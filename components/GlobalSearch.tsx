@@ -27,6 +27,7 @@ interface SearchItem {
 
 const MODULES: Omit<SearchItem, 'category'>[] = [
   { title: 'Dashboard', tabId: 'dashboard', subtitle: 'Main school overview & quick stats' },
+  { title: 'Academy & Player Dev', tabId: 'coaching-academy', subtitle: 'Sports academy rosters, technical ratings, drills & reports' },
   { title: 'PE Lesson Plan Generator', tabId: 'planner', subtitle: 'Create CBSE/ICSE lesson plans in under 60s' },
   { title: 'Tournament Fixtures (Knockout & League)', tabId: 'tournament-fixtures', subtitle: 'Brackets, fixture tables & schedules' },
   { title: 'Question Paper Generator', tabId: 'testpaper', subtitle: 'MCQ & Theory exam papers for PE' },

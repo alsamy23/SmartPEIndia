@@ -26,7 +26,11 @@ import {
   Sparkles,
   Shield,
   UploadCloud,
-  Trash2
+  Trash2,
+  Check,
+  ChevronDown,
+  X,
+  School as SchoolIcon
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -45,7 +49,8 @@ import {
   Legend
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
-import { fitnessService, Student, FitnessResult, Team, SchoolMember, School, KIFT_BATTERIES } from '../services/fitnessService.ts';
+import { fitnessService, KIFT_BATTERIES } from '../services/fitnessService.ts';
+import type { Student, FitnessResult, Team, SchoolMember, School } from '../types.ts';
 import { 
   parseFitnessValue, 
   calculateExactBMI, 
@@ -78,6 +83,43 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
   const [reportData, setReportData] = useState<any>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // Searchable dropdown state for Student & Class report selection
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedViaStudent, setSelectedViaStudent] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Click outside & Escape key listeners to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Autofocus search input when dropdown opens
+  useEffect(() => {
+    if (isDropdownOpen) {
+      const timer = setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [isDropdownOpen]);
 
   useEffect(() => {
     if (initialStudentId) {
@@ -245,6 +287,120 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
       return a.name.localeCompare(b.name);
     });
   }, [students]);
+
+  // In class mode: students matching the search query so teacher can click student name to select their class
+  const matchingStudentsForClass = React.useMemo(() => {
+    if (selectedType !== 'class' || !searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase().trim();
+    return students.filter(s => 
+      s.name.toLowerCase().includes(q) || 
+      (s.rollNumber && s.rollNumber.toLowerCase().includes(q))
+    ).slice(0, 15);
+  }, [selectedType, searchQuery, students]);
+
+  // Classes matching the search query (by class name or containing matching students)
+  const filteredClassOptions = React.useMemo(() => {
+    if (selectedType !== 'class') return [];
+    if (!searchQuery.trim()) return dynamicClassOptions;
+    const q = searchQuery.toLowerCase().trim();
+    return dynamicClassOptions.filter(c => {
+      if (c.name.toLowerCase().includes(q) || c.grade.toLowerCase().includes(q) || (c.section && c.section.toLowerCase().includes(q))) {
+        return true;
+      }
+      return c.studentIds.some(sid => {
+        const st = students.find(s => s.id === sid);
+        return st && (st.name.toLowerCase().includes(q) || (st.rollNumber && st.rollNumber.toLowerCase().includes(q)));
+      });
+    });
+  }, [selectedType, searchQuery, dynamicClassOptions, students]);
+
+  // Teams matching search
+  const filteredTeams = React.useMemo(() => {
+    if (selectedType !== 'class') return [];
+    if (!searchQuery.trim()) return teams;
+    const q = searchQuery.toLowerCase().trim();
+    return teams.filter(t => 
+      t.name.toLowerCase().includes(q) || 
+      (t.grade && t.grade.toLowerCase().includes(q))
+    );
+  }, [selectedType, searchQuery, teams]);
+
+  // In individual (student) mode: students matching search query
+  const filteredStudents = React.useMemo(() => {
+    if (selectedType !== 'individual') return [];
+    if (!searchQuery.trim()) return students;
+    const q = searchQuery.toLowerCase().trim();
+    return students.filter(s => 
+      s.name.toLowerCase().includes(q) ||
+      (s.rollNumber && s.rollNumber.toLowerCase().includes(q)) ||
+      (s.grade && `grade ${s.grade}`.toLowerCase().includes(q)) ||
+      (s.section && `section ${s.section}`.toLowerCase().includes(q))
+    );
+  }, [selectedType, searchQuery, students]);
+
+  // Selected item display label for dropdown trigger
+  const selectedDisplayLabel = React.useMemo(() => {
+    if (!selectedId) {
+      return selectedType === 'individual' ? 'Choose Student...' : 'Choose Class...';
+    }
+    if (selectedType === 'individual') {
+      const s = students.find(st => st.id === selectedId);
+      if (s) {
+        return `${s.name} (${s.rollNumber || 'PE'}) - Grade ${s.grade}${s.section ? `-${s.section}` : ''}`;
+      }
+      return selectedId;
+    }
+    if (selectedType === 'class') {
+      const c = dynamicClassOptions.find(opt => opt.id === selectedId);
+      if (c) {
+        return `${c.name} (${c.studentIds.length} Students)`;
+      }
+      const t = teams.find(tm => tm.id === selectedId);
+      if (t) {
+        return `${t.name} (Grade ${t.grade})`;
+      }
+      return selectedId;
+    }
+    return selectedId;
+  }, [selectedId, selectedType, students, dynamicClassOptions, teams]);
+
+  // Selection handlers
+  const handleSelectClassViaStudent = (student: Student) => {
+    const matchedClass = dynamicClassOptions.find(c => c.studentIds.includes(student.id))
+      || dynamicClassOptions.find(c => c.grade === student.grade && (!c.section || c.section === student.section));
+    
+    if (matchedClass) {
+      setSelectedId(matchedClass.id);
+    } else {
+      const sec = (student.section || '').toString().trim();
+      const g = (student.grade || 'Unassigned').toString().trim();
+      setSelectedId(sec ? `class_${g}_sec_${sec}` : `class_${g}`);
+    }
+    setSelectedViaStudent(student.name);
+    setIsDropdownOpen(false);
+    setSearchQuery('');
+  };
+
+  const handleSelectClass = (classId: string) => {
+    setSelectedId(classId);
+    setSelectedViaStudent(null);
+    setIsDropdownOpen(false);
+    setSearchQuery('');
+  };
+
+  const handleSelectTeam = (teamId: string) => {
+    setSelectedId(teamId);
+    setSelectedViaStudent(null);
+    setIsDropdownOpen(false);
+    setSearchQuery('');
+  };
+
+  const handleSelectStudent = (studentId: string) => {
+    setSelectedId(studentId);
+    setSelectedViaStudent(null);
+    setIsDropdownOpen(false);
+    setSearchQuery('');
+  };
 
   const generateReport = React.useCallback(() => {
     if (!selectedId && selectedType !== 'school') return;
@@ -1554,45 +1710,290 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
               </div>
 
               {selectedType !== 'school' && (
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">
-                    Select {selectedType === 'individual' ? 'Student' : 'Class'}
-                  </label>
-                  <select 
-                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-600 transition-all"
-                    value={selectedId}
-                    onChange={e => setSelectedId(e.target.value)}
-                  >
-                    <option value="">Choose {selectedType === 'individual' ? 'Student' : 'Class'}...</option>
-                    {selectedType === 'individual' ? (
-                      students.map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.rollNumber || 'PE'}) - Grade {s.grade}{s.section ? `-${s.section}` : ''}
-                        </option>
-                      ))
+                <div className="relative" ref={dropdownRef}>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center justify-between">
+                    <span>Select {selectedType === 'individual' ? 'Student' : 'Class'}</span>
+                    {selectedType === 'class' ? (
+                      <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
+                        Search by student name or class
+                      </span>
                     ) : (
-                      <>
-                        {dynamicClassOptions.length > 0 && (
-                          <optgroup label="Classes by Grade & Section">
-                            {dynamicClassOptions.map(c => (
-                              <option key={c.id} value={c.id}>
-                                {c.name} ({c.studentIds.length} Students)
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {teams.length > 0 && (
-                          <optgroup label="Saved Teams & Groups">
-                            {teams.map(t => (
-                              <option key={t.id} value={t.id}>
-                                {t.name} (Grade {t.grade})
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </>
+                      <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
+                        Search student name or roll
+                      </span>
                     )}
-                  </select>
+                  </label>
+
+                  {/* Dropdown Trigger Box */}
+                  <button
+                    type="button"
+                    onClick={() => setIsDropdownOpen(prev => !prev)}
+                    className={`w-full p-3.5 bg-slate-50 border-2 rounded-2xl font-bold text-xs text-left transition-all flex items-center justify-between cursor-pointer ${
+                      isDropdownOpen 
+                        ? 'border-indigo-600 bg-white ring-2 ring-indigo-500/20 shadow-sm' 
+                        : selectedId 
+                          ? 'border-slate-900 bg-white text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]' 
+                          : 'border-slate-200 text-slate-400 hover:border-slate-400 hover:bg-slate-100/70'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5 truncate pr-2">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        selectedId ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'
+                      }`}>
+                        {selectedType === 'individual' ? <User size={14} /> : <Users size={14} />}
+                      </div>
+                      <span className={`truncate ${selectedId ? 'font-black text-slate-900 text-xs' : 'font-semibold text-slate-400'}`}>
+                        {selectedDisplayLabel}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-1 shrink-0 text-slate-400">
+                      {selectedId && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId('');
+                            setSelectedViaStudent(null);
+                            setSearchQuery('');
+                          }}
+                          className="p-1 hover:bg-slate-100 hover:text-slate-700 rounded-lg transition cursor-pointer"
+                          title="Clear selection"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                      <ChevronDown size={16} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180 text-indigo-600' : ''}`} />
+                    </div>
+                  </button>
+
+                  {/* Selected via Student Tag */}
+                  {selectedId && selectedType === 'class' && selectedViaStudent && (
+                    <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 rounded-xl">
+                      <Sparkles size={12} className="text-indigo-500 shrink-0" />
+                      <span>Class selected via student: <strong className="font-black text-indigo-950">{selectedViaStudent}</strong></span>
+                    </div>
+                  )}
+
+                  {/* Dropdown Menu Popover */}
+                  {isDropdownOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-2 z-50 bg-white border-2 border-slate-900 rounded-2xl shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] p-3 space-y-2.5">
+                      {/* Search Input Box */}
+                      <div className="relative">
+                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          ref={searchInputRef}
+                          type="text"
+                          value={searchQuery}
+                          onChange={e => setSearchQuery(e.target.value)}
+                          placeholder={
+                            selectedType === 'class'
+                              ? "Type student name (e.g. Kabir, Diya) or class name..."
+                              : "Search student by name, roll, or grade..."
+                          }
+                          className="w-full bg-slate-50 border-2 border-slate-900 rounded-xl pl-9 pr-8 py-2 text-xs font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        {searchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Class Scope View */}
+                      {selectedType === 'class' && (
+                        <div className="max-h-64 overflow-y-auto space-y-2.5 pr-1 divide-y divide-slate-100">
+                          {/* 1. Quick Tip when search is empty */}
+                          {!searchQuery.trim() && (
+                            <div className="p-2 bg-indigo-50/80 border border-indigo-100 rounded-xl text-[11px] text-indigo-800 font-medium flex items-center gap-2">
+                              <Sparkles size={13} className="text-indigo-600 shrink-0" />
+                              <span>Tip: Type a student's name above to quickly select their class!</span>
+                            </div>
+                          )}
+
+                          {/* 2. Students Found matching the search */}
+                          {searchQuery.trim() && matchingStudentsForClass.length > 0 && (
+                            <div className="space-y-1.5 pb-1">
+                              <div className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-1 rounded-md flex items-center justify-between">
+                                <span className="flex items-center gap-1">
+                                  <User size={12} />
+                                  <span>Students Found — Click to Select Class</span>
+                                </span>
+                                <span className="font-mono text-[9px] font-bold">{matchingStudentsForClass.length}</span>
+                              </div>
+                              <div className="space-y-1">
+                                {matchingStudentsForClass.map(s => {
+                                  const classObj = dynamicClassOptions.find(c => c.studentIds.includes(s.id));
+                                  const className = classObj ? classObj.name : `Grade ${s.grade}${s.section ? `-${s.section}` : ''}`;
+                                  return (
+                                    <button
+                                      key={s.id}
+                                      type="button"
+                                      onClick={() => handleSelectClassViaStudent(s)}
+                                      className="w-full p-2 bg-slate-50 hover:bg-amber-100/70 rounded-xl text-left border border-slate-200 hover:border-amber-400 transition flex items-center justify-between group cursor-pointer"
+                                    >
+                                      <div className="flex items-center space-x-2 truncate">
+                                        <div className="w-6 h-6 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] flex items-center justify-center shrink-0">
+                                          {s.name.charAt(0)}
+                                        </div>
+                                        <div className="truncate">
+                                          <p className="text-xs font-black text-slate-900 group-hover:text-amber-950 truncate">
+                                            {s.name} {s.rollNumber && <span className="font-normal text-[10px] text-slate-500 font-mono">#{s.rollNumber}</span>}
+                                          </p>
+                                          <p className="text-[10px] text-slate-500 font-semibold truncate">
+                                            In: <strong className="text-indigo-600">{className}</strong>
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <span className="px-2 py-0.5 bg-amber-500 text-slate-950 rounded text-[9px] font-black uppercase tracking-wider shrink-0 group-hover:bg-amber-400 transition">
+                                        Select Class →
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 3. Classes by Grade & Section */}
+                          <div className="pt-2 space-y-1.5">
+                            <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 flex items-center justify-between">
+                              <span>Classes & Sections</span>
+                              <span className="text-[9px]">{filteredClassOptions.length}</span>
+                            </div>
+                            {filteredClassOptions.length === 0 && (!searchQuery.trim() || matchingStudentsForClass.length === 0) ? (
+                              <div className="p-4 text-center text-xs font-bold text-slate-400">
+                                No classes or students matched "{searchQuery}".
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                {filteredClassOptions.map(c => {
+                                  const isSelected = selectedId === c.id;
+                                  return (
+                                    <button
+                                      key={c.id}
+                                      type="button"
+                                      onClick={() => handleSelectClass(c.id)}
+                                      className={`w-full p-2.5 rounded-xl text-left transition flex items-center justify-between border cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-indigo-600 text-white border-slate-900 shadow-sm font-black'
+                                          : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200'
+                                      }`}
+                                    >
+                                      <div className="flex items-center space-x-2">
+                                        <SchoolIcon size={14} className={isSelected ? 'text-white' : 'text-slate-400'} />
+                                        <span className="text-xs font-bold">{c.name}</span>
+                                      </div>
+                                      <div className="flex items-center space-x-1.5">
+                                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                                          isSelected ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-600'
+                                        }`}>
+                                          {c.studentIds.length} Students
+                                        </span>
+                                        {isSelected && <Check size={14} className="text-amber-400 font-bold" />}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 4. Saved Teams & Groups */}
+                          {filteredTeams.length > 0 && (
+                            <div className="pt-2 space-y-1.5">
+                              <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 flex items-center justify-between">
+                                <span>Saved Teams & Squads</span>
+                                <span className="text-[9px]">{filteredTeams.length}</span>
+                              </div>
+                              <div className="space-y-1">
+                                {filteredTeams.map(t => {
+                                  const isSelected = selectedId === t.id;
+                                  return (
+                                    <button
+                                      key={t.id}
+                                      type="button"
+                                      onClick={() => handleSelectTeam(t.id)}
+                                      className={`w-full p-2.5 rounded-xl text-left transition flex items-center justify-between border cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-indigo-600 text-white border-slate-900 shadow-sm font-black'
+                                          : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200'
+                                      }`}
+                                    >
+                                      <div className="flex items-center space-x-2">
+                                        <Users size={14} className={isSelected ? 'text-white' : 'text-slate-400'} />
+                                        <span className="text-xs font-bold">{t.name}</span>
+                                      </div>
+                                      <div className="flex items-center space-x-1.5">
+                                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                                          isSelected ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-600'
+                                        }`}>
+                                          Grade {t.grade}
+                                        </span>
+                                        {isSelected && <Check size={14} className="text-amber-400 font-bold" />}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Individual (Student) Scope View */}
+                      {selectedType === 'individual' && (
+                        <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 pb-1 flex items-center justify-between">
+                            <span>Registered Students</span>
+                            <span className="text-[9px]">{filteredStudents.length} of {students.length}</span>
+                          </div>
+                          {filteredStudents.length === 0 ? (
+                            <div className="p-4 text-center text-xs font-bold text-slate-400">
+                              No students found matching "{searchQuery}".
+                            </div>
+                          ) : (
+                            filteredStudents.map(s => {
+                              const isSelected = selectedId === s.id;
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => handleSelectStudent(s.id)}
+                                  className={`w-full p-2.5 rounded-xl text-left transition flex items-center justify-between border cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-indigo-600 text-white border-slate-900 shadow-sm font-black'
+                                      : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-2.5 truncate">
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${
+                                      isSelected ? 'bg-white text-indigo-700' : 'bg-indigo-100 text-indigo-700'
+                                    }`}>
+                                      {s.name.charAt(0)}
+                                    </div>
+                                    <div className="truncate">
+                                      <p className={`text-xs font-black truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                                        {s.name}
+                                      </p>
+                                      <p className={`text-[10px] truncate ${isSelected ? 'text-indigo-200' : 'text-slate-500'}`}>
+                                        Roll: {s.rollNumber || 'PE'} • Grade {s.grade}{s.section ? `-${s.section}` : ''} • {s.gender || 'Student'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {isSelected && <Check size={16} className="text-amber-400 font-bold shrink-0 ml-2" />}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

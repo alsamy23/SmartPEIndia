@@ -281,6 +281,7 @@ const Dashboard: React.FC<{
 
           <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar py-0.5">
             {[
+              { id: 'coaching-academy', label: 'Coaching & Academy', icon: Trophy, color: 'bg-amber-400 text-slate-950 hover:bg-amber-300 font-black shadow-sm' },
               { id: 'planner', label: 'Generate Lesson', icon: Sparkles, color: 'bg-[#D4A017] text-slate-900 hover:bg-[#e0b028] shadow-xs' },
               { id: 'cbse-practical', label: 'CBSE Practical (30M)', icon: ClipboardCheck, color: 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40' },
               { id: 'fitness', label: 'Fitness Test', icon: Activity, color: 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40' },

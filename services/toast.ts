@@ -44,3 +44,14 @@ export const toast = {
     window.dispatchEvent(event);
   }
 };
+
+export const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+  if (type === 'error') {
+    toast.error(message);
+  } else if (type === 'success') {
+    toast.success(message);
+  } else {
+    toast.info(message);
+  }
+};
+

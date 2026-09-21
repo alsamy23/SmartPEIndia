@@ -72,7 +72,7 @@ import BrandWelcomeHub from './components/BrandWelcomeHub.tsx';
 import PricingAndPlans from './components/PricingAndPlans.tsx';
 import WelcomeOnboardingModal from './components/WelcomeOnboardingModal.tsx';
 import PracticalAssessmentHub from './components/PracticalAssessmentHub.tsx';
-import SportsCoachingAssessment from './components/SportsCoachingAssessment.tsx';
+import { CoachingAcademyHub } from './components/coaching/CoachingAcademyHub.tsx';
 import { GlobalSearch } from './components/GlobalSearch.tsx';
 import { logError } from './services/logService.ts';
 import { fitnessService } from './services/fitnessService.ts';
@@ -81,13 +81,20 @@ import { onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth
 import { trackEvent } from './services/analytics.ts';
 import { toast, SHOW_TOAST_EVENT, SHOW_CONFIRM_EVENT, ToastConfig, ConfirmConfig } from './services/toast.ts';
 
-type Tab = 'dashboard' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'coaching-assessment' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
+type Tab = 'dashboard' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'coaching-assessment' | 'coaching-academy' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
 
 import { BoardType, Language } from './types.ts';
 
 // Static Navigation Catalog (Moved outside to ensure stable memory reference)
 const navigation = [
   { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
+
+  { 
+    section: 'Coaching & Academy',
+    items: [
+      { id: 'coaching-academy', name: 'Academy & Player Dev', icon: Trophy, isNew: true, subtitle: 'Individual athlete development, 1–5 coaching scale, AI guidance & parent reports.' },
+    ]
+  },
   
   { 
     section: 'Plan',
@@ -104,7 +111,6 @@ const navigation = [
   { 
     section: 'Assess',
     items: [
-      { id: 'coaching-assessment', name: 'Sports Academy & Coaching', icon: Trophy, isNew: true, subtitle: 'Academic registration with 5-day cloud pass for coaches & teacher groups.' },
       { id: 'cbse-practical', name: 'CBSE Practical (30M)', icon: ClipboardCheck, subtitle: 'Class 11 & 12 30-mark practical scoring & award sheet.' },
       { id: 'fitness', name: 'Fitness Tests', icon: Activity, subtitle: 'All Khelo India Fitness tests pre-loaded.' },
       { id: 'khelo', name: 'Khelo India Battery', icon: Trophy, subtitle: 'Official battery tests and student profiles.' },
@@ -451,9 +457,31 @@ const App: React.FC = () => {
   const [isAuthView, setIsAuthView] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [selectedReportStudentId, setSelectedReportStudentId] = useState<string | null>(null);
+  const [coachingReportId, setCoachingReportId] = useState<string | null>(null);
   const [highlightStudentId, setHighlightStudentId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastConfig[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmConfig | null>(null);
+
+  // Link-sharing and direct hash deep link handler for athletic merit reports
+  useEffect(() => {
+    const handleUrlHashOrQuery = () => {
+      const hash = window.location.hash;
+      const searchParams = new URLSearchParams(window.location.search);
+      const repId = searchParams.get('reportId') || 
+                    searchParams.get('meritReportId') ||
+                    (hash.startsWith('#merit-report-') ? hash.replace('#merit-report-', '') : null) ||
+                    (hash.startsWith('#report-') ? hash.replace('#report-', '') : null);
+
+      if (repId) {
+        setCoachingReportId(repId);
+        setActiveTab('coaching-academy');
+      }
+    };
+
+    handleUrlHashOrQuery();
+    window.addEventListener('hashchange', handleUrlHashOrQuery);
+    return () => window.removeEventListener('hashchange', handleUrlHashOrQuery);
+  }, []);
 
   useEffect(() => {
     const handleToastEvent = (e: Event) => {
@@ -841,7 +869,8 @@ const App: React.FC = () => {
       case 'rules': return <RulesBot />;
       case 'fitness': return <FitnessTests />;
       case 'cbse-practical': return <PracticalAssessmentHub />;
-      case 'coaching-assessment': return <SportsCoachingAssessment />;
+      case 'coaching-assessment':
+      case 'coaching-academy': return <CoachingAcademyHub onSwitchToSchoolPe={() => handleTabChange('dashboard')} initialReportId={coachingReportId || undefined} />;
       case 'school-results': return <FitnessDashboard onNavigate={handleTabChange} onSelectStudent={(id) => { setSelectedReportStudentId(id); setActiveTab('fitness-reports'); }} />;
       case 'school-students': return <StudentManagement onNavigate={handleTabChange} onSelectStudent={(id) => { setSelectedReportStudentId(id); setActiveTab('fitness-reports'); }} highlightStudentId={highlightStudentId} />;
       case 'school-teams': return <TeamManagement />;

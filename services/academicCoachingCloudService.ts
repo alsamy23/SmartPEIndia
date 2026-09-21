@@ -19,8 +19,10 @@ export interface AcademicCoachingProgram {
   programName: string;
   programType: CoachProgramType;
   sport: string;
+  sportsOffered?: string[];
   headCoachId: string;
   headCoachName: string;
+  adminEmail?: string;
   coachEmails: string[];
   coachNames: string[];
   coachUids: string[];
@@ -28,6 +30,8 @@ export interface AcademicCoachingProgram {
   trialExpiresAt: string;
   createdAt: string;
   isCloudSynced: boolean;
+  contactNumber?: string;
+  location?: string;
 }
 
 const LOCAL_PROGRAM_KEY = 'smartpe_academic_coaching_program';
@@ -113,11 +117,15 @@ export const academicCoachingCloudService = {
     programName: string;
     programType: CoachProgramType;
     sport: string;
+    sportsOffered?: string[];
     coachName: string;
+    adminEmail?: string;
+    contactNumber?: string;
+    location?: string;
   }): Promise<AcademicCoachingProgram> {
     const user = auth.currentUser;
     const coachUid = user?.uid || `guest_coach_${Date.now()}`;
-    const coachEmail = user?.email || 'coach@academic.smartpe.in';
+    const coachEmail = params.adminEmail?.trim() || user?.email || 'coach@academic.smartpe.in';
     const programId = `acad_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
     
     // Exactly 5 days from registration
@@ -131,15 +139,19 @@ export const academicCoachingCloudService = {
       programName: params.programName.trim(),
       programType: params.programType,
       sport: params.sport,
+      sportsOffered: params.sportsOffered && params.sportsOffered.length > 0 ? params.sportsOffered : [params.sport],
       headCoachId: coachUid,
       headCoachName: params.coachName.trim() || 'Head Coach',
+      adminEmail: coachEmail,
       coachEmails: [coachEmail],
       coachNames: [params.coachName.trim() || 'Head Coach'],
       coachUids: [coachUid],
       inviteCode,
       trialExpiresAt,
       createdAt: now.toISOString(),
-      isCloudSynced: true
+      isCloudSynced: true,
+      contactNumber: params.contactNumber || '',
+      location: params.location || ''
     };
 
     // Save locally immediately
@@ -154,6 +166,122 @@ export const academicCoachingCloudService = {
     }
 
     return program;
+  },
+
+  /**
+   * Updates an existing Academic Coaching Program in Firestore & Local Cache
+   */
+  async updateAcademicProgram(
+    programId: string,
+    updates: Partial<AcademicCoachingProgram>
+  ): Promise<AcademicCoachingProgram> {
+    const current = this.getLocalProgram();
+    const updated: AcademicCoachingProgram = {
+      ...(current || {
+        id: programId,
+        programName: 'Sports Academy',
+        programType: 'after_school_academy',
+        sport: 'football',
+        headCoachId: auth.currentUser?.uid || 'coach',
+        headCoachName: 'Head Coach',
+        coachEmails: [],
+        coachNames: [],
+        coachUids: [],
+        inviteCode: this.generateInviteCode(),
+        trialExpiresAt: new Date(Date.now() + 5 * 86400000).toISOString(),
+        createdAt: new Date().toISOString(),
+        isCloudSynced: true
+      }),
+      ...updates,
+      id: programId
+    };
+
+    this.setLocalProgram(updated);
+
+    try {
+      await updateDoc(doc(db, 'academic_programs', programId), updates);
+    } catch (err) {
+      console.warn('Could not update academic program in Firestore:', err);
+    }
+
+    return updated;
+  },
+
+  /**
+   * Directly adds a colleague coach by email to the Academy Database
+   */
+  async addColleagueCoach(
+    programId: string,
+    colleagueEmail: string,
+    colleagueName?: string
+  ): Promise<AcademicCoachingProgram> {
+    const email = colleagueEmail.trim().toLowerCase();
+    const name = colleagueName?.trim() || email.split('@')[0] || 'Colleague Coach';
+    const current = this.getLocalProgram();
+
+    if (!current) throw new Error('No active academy database found.');
+    if (current.coachEmails.map(e => e.toLowerCase()).includes(email)) {
+      throw new Error(`Coach with email ${email} is already registered in this academy.`);
+    }
+
+    const updatedEmails = [...current.coachEmails, email];
+    const updatedNames = [...current.coachNames, name];
+
+    const updatedProg: AcademicCoachingProgram = {
+      ...current,
+      coachEmails: updatedEmails,
+      coachNames: updatedNames
+    };
+
+    this.setLocalProgram(updatedProg);
+
+    try {
+      await updateDoc(doc(db, 'academic_programs', programId), {
+        coachEmails: arrayUnion(email),
+        coachNames: arrayUnion(name)
+      });
+    } catch (err) {
+      console.warn('Firestore addColleagueCoach warning:', err);
+    }
+
+    return updatedProg;
+  },
+
+  /**
+   * Removes a colleague coach from the Academy Database
+   */
+  async removeColleagueCoach(
+    programId: string,
+    colleagueEmail: string
+  ): Promise<AcademicCoachingProgram> {
+    const email = colleagueEmail.trim().toLowerCase();
+    const current = this.getLocalProgram();
+    if (!current) throw new Error('No active academy database found.');
+
+    const idx = current.coachEmails.findIndex(e => e.toLowerCase() === email);
+    if (idx === -1) return current;
+
+    const updatedEmails = current.coachEmails.filter((_, i) => i !== idx);
+    const updatedNames = current.coachNames.filter((_, i) => i !== idx);
+
+    const updatedProg: AcademicCoachingProgram = {
+      ...current,
+      coachEmails: updatedEmails,
+      coachNames: updatedNames
+    };
+
+    this.setLocalProgram(updatedProg);
+
+    try {
+      await updateDoc(doc(db, 'academic_programs', programId), {
+        coachEmails: updatedEmails,
+        coachNames: updatedNames
+      });
+    } catch (err) {
+      console.warn('Firestore removeColleagueCoach warning:', err);
+    }
+
+    return updatedProg;
   },
 
   /**
@@ -247,12 +375,69 @@ export const academicCoachingCloudService = {
   },
 
   /**
+   * Bulk saves multiple Athletes to Firestore and local storage (e.g. 30-40 students at once)
+   */
+  async saveCloudAthletesBatch(
+    athletes: (Omit<AthleteProfile, 'id'> & { id?: string })[],
+    programId: string
+  ): Promise<number> {
+    const user = auth.currentUser;
+    const now = new Date().toISOString();
+    
+    // Read local cache
+    let list: AthleteProfile[] = [];
+    try {
+      const raw = localStorage.getItem(LOCAL_ATHLETES_KEY);
+      if (raw) list = JSON.parse(raw);
+    } catch (e) {}
+
+    const fullAthletes: AthleteProfile[] = athletes.map((a, idx) => ({
+      ...a,
+      id: a.id || `ath_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`
+    }));
+
+    // Update local cache
+    fullAthletes.forEach(fa => {
+      const existingIdx = list.findIndex(item => item.id === fa.id || (item.name.toLowerCase() === fa.name.toLowerCase() && item.sport === fa.sport));
+      if (existingIdx >= 0) {
+        list[existingIdx] = fa;
+      } else {
+        list.unshift(fa);
+      }
+    });
+
+    try {
+      localStorage.setItem(LOCAL_ATHLETES_KEY, JSON.stringify(list));
+    } catch (e) {
+      console.error('Failed to update local athlete batch cache', e);
+    }
+
+    // Save to Firestore in batches/parallel
+    try {
+      await Promise.all(
+        fullAthletes.map(fa => 
+          setDoc(doc(db, 'academic_athletes', fa.id), {
+            ...fa,
+            programId,
+            createdByCoachId: user?.uid || 'coach',
+            updatedAt: now
+          })
+        )
+      );
+    } catch (err) {
+      console.warn('Could not sync some batch athletes to Firestore (saved locally):', err);
+    }
+
+    return fullAthletes.length;
+  },
+
+  /**
    * Saves an Assessment to Firestore under the Academic Coaching Program
    */
   async saveCloudAssessment(
-    assessment: AssessmentRecord,
+    assessment: AssessmentRecord | any,
     programId: string
-  ): Promise<AssessmentRecord> {
+  ): Promise<any> {
     // Save locally
     try {
       const raw = localStorage.getItem(LOCAL_ASSESSMENTS_KEY);
@@ -343,6 +528,43 @@ export const academicCoachingCloudService = {
       if (stored) return JSON.parse(stored);
     } catch (e) {}
     return [];
+  },
+
+  /**
+   * Fetches a single assessment by ID from Firestore (with local fallback) for link-sharing
+   */
+  async fetchSingleCloudAssessment(assessmentId: string): Promise<any | null> {
+    // Check local storage first
+    try {
+      const raw = localStorage.getItem(LOCAL_ASSESSMENTS_KEY);
+      if (raw) {
+        const list = JSON.parse(raw);
+        const found = list.find((a: any) => a.id === assessmentId);
+        if (found) return found;
+      }
+    } catch (e) {}
+
+    // Check academyService assessments
+    try {
+      const rawAcad = localStorage.getItem('smartpe_academy_assessments_v1');
+      if (rawAcad) {
+        const list = JSON.parse(rawAcad);
+        const found = list.find((a: any) => a.id === assessmentId);
+        if (found) return found;
+      }
+    } catch (e) {}
+
+    // Query Firestore collection 'academic_assessments'
+    try {
+      const snap = await getDoc(doc(db, 'academic_assessments', assessmentId));
+      if (snap.exists()) {
+        return snap.data();
+      }
+    } catch (err) {
+      console.warn('Could not fetch cloud assessment by id:', err);
+    }
+
+    return null;
   },
 
   /**
