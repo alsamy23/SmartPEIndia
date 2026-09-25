@@ -14,18 +14,29 @@ import { db, auth } from './firebase';
 import { AthleteProfile, AssessmentRecord, CoachProgramType } from './sportsCoachingService';
 import { logError } from './logService';
 
+export interface AcademyTeacher {
+  id?: string;
+  name: string;
+  email: string;
+  sport?: string;
+  role?: string; // 'Lead Coach' | 'Specialist Coach' | 'PE Teacher' | 'Assistant'
+  addedAt?: string;
+}
+
 export interface AcademicCoachingProgram {
   id: string;
   programName: string;
   programType: CoachProgramType;
   sport: string;
   sportsOffered?: string[];
+  logoUrl?: string; // Academy custom logo URL or Base64 data URL
   headCoachId: string;
   headCoachName: string;
   adminEmail?: string;
   coachEmails: string[];
   coachNames: string[];
   coachUids: string[];
+  teachersList?: AcademyTeacher[];
   inviteCode: string;
   trialExpiresAt: string;
   createdAt: string;
@@ -118,10 +129,12 @@ export const academicCoachingCloudService = {
     programType: CoachProgramType;
     sport: string;
     sportsOffered?: string[];
+    logoUrl?: string;
     coachName: string;
     adminEmail?: string;
     contactNumber?: string;
     location?: string;
+    teachersList?: AcademyTeacher[];
   }): Promise<AcademicCoachingProgram> {
     const user = auth.currentUser;
     const coachUid = user?.uid || `guest_coach_${Date.now()}`;
@@ -134,18 +147,30 @@ export const academicCoachingCloudService = {
     const trialExpiresAt = trialDate.toISOString();
     const inviteCode = this.generateInviteCode();
 
+    const initialTeachers: AcademyTeacher[] = params.teachersList || [
+      {
+        name: params.coachName.trim() || 'Head Coach',
+        email: coachEmail,
+        sport: params.sport || 'football',
+        role: 'Lead Coach',
+        addedAt: now.toISOString()
+      }
+    ];
+
     const program: AcademicCoachingProgram = {
       id: programId,
       programName: params.programName.trim(),
       programType: params.programType,
       sport: params.sport,
       sportsOffered: params.sportsOffered && params.sportsOffered.length > 0 ? params.sportsOffered : [params.sport],
+      logoUrl: params.logoUrl || '',
       headCoachId: coachUid,
       headCoachName: params.coachName.trim() || 'Head Coach',
       adminEmail: coachEmail,
-      coachEmails: [coachEmail],
-      coachNames: [params.coachName.trim() || 'Head Coach'],
+      coachEmails: [coachEmail, ...(params.teachersList?.map(t => t.email).filter(e => e !== coachEmail) || [])],
+      coachNames: [params.coachName.trim() || 'Head Coach', ...(params.teachersList?.map(t => t.name).filter(n => n !== params.coachName.trim()) || [])],
       coachUids: [coachUid],
+      teachersList: initialTeachers,
       inviteCode,
       trialExpiresAt,
       createdAt: now.toISOString(),
@@ -582,6 +607,33 @@ export const academicCoachingCloudService = {
       if (raw) {
         const list: AthleteProfile[] = JSON.parse(raw);
         const filtered = list.filter(a => a.id !== athleteId);
+        localStorage.setItem(LOCAL_ATHLETES_KEY, JSON.stringify(filtered));
+      }
+    } catch (e) {}
+  },
+
+  /**
+   * Deletes multiple athletes in batch from Firestore and local storage
+   */
+  async deleteCloudAthletesBatch(athleteIds: string[]): Promise<void> {
+    if (!athleteIds || athleteIds.length === 0) return;
+    const idSet = new Set(athleteIds);
+
+    // Delete from Firestore
+    try {
+      await Promise.all(
+        athleteIds.map(id => deleteDoc(doc(db, 'academic_athletes', id)).catch(e => console.warn(`Failed to delete athlete ${id}`, e)))
+      );
+    } catch (err) {
+      console.warn('Cloud batch athletes delete error:', err);
+    }
+
+    // Delete from local cache
+    try {
+      const raw = localStorage.getItem(LOCAL_ATHLETES_KEY);
+      if (raw) {
+        const list: AthleteProfile[] = JSON.parse(raw);
+        const filtered = list.filter(a => !idSet.has(a.id));
         localStorage.setItem(LOCAL_ATHLETES_KEY, JSON.stringify(filtered));
       }
     } catch (e) {}

@@ -61,7 +61,7 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
       ageGroup: 'U-12',
       coachName: 'Coach Vikram Roy',
       trainingSchedule: 'Mon, Wed, Fri 4:30 PM - 6:00 PM',
-      location: 'Main Turf Ground',
+      location: 'Main Sports Ground',
       playerIds: []
     });
     setIsModalOpen(true);
@@ -82,7 +82,7 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
 
     const record: BatchTeamGroup = {
       id: editingBatch ? editingBatch.id : `batch-${Date.now()}`,
-      name: formData.name || 'Unnamed Squad',
+      name: formData.name || 'Unnamed Batch',
       sport: (formData.sport as any) || 'football',
       ageGroup: formData.ageGroup || 'U-12',
       coachName: formData.coachName || 'Coach',
@@ -123,17 +123,17 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
         <div>
           <div className="flex items-center space-x-2 mb-1">
             <span className="px-2.5 py-0.5 bg-purple-100 text-purple-800 rounded-md text-[10px] font-black uppercase tracking-wider">
-              Academy & Squad Groups
+              Batches & Training Groups
             </span>
             <span className="text-xs text-slate-400 font-bold">
               {batches.length} Active Batches
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-display">
-            Squads & Batch Management
+            Batches & Groups Management
           </h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Group players by age bracket, academy team, and training slot for fast batch tracking.
+            Group students by game, age bracket, and training time for fast batch assessments.
           </p>
         </div>
 
@@ -142,7 +142,7 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
           className="px-5 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl text-xs uppercase tracking-wider transition shadow-md flex items-center justify-center space-x-2 active:scale-95"
         >
           <Plus size={18} />
-          <span>+ Create New Squad</span>
+          <span>+ Create New Batch</span>
         </button>
       </div>
 
@@ -172,7 +172,7 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
                     {batch.name}
                   </h3>
                   <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                    Lead Coach: {batch.coachName}
+                    Coach: {batch.coachName}
                   </p>
                 </div>
 
@@ -191,14 +191,14 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
                   )}
                   <div className="flex items-center space-x-2">
                     <Users size={14} className="text-slate-400" />
-                    <span className="font-bold text-slate-900">{assignedPlayers.length} Enrolled Athletes</span>
+                    <span className="font-bold text-slate-900">{assignedPlayers.length} Enrolled Students</span>
                   </div>
                 </div>
 
-                {/* Enrolled Players Mini List */}
+                {/* Enrolled Students Mini List */}
                 {assignedPlayers.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase text-slate-400">Roster</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Students in this Batch</p>
                     <div className="flex flex-wrap gap-1">
                       {assignedPlayers.map(p => (
                         <span key={p.id} className="px-2 py-0.5 bg-slate-100 rounded-md text-[11px] font-bold text-slate-800 border border-slate-200">
@@ -217,7 +217,7 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
                     if (assignedPlayers.length > 0) {
                       onNewAssessment(assignedPlayers[0].id);
                     } else {
-                      showToast('No players enrolled in this batch yet', 'warning');
+                      showToast('No students in this batch yet', 'warning');
                     }
                   }}
                   className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition text-center"
@@ -249,7 +249,7 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
           <div className="bg-white border-2 border-slate-900 rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-5 shadow-2xl animate-slide-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b-2 border-slate-100 pb-4">
               <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                {editingBatch ? 'Edit Squad / Batch' : 'Create New Squad'}
+                {editingBatch ? 'Edit Batch' : 'Create New Batch'}
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -261,46 +261,47 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
 
             <form onSubmit={handleSave} className="space-y-4 text-xs font-bold">
               <div>
-                <label className="block text-slate-700 uppercase tracking-wider mb-1">Squad / Batch Name *</label>
+                <label className="block text-slate-700 uppercase tracking-wider mb-1">Batch Name *</label>
                 <input
                   type="text"
                   required
                   value={formData.name || ''}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Chennai FA - U12 Squad"
-                  className="w-full bg-slate-50 border-2 border-slate-900 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+                  placeholder="e.g. Morning Batch A (U-12)"
+                  className="w-full bg-slate-50 border-2 border-slate-900 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 uppercase tracking-wider mb-1">Sport</label>
+                  <label className="block text-slate-700 uppercase tracking-wider mb-1">Sport / Game</label>
                   <select
                     value={formData.sport || 'football'}
                     onChange={e => setFormData({ ...formData, sport: e.target.value as CoachingSportId })}
                     className="w-full bg-slate-50 border-2 border-slate-900 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
                   >
-                    <option value="football">Football</option>
-                    <option value="basketball">Basketball</option>
-                    <option value="tennis">Tennis</option>
-                    <option value="cricket">Cricket</option>
+                    {Object.values(SPORT_TEMPLATES).map(tmpl => (
+                      <option key={tmpl.id} value={tmpl.id}>
+                        {tmpl.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 uppercase tracking-wider mb-1">Age Bracket</label>
+                  <label className="block text-slate-700 uppercase tracking-wider mb-1">Age Group</label>
                   <input
                     type="text"
                     value={formData.ageGroup || 'U-12'}
                     onChange={e => setFormData({ ...formData, ageGroup: e.target.value })}
-                    placeholder="e.g. U-10, U-14, Senior"
+                    placeholder="e.g. U-10, U-12, U-14, Senior"
                     className="w-full bg-slate-50 border-2 border-slate-900 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-700 uppercase tracking-wider mb-1">Lead Coach Name</label>
+                <label className="block text-slate-700 uppercase tracking-wider mb-1">Coach Name</label>
                 <input
                   type="text"
                   value={formData.coachName || ''}
@@ -311,7 +312,7 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-700 uppercase tracking-wider mb-1">Training Schedule</label>
+                <label className="block text-slate-700 uppercase tracking-wider mb-1">Training Timing & Days</label>
                 <input
                   type="text"
                   value={formData.trainingSchedule || ''}
@@ -322,12 +323,12 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-700 uppercase tracking-wider mb-1">Training Venue / Location</label>
+                <label className="block text-slate-700 uppercase tracking-wider mb-1">Training Ground / Venue</label>
                 <input
                   type="text"
                   value={formData.location || ''}
                   onChange={e => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="e.g. Main Turf Pitch 1"
+                  placeholder="e.g. Ground 1 / Court 2"
                   className="w-full bg-slate-50 border-2 border-slate-900 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
                 />
               </div>
@@ -335,7 +336,7 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
               {/* Player Multi-Select */}
               <div>
                 <label className="block text-slate-700 uppercase tracking-wider mb-1.5">
-                  Select Athletes to Enroll
+                  Select Students to Add to this Batch
                 </label>
                 <div className="max-h-40 overflow-y-auto bg-slate-50 border border-slate-300 rounded-xl p-2 space-y-1">
                   {players.map(p => {
@@ -346,11 +347,11 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
                         type="button"
                         onClick={() => togglePlayerInBatch(p.id)}
                         className={`w-full p-2 rounded-lg text-left flex items-center justify-between text-xs transition ${
-                          isSelected ? 'bg-blue-600 text-white font-bold' : 'hover:bg-slate-200 text-slate-800'
+                          isSelected ? 'bg-amber-400 text-slate-950 font-black' : 'hover:bg-slate-200 text-slate-800'
                         }`}
                       >
                         <span>{p.name} ({p.sport.toUpperCase()} • {p.position})</span>
-                        <span className="text-[10px] uppercase font-black">{isSelected ? 'Enrolled ✓' : '+ Add'}</span>
+                        <span className="text-[10px] uppercase font-black">{isSelected ? 'Selected ✓' : '+ Add'}</span>
                       </button>
                     );
                   })}
@@ -369,7 +370,7 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
                   type="submit"
                   className="px-6 py-2 bg-slate-900 text-white rounded-xl text-xs uppercase tracking-wider font-black shadow-md"
                 >
-                  Save Squad
+                  Save Batch
                 </button>
               </div>
             </form>

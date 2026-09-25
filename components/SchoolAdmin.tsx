@@ -312,7 +312,7 @@ const SchoolAdmin: React.FC = () => {
         videoRef.current.srcObject = stream;
       }
     } catch (err: any) {
-      console.error("Camera access error:", err);
+      console.warn("Camera access denied or unavailable:", err);
       setCameraError(err.message || 'Unable to access camera. Please check camera permissions or upload an image file.');
     }
   };

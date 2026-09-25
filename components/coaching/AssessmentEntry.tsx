@@ -17,8 +17,13 @@ import {
   Trash2,
   HelpCircle,
   Clock,
-  Layers
+  Layers,
+  Sliders,
+  CheckCircle2,
+  Filter,
+  Search
 } from 'lucide-react';
+import { VoiceTranscribeButton } from '../VoiceTranscribeButton';
 import { 
   academyService, 
   PlayerProfileData, 
@@ -30,8 +35,15 @@ import {
   calculateDevelopmentScore, 
   getDevelopmentLevel, 
   getDevelopmentLevelColor,
+  detectAgeCategory,
   TrainingGoal
 } from '../../services/academyService';
+import { 
+  SkillPresetType, 
+  getPresetSkillIdsForSport, 
+  SKILL_PRESETS_META 
+} from '../../services/coachingSkillsDatabase';
+import { SkillSelectionModal } from './SkillSelectionModal';
 import { generateAiCoachingRecommendations } from '../../services/coachingAiService';
 import { showToast } from '../../services/toast';
 
@@ -52,6 +64,7 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
 }) => {
   const [players, setPlayers] = useState<PlayerProfileData[]>([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>(initialPlayerId || '');
+  const [ageCategoryFilter, setAgeCategoryFilter] = useState<string>('all');
   
   // Assessment fields
   const [sport, setSport] = useState<CoachingSportId>('football');
@@ -60,6 +73,12 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
   const [assessmentDate, setAssessmentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [coachName, setCoachName] = useState<string>('Coach Vikram Roy');
   const [nextAssessmentDate, setNextAssessmentDate] = useState<string>('');
+
+  // Skill Scope & Selection
+  const [skillScope, setSkillScope] = useState<SkillPresetType>('core');
+  const [activeSkillIds, setActiveSkillIds] = useState<string[]>([]);
+  const [isSkillModalOpen, setIsSkillModalOpen] = useState<boolean>(false);
+  const [syncToAthleteProfile, setSyncToAthleteProfile] = useState<boolean>(true);
 
   // Skill ratings (1 to 5)
   const [skillRatings, setSkillRatings] = useState<Record<string, number>>({});
@@ -82,6 +101,7 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
 
   // Filter category in evaluation screen
   const [activePillarFilter, setActivePillarFilter] = useState<'all' | 'technical' | 'tactical' | 'physical' | 'gameBehaviour'>('all');
+  const [searchSkillQuery, setSearchSkillQuery] = useState<string>('');
 
   // Load players
   useEffect(() => {
@@ -104,6 +124,18 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
     return players.find(p => p.id === selectedPlayerId) || null;
   }, [players, selectedPlayerId]);
 
+  const filteredPlayers = useMemo(() => {
+    if (ageCategoryFilter === 'all') return players;
+    return players.filter(p => {
+      const cat = p.ageCategory || detectAgeCategory(p.age, p.dob);
+      return cat === ageCategoryFilter;
+    });
+  }, [players, ageCategoryFilter]);
+
+  const currentTemplate = SPORT_TEMPLATES[sport] || SPORT_TEMPLATES.football;
+  const allSportSkills = currentTemplate.skills || [];
+
+  // Initialize or synchronize skill list when player or sport changes
   useEffect(() => {
     if (selectedPlayer) {
       setSport(selectedPlayer.sport);
@@ -129,44 +161,115 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
           setCoachRecommendation(existing.coachRecommendation || '');
           setNextGoals(existing.nextGoals || []);
           setNextAssessmentDate(existing.nextAssessmentDate || '');
+          
+          if (existing.assessedSkillIds && existing.assessedSkillIds.length > 0) {
+            setActiveSkillIds(existing.assessedSkillIds);
+            setSkillScope('custom');
+          } else {
+            setActiveSkillIds(Object.keys(existing.skillRatings));
+          }
           return;
         }
       }
 
-      // If new assessment, initialize default ratings based on sport template
+      // Set skill scope based on athlete profile
       const template = SPORT_TEMPLATES[selectedPlayer.sport] || SPORT_TEMPLATES.football;
-      const initialRatings: Record<string, number> = {};
-      template.skills.forEach(s => {
-        if (s.isCore) {
-          initialRatings[s.id] = s.defaultScore;
-        }
-      });
+      let targetSkillIds: string[] = [];
 
-      // Include position-specific skills for current player position
-      const posObj = template.positions.find(pos => pos.id.toLowerCase() === selectedPlayer.position.toLowerCase() || pos.name.toLowerCase().includes(selectedPlayer.position.toLowerCase()));
-      if (posObj) {
-        setIncludedPositionSkills(posObj.skills);
-        posObj.skills.forEach(sId => {
-          const sObj = template.skills.find(s => s.id === sId);
-          if (sObj) {
-            initialRatings[sId] = sObj.defaultScore;
-          }
-        });
+      if (selectedPlayer.selectedSkillIds && selectedPlayer.selectedSkillIds.length > 0) {
+        targetSkillIds = selectedPlayer.selectedSkillIds;
+        setSkillScope(selectedPlayer.skillPlanPreset || 'custom');
+      } else {
+        // Default to Core 10-12 skills
+        targetSkillIds = getPresetSkillIdsForSport(
+          selectedPlayer.sport, 
+          'core', 
+          template.skills, 
+          template.positions, 
+          selectedPlayer.position
+        );
+        setSkillScope('core');
       }
+
+      setActiveSkillIds(targetSkillIds);
+
+      // Initialize default ratings for the selected skills
+      const initialRatings: Record<string, number> = {};
+      targetSkillIds.forEach(id => {
+        const sObj = template.skills.find(s => s.id === id);
+        initialRatings[id] = sObj?.defaultScore || 3;
+      });
 
       setSkillRatings(initialRatings);
     }
   }, [selectedPlayer, initialAssessmentId]);
 
-  const currentTemplate = SPORT_TEMPLATES[sport] || SPORT_TEMPLATES.football;
+  // Handle Preset Scope Changes
+  const handleSelectScopePreset = (preset: SkillPresetType) => {
+    setSkillScope(preset);
+    const ids = getPresetSkillIdsForSport(
+      sport, 
+      preset, 
+      allSportSkills, 
+      currentTemplate.positions, 
+      position
+    );
+    setActiveSkillIds(ids);
 
-  // Real-time score calculations
+    // Update ratings object: keep existing ratings, initialize new ones with defaultScore
+    setSkillRatings(prev => {
+      const nextRatings: Record<string, number> = {};
+      ids.forEach(id => {
+        if (prev[id] !== undefined) {
+          nextRatings[id] = prev[id];
+        } else {
+          const sObj = allSportSkills.find(s => s.id === id);
+          nextRatings[id] = sObj?.defaultScore || 3;
+        }
+      });
+      return nextRatings;
+    });
+
+    showToast(`Switched to ${preset === 'master40' ? 'All 40 Skills' : preset === 'core' ? 'Core 12 Skills' : 'Development 20 Skills'}`, 'info');
+  };
+
+  const handleApplyCustomSkills = (newSkillIds: string[], preset: SkillPresetType, savedToProfile?: boolean) => {
+    setActiveSkillIds(newSkillIds);
+    setSkillScope(preset);
+
+    setSkillRatings(prev => {
+      const nextRatings: Record<string, number> = {};
+      newSkillIds.forEach(id => {
+        if (prev[id] !== undefined) {
+          nextRatings[id] = prev[id];
+        } else {
+          const sObj = allSportSkills.find(s => s.id === id);
+          nextRatings[id] = sObj?.defaultScore || 3;
+        }
+      });
+      return nextRatings;
+    });
+
+    if (savedToProfile) {
+      setPlayers(academyService.getPlayers());
+    }
+  };
+
+  // Real-time score calculations over actively assessed skills
   const { domainScores, overallScore, developmentLevel, strengths, developmentPriorities } = useMemo(() => {
-    const dScores = academyService.calculateDomainBreakdown(sport, skillRatings);
-    const allRatings = Object.values(skillRatings);
+    // Only calculate domain breakdown using active rated skills
+    const filteredRatings: Record<string, number> = {};
+    activeSkillIds.forEach(id => {
+      if (skillRatings[id] !== undefined) {
+        filteredRatings[id] = skillRatings[id];
+      }
+    });
+
+    const dScores = academyService.calculateDomainBreakdown(sport, filteredRatings);
+    const allRatings = Object.values(filteredRatings);
     const oScore = calculateDevelopmentScore(allRatings);
     const dLevel = getDevelopmentLevel(oScore);
-    const { strengths: str, developmentPriorities: prio } = academyService.calculateStrengthsAndPriorities(sport, skillRatings);
+    const { strengths: str, developmentPriorities: prio } = academyService.calculateStrengthsAndPriorities(sport, filteredRatings);
 
     return {
       domainScores: dScores,
@@ -175,7 +278,7 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
       strengths: str,
       developmentPriorities: prio
     };
-  }, [sport, skillRatings]);
+  }, [sport, skillRatings, activeSkillIds]);
 
   const handleRatingChange = (skillId: string, rating: number) => {
     setSkillRatings(prev => ({ ...prev, [skillId]: rating }));
@@ -187,27 +290,6 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
 
   const handleTargetChange = (skillId: string, text: string) => {
     setSkillTargets(prev => ({ ...prev, [skillId]: text }));
-  };
-
-  const togglePositionalSkill = (skillId: string) => {
-    setIncludedPositionSkills(prev => {
-      const exists = prev.includes(skillId);
-      if (exists) {
-        const next = prev.filter(id => id !== skillId);
-        setSkillRatings(curr => {
-          const c = { ...curr };
-          delete c[skillId];
-          return c;
-        });
-        return next;
-      } else {
-        const skill = currentTemplate.skills.find(s => s.id === skillId);
-        if (skill) {
-          setSkillRatings(curr => ({ ...curr, [skillId]: skill.defaultScore }));
-        }
-        return [...prev, skillId];
-      }
-    });
   };
 
   // AI Recommendations
@@ -283,63 +365,146 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
     setNextGoals(prev => [...prev, newGoal]);
   };
 
+  // Smart Voice Skill Scoring & Feedback Dictation
+  const handleVoiceSkillScoring = (spokenText: string) => {
+    if (!spokenText || !spokenText.trim()) return;
+    const text = spokenText.toLowerCase();
+
+    let matchedCount = 0;
+    const newRatings = { ...skillRatings };
+    const numWords: Record<string, number> = {
+      'one': 1, '1': 1,
+      'two': 2, '2': 2,
+      'three': 3, '3': 3,
+      'four': 4, '4': 4,
+      'five': 5, '5': 5
+    };
+
+    allSportSkills.forEach(skill => {
+      const sName = skill.name.toLowerCase();
+      const firstWord = sName.split(' ')[0];
+      if (text.includes(sName) || (firstWord.length > 4 && text.includes(firstWord))) {
+        // Regex to extract score after or before the skill mention
+        const targetWord = text.includes(sName) ? sName : firstWord;
+        const regex = new RegExp(`(?:${targetWord})[^0-9a-z]{0,12}(?:is|level|score|rating|to)?\\s*([1-5]|one|two|three|four|five)`, 'i');
+        const match = text.match(regex);
+        if (match && match[1]) {
+          const val = numWords[match[1].toLowerCase()] || parseInt(match[1]);
+          if (val >= 1 && val <= 5) {
+            newRatings[skill.id] = val;
+            matchedCount++;
+          }
+        }
+      }
+    });
+
+    if (matchedCount > 0) {
+      setSkillRatings(newRatings);
+      showToast(`Voice updated ${matchedCount} skill scores automatically!`, 'success');
+    } else {
+      setCoachObservation(prev => prev ? `${prev} ${spokenText}` : spokenText);
+      showToast(`Added to Coach Observation: "${spokenText.slice(0, 45)}..."`, 'info');
+    }
+  };
+
   const handleRemoveGoal = (id: string) => {
     setNextGoals(prev => prev.filter(g => g.id !== id));
   };
 
   const handleSave = () => {
     if (!selectedPlayer) {
-      showToast('Please select a player', 'error');
+      showToast('Please select a player to evaluate', 'error');
       return;
     }
 
-    const record: PlayerAssessmentRecord = {
-      id: initialAssessmentId || `assess-${Date.now()}`,
+    if (activeSkillIds.length === 0) {
+      showToast('Please select at least one skill to assess', 'warning');
+      return;
+    }
+
+    // Filter skill ratings to only active skills
+    const filteredRatings: Record<string, number> = {};
+    activeSkillIds.forEach(id => {
+      filteredRatings[id] = skillRatings[id] || 3;
+    });
+
+    const newRecord: PlayerAssessmentRecord = {
+      id: initialAssessmentId || `assess-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       playerId: selectedPlayer.id,
       playerName: selectedPlayer.name,
       sport,
       position,
+      ageCategory: selectedPlayer.ageCategory || detectAgeCategory(selectedPlayer.age, selectedPlayer.dob),
+      gradeOrClass: selectedPlayer.gradeOrClass,
+      ageAtAssessment: selectedPlayer.age,
       assessmentType,
       assessmentDate,
-      coachName: coachName || selectedPlayer.coachName || 'Coach',
-      skillRatings,
+      coachName,
+      skillRatings: filteredRatings,
       skillObservations,
       skillTargets,
       includedPositionSkills,
+      assessedSkillIds: activeSkillIds,
       domainScores,
       overallScore,
       developmentLevel,
       strengths,
       developmentPriorities,
-      coachObservation,
-      coachRecommendation,
+      coachObservation: coachObservation || `Athlete evaluated across ${activeSkillIds.length} competencies. Overall development rating: ${overallScore}/100.`,
+      coachRecommendation: coachRecommendation || 'Continue regular academy practice focusing on high-tempo technical consistency.',
       aiSuggestions: aiSuggestions || undefined,
       nextGoals,
       nextAssessmentDate,
       createdAt: new Date().toISOString()
     };
 
-    academyService.saveAssessment(record);
-    showToast(`Assessment saved for ${selectedPlayer.name}! Overall: ${overallScore}/100`, 'success');
+    academyService.saveAssessment(newRecord);
 
-    if (onSaved) onSaved(record);
+    // Optionally sync active skills to player's permanent profile
+    if (syncToAthleteProfile && selectedPlayer) {
+      const updatedPlayer: PlayerProfileData = {
+        ...selectedPlayer,
+        selectedSkillIds: activeSkillIds,
+        skillPlanPreset: skillScope
+      };
+      academyService.savePlayer(updatedPlayer);
+    }
+
+    showToast(`Assessment saved successfully for ${selectedPlayer.name}! (${activeSkillIds.length} skills evaluated)`, 'success');
+    
+    if (onSaved) {
+      onSaved(newRecord);
+    }
   };
 
-  // Filter skills by category
+  // Filter skills to display in the evaluation list
+  const activeSkillIdSet = useMemo(() => new Set(activeSkillIds), [activeSkillIds]);
+
   const skillsToDisplay = useMemo(() => {
-    return currentTemplate.skills.filter(s => {
-      // Must be core OR explicitly included positional skill
-      const isIncluded = s.isCore || includedPositionSkills.includes(s.id);
-      if (!isIncluded) return false;
-      if (activePillarFilter === 'all') return true;
-      return s.category === activePillarFilter;
+    return allSportSkills.filter(s => {
+      // Must be in active skill selection
+      if (!activeSkillIdSet.has(s.id)) return false;
+      
+      // Pillar filter
+      if (activePillarFilter !== 'all' && s.category !== activePillarFilter) return false;
+
+      // Search query
+      if (searchSkillQuery.trim()) {
+        const q = searchSkillQuery.toLowerCase();
+        const matches = s.name.toLowerCase().includes(q) || 
+                        s.description.toLowerCase().includes(q) || 
+                        s.coachingCue.toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+
+      return true;
     });
-  }, [currentTemplate, includedPositionSkills, activePillarFilter]);
+  }, [allSportSkills, activeSkillIdSet, activePillarFilter, searchSkillQuery]);
 
   const levelColor = getDevelopmentLevelColor(developmentLevel);
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-6 pb-36 sm:pb-28">
       
       {/* Header & Quick Summary Bar */}
       <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 border-2 border-slate-900 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -349,14 +514,14 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
               1–5 Coaching Scale Entry
             </span>
             <span className="text-xs text-slate-400 font-bold">
-              Rapid Tap Interface • Instant Score Normalization
+              Custom Skill Criteria • Rapid Tap Interface
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight font-display">
             Player Development Assessment
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 font-medium mt-1">
-            Evaluate technical, tactical, physical, and behavioral progression with seamless score calculation.
+            Evaluate basic foundation essentials or up to 40 comprehensive skills tailored to each athlete.
           </p>
         </div>
 
@@ -383,26 +548,83 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
       {/* Configuration Cards: Player, Sport, Position, Cycle */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* 1. Player Selection */}
-        <div className="bg-white border-2 border-slate-900 rounded-2xl p-5 shadow-sm space-y-3">
-          <label className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center space-x-1.5">
-            <User size={15} className="text-slate-900" />
-            <span>1. Select Player</span>
-          </label>
+        <div className="bg-white border-2 border-slate-900 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center space-x-1.5 shrink-0">
+              <User size={15} className="text-slate-900" />
+              <span>1. Select Player</span>
+            </label>
+            <select
+              value={ageCategoryFilter}
+              onChange={e => setAgeCategoryFilter(e.target.value)}
+              className="bg-slate-100 text-slate-800 border border-slate-300 rounded-lg px-2 py-1 text-[11px] font-bold outline-none"
+              aria-label="Filter by age category"
+            >
+              <option value="all">All Age Categories</option>
+              <option value="U-10">U-10</option>
+              <option value="U-12">U-12</option>
+              <option value="U-14">U-14</option>
+              <option value="U-16">U-16</option>
+              <option value="U-18">U-18</option>
+              <option value="Senior">Senior</option>
+            </select>
+          </div>
+
           <select
             value={selectedPlayerId}
             onChange={e => setSelectedPlayerId(e.target.value)}
-            className="w-full bg-slate-50 border-2 border-slate-900 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            className="w-full bg-slate-50 border-2 border-slate-900 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
           >
-            {players.map(p => (
+            {filteredPlayers.map(p => (
               <option key={p.id} value={p.id}>
                 {p.name} ({p.sport.toUpperCase()} • {p.position} • {p.age}y)
               </option>
             ))}
           </select>
+
+          {/* Quick Athlete Tap Strip */}
+          {filteredPlayers.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-none">
+              {filteredPlayers.slice(0, 10).map(p => {
+                const isSelected = p.id === selectedPlayerId;
+                const cat = p.ageCategory || detectAgeCategory(p.age, p.dob);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedPlayerId(p.id)}
+                    className={`px-2.5 py-1.5 rounded-xl text-left border flex-shrink-0 transition-all ${
+                      isSelected
+                        ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-400'
+                        : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    <p className="text-[11px] font-black truncate max-w-[100px] text-slate-900">{p.name}</p>
+                    <p className="text-[9px] text-slate-500 font-bold">{cat} • {p.age}y</p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {selectedPlayer && (
-            <p className="text-[11px] text-slate-500 font-medium">
-              Squad: <span className="font-bold text-slate-800">{selectedPlayer.batchOrTeam || 'Individual'}</span> | Dominant: {selectedPlayer.dominantSide}
-            </p>
+            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex items-start space-x-2.5">
+              <div className="w-8 h-8 rounded-lg bg-slate-900 text-amber-400 font-black flex items-center justify-center text-xs shrink-0 shadow-sm">
+                {selectedPlayer.name.charAt(0)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center space-x-1.5 flex-wrap">
+                  <span className="text-xs font-black text-slate-900">{selectedPlayer.name}</span>
+                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded">
+                    {selectedPlayer.ageCategory || detectAgeCategory(selectedPlayer.age, selectedPlayer.dob)} Division
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-bold">Age {selectedPlayer.age}</span>
+                </div>
+                <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                  Batch: <strong className="text-slate-700">{selectedPlayer.batchOrTeam || 'Individual'}</strong> | Dominant: {selectedPlayer.dominantSide}
+                </p>
+              </div>
+            </div>
           )}
         </div>
 
@@ -416,10 +638,10 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
             <select
               value={sport}
               onChange={e => {
-                const newSport = e.target.value as CoachingSportId;
-                setSport(newSport);
-                const tmpl = SPORT_TEMPLATES[newSport] || SPORT_TEMPLATES.football;
-                if (tmpl.positions.length > 0) {
+                const s = e.target.value as CoachingSportId;
+                setSport(s);
+                const tmpl = SPORT_TEMPLATES[s];
+                if (tmpl && tmpl.positions.length > 0) {
                   setPosition(tmpl.positions[0].name);
                 }
               }}
@@ -444,12 +666,12 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
               ))}
             </select>
           </div>
-          <p className="text-[11px] text-slate-400 font-medium">
-            Template: {currentTemplate.name} • {currentTemplate.skills.filter(s => s.isCore).length} Core Skills
+          <p className="text-[11px] text-slate-500 font-medium leading-tight">
+            {currentTemplate.tagline}
           </p>
         </div>
 
-        {/* 3. Cycle & Date */}
+        {/* 3. Assessment Cycle & Date */}
         <div className="bg-white border-2 border-slate-900 rounded-2xl p-5 shadow-sm space-y-3">
           <label className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center space-x-1.5">
             <Calendar size={15} className="text-slate-900" />
@@ -461,10 +683,14 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
               onChange={e => setAssessmentType(e.target.value as AssessmentType)}
               className="bg-slate-50 border-2 border-slate-900 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none"
             >
-              <option value="Initial Assessment">Initial Assessment</option>
+              <option value="Baseline Assessment">Baseline Assessment</option>
               <option value="Monthly Review">Monthly Review</option>
               <option value="3-Month Review">3-Month Review</option>
+              <option value="Term 1 Evaluation">Term 1 Evaluation</option>
+              <option value="Term 2 Evaluation">Term 2 Evaluation</option>
               <option value="6-Month Review">6-Month Review</option>
+              <option value="Annual / Final Assessment">Annual / Final Assessment</option>
+              <option value="Initial Assessment">Initial Assessment</option>
               <option value="Custom Assessment">Custom Assessment</option>
             </select>
 
@@ -485,73 +711,176 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
         </div>
       </div>
 
-      {/* Positional Skills Toggle Drawer */}
-      {currentTemplate.positions.length > 0 && (
-        <div className="bg-blue-50/70 border-2 border-blue-900/30 rounded-2xl p-5 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center space-x-2">
-              <Layers size={18} className="text-blue-700" />
-              <h3 className="text-xs font-black uppercase tracking-wider text-blue-950">
-                Position-Specific Skills ({position})
+      {/* SKILL SELECTION CRITERIA BAR (Allows Coach to choose how many skills to assess) */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white rounded-3xl p-5 sm:p-6 border-2 border-slate-900 shadow-lg space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 font-black flex items-center justify-center">
+              <Sliders className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-400/20 px-2 py-0.5 rounded border border-amber-400/30">
+                  Skill Selection Criteria
+                </span>
+                <span className="text-xs text-slate-300 font-bold">
+                  {sport.toUpperCase()} ({allSportSkills.length} Total in Library)
+                </span>
+              </div>
+              <h3 className="text-lg font-black tracking-tight mt-0.5">
+                Assessing {activeSkillIds.length} of {allSportSkills.length} Skills
               </h3>
             </div>
-            <span className="text-[11px] text-blue-700 font-semibold">
-              Tap to include or exclude role-specific competencies
-            </span>
           </div>
 
-          <div className="flex flex-wrap gap-2 pt-1">
-            {currentTemplate.skills.filter(s => !s.isCore).map(posSkill => {
-              const isSelected = includedPositionSkills.includes(posSkill.id);
-              return (
-                <button
-                  key={posSkill.id}
-                  onClick={() => togglePositionalSkill(posSkill.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-black border transition-all flex items-center space-x-1.5 ${
-                    isSelected 
-                      ? 'bg-blue-600 text-white border-blue-800 shadow-sm' 
-                      : 'bg-white text-slate-700 border-slate-300 hover:border-slate-500'
-                  }`}
-                >
-                  <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${isSelected ? 'bg-white text-blue-700 font-black' : 'bg-slate-200 text-slate-600'}`}>
-                    {isSelected ? '✓' : '+'}
-                  </span>
-                  <span>{posSkill.name}</span>
-                </button>
-              );
-            })}
-          </div>
+          {/* Modal Trigger Button */}
+          <button
+            type="button"
+            onClick={() => setIsSkillModalOpen(true)}
+            className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-2xl text-xs uppercase tracking-wider transition shadow-md flex items-center justify-center space-x-2 active:scale-95"
+          >
+            <Sliders className="w-4 h-4" />
+            <span>Customize & Pick Skills ({activeSkillIds.length})</span>
+          </button>
         </div>
-      )}
+
+        {/* Quick Preset Buttons */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800">
+          <span className="text-[11px] font-bold text-slate-400 mr-1">Quick Presets:</span>
+          
+          {selectedPlayer?.selectedSkillIds && selectedPlayer.selectedSkillIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSkillIds(selectedPlayer.selectedSkillIds || []);
+                setSkillScope(selectedPlayer.skillPlanPreset || 'custom');
+                showToast(`Loaded ${selectedPlayer.name}'s assigned skills (${selectedPlayer.selectedSkillIds?.length})`, 'info');
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition border flex items-center space-x-1.5 ${
+                skillScope === 'custom' && activeSkillIds.length === selectedPlayer.selectedSkillIds.length
+                  ? 'bg-amber-400 text-slate-950 border-amber-400 shadow'
+                  : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+              }`}
+            >
+              <span>👤 {selectedPlayer.name}'s Profile Plan ({selectedPlayer.selectedSkillIds.length})</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => handleSelectScopePreset('core')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition border flex items-center space-x-1.5 ${
+              skillScope === 'core'
+                ? 'bg-amber-400 text-slate-950 border-amber-400 shadow'
+                : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+            }`}
+          >
+            <span>⚡ Core Basics (12 Skills)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSelectScopePreset('development')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition border flex items-center space-x-1.5 ${
+              skillScope === 'development'
+                ? 'bg-amber-400 text-slate-950 border-amber-400 shadow'
+                : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+            }`}
+          >
+            <span>🎯 Development Track (20 Skills)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSelectScopePreset('master40')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition border flex items-center space-x-1.5 ${
+              skillScope === 'master40'
+                ? 'bg-amber-400 text-slate-950 border-amber-400 shadow'
+                : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+            }`}
+          >
+            <span>🏆 Full Matrix ({allSportSkills.length} Skills)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSelectScopePreset('positional')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition border flex items-center space-x-1.5 ${
+              skillScope === 'positional'
+                ? 'bg-amber-400 text-slate-950 border-amber-400 shadow'
+                : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+            }`}
+          >
+            <span>🛡️ Role Focus ({position})</span>
+          </button>
+        </div>
+      </div>
 
       {/* Main Skill Assessment Matrix (Mobile-first 1-5 touch interface) */}
       <div className="bg-white border-2 border-slate-900 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
         
-        {/* Category Tabs / Filters */}
+        {/* Category Tabs & Search */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b-2 border-slate-100 pb-4 gap-4">
           <div>
-            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">
-              Skill Evaluation Matrix
-            </h2>
+            <div className="flex items-center space-x-2">
+              <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+                Skill Evaluation Matrix
+              </h2>
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] font-black">
+                {skillsToDisplay.length} in View
+              </span>
+            </div>
             <p className="text-xs text-slate-500 font-medium">
               Tap score 1 to 5 for each competency. Instant scoring & cues displayed below each skill.
             </p>
           </div>
 
-          <div className="flex items-center space-x-1.5 overflow-x-auto pb-2 sm:pb-0">
-            {(['all', 'technical', 'tactical', 'physical', 'gameBehaviour'] as const).map(pill => (
-              <button
-                key={pill}
-                onClick={() => setActivePillarFilter(pill)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition ${
-                  activePillarFilter === pill
-                    ? 'bg-slate-900 text-white shadow-md'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {pill === 'gameBehaviour' ? 'Behaviour' : pill}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Voice Skill Scorer Action */}
+            <VoiceTranscribeButton
+              onTranscribe={handleVoiceSkillScoring}
+              promptContext={`This is a sports coach rating athlete skills for ${sport}. Example voice inputs: 'Dribbling 4, shooting 5, passing 3' or observations.`}
+              buttonLabel="Speak Skill Scores"
+              size="sm"
+              variant="pill"
+            />
+
+            {/* Search Input with Voice */}
+            <div className="relative flex items-center">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search skills..."
+                value={searchSkillQuery}
+                onChange={e => setSearchSkillQuery(e.target.value)}
+                className="bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-8 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900 w-36 sm:w-44"
+              />
+              <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                <VoiceTranscribeButton
+                  onTranscribe={(text) => setSearchSkillQuery(text)}
+                  promptContext={`Search sports skill names for ${sport}`}
+                  size="sm"
+                  variant="ghost"
+                />
+              </div>
+            </div>
+
+            {/* Pillar Filter Buttons */}
+            <div className="flex items-center space-x-1 overflow-x-auto">
+              {(['all', 'technical', 'tactical', 'physical', 'gameBehaviour'] as const).map(pill => (
+                <button
+                  key={pill}
+                  onClick={() => setActivePillarFilter(pill)}
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+                    activePillarFilter === pill
+                      ? 'bg-slate-900 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {pill === 'gameBehaviour' ? 'Behaviour' : pill}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -573,109 +902,131 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
         </div>
 
         {/* Skill Cards Grid */}
-        <div className="space-y-4">
-          {skillsToDisplay.map(skill => {
-            const currentScore = skillRatings[skill.id] || 3;
-            const currentScale = COACHING_SCALE_LABELS[currentScore];
-            const obsText = skillObservations[skill.id] || '';
-            const targetText = skillTargets[skill.id] || '';
+        {skillsToDisplay.length === 0 ? (
+          <div className="text-center py-10 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+            <Target className="w-8 h-8 text-slate-400 mx-auto" />
+            <p className="text-sm font-bold text-slate-700">No skills match the current filter</p>
+            <button
+              type="button"
+              onClick={() => {
+                setActivePillarFilter('all');
+                setSearchSkillQuery('');
+              }}
+              className="text-xs text-blue-600 font-bold hover:underline"
+            >
+              Reset filters
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {skillsToDisplay.map(skill => {
+              const currentScore = skillRatings[skill.id] || 3;
+              const currentScale = COACHING_SCALE_LABELS[currentScore];
+              const obs = skillObservations[skill.id] || '';
+              const tgt = skillTargets[skill.id] || '';
 
-            return (
-              <div 
-                key={skill.id}
-                className="bg-slate-50/70 border-2 border-slate-200 hover:border-slate-900 rounded-2xl p-4 sm:p-5 transition space-y-3"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <h3 className="text-sm font-black text-slate-900">{skill.name}</h3>
-                      <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-slate-200 text-slate-700">
-                        {skill.category}
-                      </span>
-                      {!skill.isCore && (
-                        <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-blue-100 text-blue-800">
-                          Positional
+              const pillarBadgeColor = 
+                skill.category === 'technical' ? 'bg-emerald-100 text-emerald-800' :
+                skill.category === 'tactical' ? 'bg-blue-100 text-blue-800' :
+                skill.category === 'physical' ? 'bg-amber-100 text-amber-900' :
+                'bg-purple-100 text-purple-800';
+
+              return (
+                <div 
+                  key={skill.id}
+                  className="bg-white border-2 border-slate-200 hover:border-slate-900 rounded-2xl p-4 sm:p-5 transition-all space-y-3"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${pillarBadgeColor}`}>
+                          {skill.category}
                         </span>
-                      )}
+                        {skill.isCore && (
+                          <span className="text-[10px] font-black px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded">
+                            ★ Core
+                          </span>
+                        )}
+                        <h3 className="text-sm sm:text-base font-black text-slate-900">
+                          {skill.name}
+                        </h3>
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        {skill.description}
+                      </p>
                     </div>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">{skill.description}</p>
+
+                    {/* 1-5 Quick Tap Score Buttons */}
+                    <div className="flex items-center space-x-1.5 bg-slate-100 p-1.5 rounded-2xl shrink-0 self-start sm:self-center">
+                      {[1, 2, 3, 4, 5].map(score => {
+                        const isSelected = currentScore === score;
+                        const sc = COACHING_SCALE_LABELS[score];
+                        return (
+                          <button
+                            key={score}
+                            type="button"
+                            onClick={() => handleRatingChange(skill.id, score)}
+                            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl font-black text-xs sm:text-sm transition-all flex flex-col items-center justify-center ${
+                              isSelected
+                                ? 'bg-slate-900 text-white shadow-md scale-105'
+                                : 'bg-white text-slate-700 hover:bg-slate-200'
+                            }`}
+                            style={{
+                              borderColor: isSelected ? sc.color : undefined,
+                              borderWidth: isSelected ? '2px' : '1px'
+                            }}
+                          >
+                            <span>{score}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  {/* 1 to 5 Big Touch Rating Buttons */}
-                  <div className="flex items-center space-x-1.5 self-start sm:self-auto">
-                    {[1, 2, 3, 4, 5].map(num => {
-                      const isSelected = currentScore === num;
-                      const scale = COACHING_SCALE_LABELS[num];
-                      return (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => handleRatingChange(skill.id, num)}
-                          className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl font-black text-sm transition-all flex flex-col items-center justify-center border-2 ${
-                            isSelected
-                              ? 'bg-slate-900 text-white border-slate-900 shadow-md scale-105 ring-2 ring-amber-400'
-                              : 'bg-white text-slate-700 border-slate-300 hover:border-slate-700 hover:bg-slate-100'
-                          }`}
-                        >
-                          <span>{num}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Score Meaning & Coaching Cue */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-3 rounded-xl border border-slate-200 text-xs gap-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[10px] font-black uppercase text-slate-400">Current Rating:</span>
-                    <span className="font-black" style={{ color: currentScale.color }}>
-                      {currentScore}/5 — {currentScale.title}
+                  {/* Coaching Cue & Scale Description */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-2 pt-2 border-t border-slate-100">
+                    <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-1 rounded-lg">
+                      💡 Coaching Cue: {skill.coachingCue}
+                    </span>
+                    <span className="font-bold text-slate-700">
+                      Level: <strong style={{ color: currentScale.color }}>{currentScale.title}</strong>
                     </span>
                   </div>
 
-                  <div className="text-slate-500 font-medium text-[11px] flex items-center space-x-1">
-                    <span className="font-bold text-slate-700">Coaching Cue:</span>
-                    <span>{skill.coachingCue}</span>
+                  {/* Observations & Targets expandable input */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    <input
+                      type="text"
+                      placeholder="Observation / feedback for this skill..."
+                      value={obs}
+                      onChange={e => handleObservationChange(skill.id, e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-900"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Specific target / corrective drill..."
+                      value={tgt}
+                      onChange={e => handleTargetChange(skill.id, e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-900"
+                    />
                   </div>
                 </div>
-
-                {/* Optional Note & Target input expandable */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                  <input
-                    type="text"
-                    value={obsText}
-                    onChange={e => handleObservationChange(skill.id, e.target.value)}
-                    placeholder={`Coach observation for ${skill.name} (optional)...`}
-                    className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-800"
-                  />
-                  <input
-                    type="text"
-                    value={targetText}
-                    onChange={e => handleTargetChange(skill.id, e.target.value)}
-                    placeholder="Specific development target (e.g. 50 reps daily)..."
-                    className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-800"
-                  />
-                </div>
-
-              </div>
-            );
-          })}
-        </div>
-
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* AI Recommendations & Qualitative Feedback Section */}
-      <div className="bg-white border-2 border-slate-900 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b-2 border-slate-100 pb-4 gap-4">
+      {/* AI Coaching Recommendations & Feedback Section */}
+      <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white border-2 border-slate-900 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
           <div>
             <div className="flex items-center space-x-2">
-              <Sparkles size={18} className="text-amber-500" />
-              <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">
-                Coach Feedback & AI Development Assistant
-              </h2>
+              <Sparkles className="w-5 h-5 text-amber-400" />
+              <h3 className="text-lg font-black">AI Coaching Synthesizer</h3>
             </div>
-            <p className="text-xs text-slate-500 font-medium">
-              Generate constructive coach observations, strengths, priorities, and 3-month goals with 1 click.
+            <p className="text-xs text-slate-400 mt-0.5">
+              Instantly generate comprehensive developmental summary, strengths, priority drills, and actionable goals.
             </p>
           </div>
 
@@ -683,194 +1034,157 @@ export const AssessmentEntry: React.FC<AssessmentEntryProps> = ({
             type="button"
             onClick={handleGenerateAi}
             disabled={isGeneratingAi}
-            className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 transition active:scale-95 disabled:opacity-50"
+            className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-2xl text-xs uppercase tracking-wider transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50"
           >
-            <Sparkles size={16} />
-            <span>{isGeneratingAi ? 'Analyzing Skills...' : '⚡ Generate AI Coach Suggestions'}</span>
+            <Sparkles className="w-4 h-4" />
+            <span>{isGeneratingAi ? 'Synthesizing...' : 'Generate AI Report & Goals'}</span>
           </button>
         </div>
 
-        {/* Auto-identified Strengths & Priorities */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-emerald-50 border-2 border-emerald-900/30 rounded-2xl p-4 space-y-2">
-            <h4 className="text-xs font-black uppercase tracking-wider text-emerald-900 flex items-center space-x-1.5">
-              <span>✓ Auto-Identified Strengths (Score ≥ 4)</span>
-            </h4>
-            <div className="flex flex-wrap gap-1.5">
-              {strengths.map((str, idx) => (
-                <span key={idx} className="px-2.5 py-1 bg-white border border-emerald-300 rounded-lg text-xs font-bold text-emerald-950">
-                  {str}
-                </span>
-              ))}
+        {/* Qualitative Notes Inputs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-black uppercase tracking-wider text-slate-400 block">
+                Coach Qualitative Observation
+              </label>
+              <VoiceTranscribeButton
+                onTranscribe={(text) => setCoachObservation(prev => prev ? `${prev} ${text}` : text)}
+                promptContext={`This is a sports coach speaking qualitative training observations for a ${sport} athlete.`}
+                buttonLabel="Dictate Note"
+                size="sm"
+                variant="pill"
+              />
             </div>
-          </div>
-
-          <div className="bg-amber-50 border-2 border-amber-900/30 rounded-2xl p-4 space-y-2">
-            <h4 className="text-xs font-black uppercase tracking-wider text-amber-900 flex items-center space-x-1.5">
-              <span>• Auto-Identified Development Priorities (Score ≤ 3)</span>
-            </h4>
-            <div className="flex flex-wrap gap-1.5">
-              {developmentPriorities.map((prio, idx) => (
-                <span key={idx} className="px-2.5 py-1 bg-white border border-amber-300 rounded-lg text-xs font-bold text-amber-950">
-                  {prio}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* AI Badge Note if AI was run */}
-        {aiSuggestions && (
-          <div className="p-4 bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl flex items-start space-x-3">
-            <Sparkles size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="px-2 py-0.5 bg-amber-500 text-slate-950 rounded text-[9px] font-black uppercase">
-                  AI Coach Suggestions Active
-                </span>
-                <span className="text-xs text-amber-900 font-bold">Suggestions are loaded below and fully editable</span>
-              </div>
-              <p className="text-xs text-slate-700 font-medium mt-1">
-                {aiSuggestions.trainingFocus}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Coach Summary & Recommendations inputs */}
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1.5">
-              Coach's Comprehensive Observation
-            </label>
             <textarea
               rows={3}
               value={coachObservation}
               onChange={e => setCoachObservation(e.target.value)}
-              placeholder="Enter coach summary regarding overall game application, attitude, and tactical presence..."
-              className="w-full bg-slate-50 border-2 border-slate-900 rounded-xl p-3 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              placeholder="Detailed technical and behavioural observations from training & match play (or tap 'Dictate Note' to speak)..."
+              className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
             />
           </div>
 
-          <div>
-            <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1.5">
-              Recommended Home & Academy Training Focus
-            </label>
-            <input
-              type="text"
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-black uppercase tracking-wider text-slate-400 block">
+                Coach Recommendations & Parent Guidance
+              </label>
+              <VoiceTranscribeButton
+                onTranscribe={(text) => setCoachRecommendation(prev => prev ? `${prev} ${text}` : text)}
+                promptContext={`This is a sports coach speaking actionable recommendations and parent advice for a ${sport} student.`}
+                buttonLabel="Dictate Guidance"
+                size="sm"
+                variant="pill"
+              />
+            </div>
+            <textarea
+              rows={3}
               value={coachRecommendation}
               onChange={e => setCoachRecommendation(e.target.value)}
-              placeholder="e.g. 15-minute daily wall passing, figure-8 dribble cones, and 1v1 small-sided match play..."
-              className="w-full bg-slate-50 border-2 border-slate-900 rounded-xl p-3 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              placeholder="Recommended training focus, home practice drills, and encouragement (or tap 'Dictate Guidance' to speak)..."
+              className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
             />
           </div>
         </div>
 
-        {/* Next 3-Month Development Goals Manager */}
+        {/* 3-Month Training Goals */}
         <div className="space-y-3 pt-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center space-x-1.5">
-              <TrendingUp size={16} className="text-blue-600" />
-              <span>Next 3-Month Actionable Goals</span>
-            </h3>
+            <label className="text-xs font-black uppercase tracking-wider text-slate-400">
+              3-Month Development Goals
+            </label>
             <button
               type="button"
               onClick={handleAddGoal}
-              className="px-3 py-1 bg-slate-900 text-white rounded-lg text-xs font-black uppercase tracking-wider hover:bg-slate-800 transition flex items-center space-x-1"
+              className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl text-xs font-bold border border-slate-700 flex items-center space-x-1"
             >
-              <Plus size={14} />
+              <Plus className="w-3.5 h-3.5" />
               <span>Add Goal</span>
             </button>
           </div>
 
           {nextGoals.length === 0 ? (
-            <p className="text-xs text-slate-400 italic bg-slate-50 p-4 rounded-xl border border-slate-200">
-              No specific goals defined yet. Click "Generate AI Coach Suggestions" or "Add Goal" above to create milestones.
+            <p className="text-xs text-slate-500 italic bg-slate-800/40 p-4 rounded-2xl border border-slate-800">
+              No training goals added yet. Click "+ Add Goal" or generate via AI.
             </p>
           ) : (
             <div className="space-y-2">
               {nextGoals.map((g, idx) => (
-                <div key={g.id || idx} className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <input
-                      type="text"
-                      value={g.skill}
-                      onChange={e => {
-                        const val = e.target.value;
-                        setNextGoals(prev => prev.map((item, i) => i === idx ? { ...item, skill: val } : item));
-                      }}
-                      placeholder="Skill Focus"
-                      className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800"
-                    />
-                    <input
-                      type="text"
-                      value={g.goal}
-                      onChange={e => {
-                        const val = e.target.value;
-                        setNextGoals(prev => prev.map((item, i) => i === idx ? { ...item, goal: val } : item));
-                      }}
-                      placeholder="Development Goal"
-                      className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-800"
-                    />
-                    <input
-                      type="text"
-                      value={g.target}
-                      onChange={e => {
-                        const val = e.target.value;
-                        setNextGoals(prev => prev.map((item, i) => i === idx ? { ...item, target: val } : item));
-                      }}
-                      placeholder="Target Milestone"
-                      className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-800"
-                    />
+                <div key={g.id || idx} className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black text-white">{g.goal}</p>
+                    <p className="text-[11px] text-slate-400">Skill: {g.skill} | Target: {g.target}</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleRemoveGoal(g.id)}
-                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition self-end sm:self-auto"
+                    className="p-1.5 text-slate-400 hover:text-red-400 self-end sm:self-center"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
             </div>
           )}
         </div>
-
       </div>
 
-      {/* Action Floating / Sticky Save Bar */}
-      <div className="sticky bottom-4 z-20 bg-slate-900 border-2 border-slate-900 rounded-2xl p-4 shadow-2xl flex items-center justify-between text-white">
+      {/* Floating Bottom Action Dock */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t-2 border-slate-900 px-4 py-3 shadow-2xl flex items-center justify-between max-w-7xl mx-auto">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center text-sm">
-            {overallScore}
-          </div>
-          <div>
-            <p className="text-xs font-black uppercase tracking-wider">{selectedPlayer?.name || 'Player Assessment'}</p>
-            <p className="text-[11px] text-slate-400">{assessmentType} • Level: {developmentLevel}</p>
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
           {onCancel && (
             <button
               type="button"
               onClick={onCancel}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-black uppercase tracking-wider transition"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl font-black text-xs uppercase tracking-wider transition"
             >
               Cancel
             </button>
           )}
 
+          <label className="hidden sm:flex items-center space-x-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={syncToAthleteProfile}
+              onChange={e => setSyncToAthleteProfile(e.target.checked)}
+              className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 w-4 h-4"
+            />
+            <span>Reflect {activeSkillIds.length} skills to {selectedPlayer?.name || 'Athlete'}'s profile</span>
+          </label>
+        </div>
+
+        <div className="flex items-center space-x-3">
+          <div className="text-right mr-2 hidden sm:block">
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">Calculated Overall</span>
+            <span className="text-sm font-black text-slate-900">{overallScore}/100 • {developmentLevel}</span>
+          </div>
+
           <button
             type="button"
             onClick={handleSave}
-            className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg flex items-center space-x-2 transition active:scale-95"
+            className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-2xl text-xs sm:text-sm uppercase tracking-wider shadow-xl transition flex items-center space-x-2 active:scale-95"
           >
-            <Save size={16} />
-            <span>Save Assessment</span>
+            <Save className="w-4 h-4 text-emerald-400" />
+            <span>Save Assessment ({activeSkillIds.length} Skills)</span>
           </button>
         </div>
       </div>
+
+      {/* Skill Selection Modal */}
+      {isSkillModalOpen && (
+        <SkillSelectionModal
+          isOpen={isSkillModalOpen}
+          onClose={() => setIsSkillModalOpen(false)}
+          sport={sport}
+          position={position}
+          athlete={selectedPlayer}
+          initialSelectedSkillIds={activeSkillIds}
+          initialPreset={skillScope}
+          onApply={handleApplyCustomSkills}
+          title={`Configure Skills for ${selectedPlayer?.name || 'Athlete'}`}
+        />
+      )}
 
     </div>
   );

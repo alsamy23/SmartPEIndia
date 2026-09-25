@@ -24,7 +24,7 @@ const MoveCheckTool: React.FC = () => {
       setPermissionStatus('granted');
       setIsTracking(true);
     } catch (err) {
-      console.error("Camera access denied or error:", err);
+      console.warn("Camera access denied or error:", err);
       setPermissionStatus('denied');
     }
   };

@@ -1,5 +1,22 @@
 import { storageService } from './storageService';
 import { academicCoachingCloudService } from './academicCoachingCloudService';
+import { 
+  FOOTBALL_SKILLS, 
+  BASKETBALL_SKILLS, 
+  CRICKET_SKILLS, 
+  CHESS_SKILLS,
+  TENNIS_SKILLS,
+  BADMINTON_SKILLS,
+  ATHLETICS_SKILLS,
+  VOLLEYBALL_SKILLS,
+  KABADDI_SKILLS,
+  TABLE_TENNIS_SKILLS,
+  SWIMMING_SKILLS,
+  YOGA_FITNESS_SKILLS, 
+  SkillPresetType,
+  getPresetSkillIdsForSport,
+  SKILL_PRESETS_META
+} from './coachingSkillsDatabase';
 
 export type CoachingSportId = 
   | 'football' 
@@ -16,10 +33,14 @@ export type CoachingSportId =
   | 'yoga-fitness';
 
 export type AssessmentType = 
-  | 'Initial Assessment' 
+  | 'Baseline Assessment'
   | 'Monthly Review' 
   | '3-Month Review' 
+  | 'Term 1 Evaluation'
+  | 'Term 2 Evaluation'
   | '6-Month Review' 
+  | 'Annual / Final Assessment'
+  | 'Initial Assessment' 
   | 'Custom Assessment';
 
 export type DevelopmentLevel = 
@@ -100,6 +121,11 @@ export interface PlayerProfileData {
   previousExperience: string;
   playerGoals: string;
   medicalNotes?: string;
+  feeStatus?: 'Paid' | 'Due' | 'Exempt' | 'Partial';
+  monthlyFeeAmount?: number;
+  feeDueDate?: string;
+  selectedSkillIds?: string[]; // IDs of customized skills tracked for this athlete
+  skillPlanPreset?: SkillPresetType; // 'core' | 'development' | 'master40' | 'positional' | 'custom'
   createdAt: string;
   active: boolean;
 }
@@ -135,8 +161,9 @@ export interface PlayerAssessmentRecord {
   skillObservations: Record<string, string>;
   skillTargets: Record<string, string>;
   
-  // Positional skills included in this assessment
+  // Positional skills and assessed skill IDs included in this assessment
   includedPositionSkills: string[];
+  assessedSkillIds?: string[];
 
   // Domain scores normalized (0-100)
   domainScores: {
@@ -624,74 +651,32 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
         id: 'Goalkeeper',
         name: 'Goalkeeper',
         description: 'Handling, distribution, shot stopping, and 1v1 defense in the box.',
-        skills: ['fb_gk_handling', 'fb_gk_distribution', 'fb_gk_positioning', 'fb_gk_shot_stopping', 'fb_gk_1v1_defending']
+        skills: ['fb_ball_control', 'fb_first_touch_directional', 'fb_tackling_block', 'fb_scanning_preorientation', 'fb_positioning_spacing']
       },
       {
         id: 'Defender',
         name: 'Defender (CB / Fullback)',
         description: 'Tackling, interceptions, aerial duels, and build-up from back.',
-        skills: ['fb_def_tackling', 'fb_def_interception', 'fb_def_positioning', 'fb_def_aerial', 'fb_def_buildup']
+        skills: ['fb_tackling_block', 'fb_interception_anticipation', 'fb_heading_technique', 'fb_buildup_angles', 'fb_positioning_spacing']
       },
       {
         id: 'Midfielder',
         name: 'Midfielder (CM / CAM / CDM)',
         description: 'Scanning, passing range, transitions, ball retention under pressure.',
-        skills: ['fb_mid_scanning', 'fb_mid_passing_range', 'fb_mid_decision', 'fb_mid_retention', 'fb_mid_transition']
+        skills: ['fb_scanning_preorientation', 'fb_short_passing', 'fb_long_passing', 'fb_shielding_retention', 'fb_transition_attack_to_defense']
       },
       {
         id: 'Forward',
         name: 'Forward / Winger / Striker',
         description: 'Finishing, off-ball runs, 1v1 attacking, chance creation in final third.',
-        skills: ['fb_fwd_finishing', 'fb_fwd_movement', 'fb_fwd_1v1_attack', 'fb_fwd_offball_runs', 'fb_fwd_chance_creation']
+        skills: ['fb_shooting_accuracy', 'fb_shooting_power', 'fb_1v1_attacking', 'fb_offball_movement', 'fb_turning_cod']
       }
     ],
-    skills: [
-      { id: 'fb_ball_control', name: 'Ball Control', category: 'technical', isCore: true, description: 'Cushioning and controlling rolling/aerial balls with all surfaces.', coachingCue: 'Soft ankles, body behind line of flight.', defaultScore: 3 },
-      { id: 'fb_first_touch', name: 'First Touch', category: 'technical', isCore: true, description: 'Directing first contact away from pressure into open space.', coachingCue: 'Head up before contact, open body stance.', defaultScore: 3 },
-      { id: 'fb_dribbling', name: 'Dribbling', category: 'technical', isCore: true, description: 'Close control while driving, keeping ball within striking distance.', coachingCue: 'Small touches with laces/outside foot.', defaultScore: 3 },
-      { id: 'fb_turning_cod', name: 'Turning & Change of Direction', category: 'technical', isCore: true, description: 'Sharp turns (Cruyff, hook, drag-back) with explosive exit acceleration.', coachingCue: 'Drop hips, push off outer foot.', defaultScore: 3 },
-      { id: 'fb_short_passing', name: 'Short Passing', category: 'technical', isCore: true, description: 'Crisp inside-foot ground passes with correct weight and accuracy.', coachingCue: 'Lock ankle, follow through along ground.', defaultScore: 3 },
-      { id: 'fb_long_passing', name: 'Long Passing', category: 'technical', isCore: true, description: 'Driven or lofted delivery across distance over 20-30 meters.', coachingCue: 'Strike through ball center or beneath with laces.', defaultScore: 3 },
-      { id: 'fb_receiving', name: 'Receiving', category: 'technical', isCore: true, description: 'Receiving on back foot to play forward into next phase immediately.', coachingCue: 'Check shoulder, receive across body.', defaultScore: 3 },
-      { id: 'fb_shooting_technique', name: 'Shooting Technique', category: 'technical', isCore: true, description: 'Clean contact through laces or instep curve on target.', coachingCue: 'Plant foot beside ball, knee over ball.', defaultScore: 3 },
-      { id: 'fb_shooting_accuracy', name: 'Shooting Accuracy', category: 'technical', isCore: true, description: 'Targeting bottom and top corner quadrants away from keeper.', coachingCue: 'Look at target, strike low into corners.', defaultScore: 3 },
-      { id: 'fb_finishing', name: 'Finishing', category: 'technical', isCore: true, description: 'Composure and variety of finishes in 1v1 and congested box.', coachingCue: 'Pick corner early, avoid blasting blind.', defaultScore: 3 },
-      { id: 'fb_1v1_attacking', name: '1v1 Attacking', category: 'technical', isCore: true, description: 'Using feints, changes of speed, and shoulder drops to beat defender.', coachingCue: 'Commit defender onto heels then accelerate.', defaultScore: 3 },
-      { id: 'fb_weak_foot', name: 'Weak Foot Competence', category: 'technical', isCore: true, description: 'Passing, crossing, and striking confidently with non-dominant foot.', coachingCue: 'Plant foot stability, repeat wall repetitions.', defaultScore: 2 },
-      { id: 'fb_positioning', name: 'Positioning', category: 'tactical', isCore: true, description: 'Maintaining effective distance and supporting angles in relation to ball.', coachingCue: 'Create passing triangles, don’t hide behind opponents.', defaultScore: 3 },
-      { id: 'fb_decision_making', name: 'Decision Making', category: 'tactical', isCore: true, description: 'Selecting pass vs dribble vs shoot quickly under pressing.', coachingCue: 'Scan field early to decide before receiving.', defaultScore: 3 },
-      { id: 'fb_off_ball_movement', name: 'Off-the-Ball Movement', category: 'tactical', isCore: true, description: 'Making blindside runs, creating space for teammates by dragging defenders.', coachingCue: 'Move as the ball travels, timing over speed.', defaultScore: 3 },
-      { id: 'fb_defensive_awareness', name: 'Defensive Awareness', category: 'tactical', isCore: true, description: 'Pressing triggers, tracking runners, cutting passing lanes.', coachingCue: 'Body profile angled to steer opponent wide.', defaultScore: 3 },
-      { id: 'fb_speed', name: 'Speed & Acceleration', category: 'physical', isCore: true, description: 'Initial 5-10m burst acceleration and top-end sprint velocity.', coachingCue: 'Forward lean on acceleration, powerful arm drive.', defaultScore: 3 },
-      { id: 'fb_agility', name: 'Agility & Coordination', category: 'physical', isCore: true, description: 'Rapid deceleration, multi-directional lateral shifting and balance.', coachingCue: 'Low center of gravity, reactive footwork.', defaultScore: 3 },
-      { id: 'fb_communication', name: 'Communication & Teamwork', category: 'gameBehaviour', isCore: true, description: 'Vocal directives ("Man on", "Turn"), positive encouragement, leadership.', coachingCue: 'Clear, concise verbal and hand signals.', defaultScore: 4 },
-      { id: 'fb_coachability', name: 'Coachability & Discipline', category: 'gameBehaviour', isCore: true, description: 'Openness to feedback, training work ethic, resilience after mistakes.', coachingCue: 'Apply coach feedback on next repetition.', defaultScore: 4 },
-      // Position specifics
-      { id: 'fb_gk_handling', name: 'GK Handling & Catching', category: 'technical', isCore: false, positionSpecificFor: ['Goalkeeper'], description: 'W-catch, basket catch, and handling high crosses cleanly.', coachingCue: 'Hands forward, eyes following ball into grip.', defaultScore: 3 },
-      { id: 'fb_gk_distribution', name: 'GK Distribution', category: 'technical', isCore: false, positionSpecificFor: ['Goalkeeper'], description: 'Over-arm bowling, side-volley kicks, and building out from back.', coachingCue: 'Pick target teammate with accurate flight.', defaultScore: 3 },
-      { id: 'fb_gk_positioning', name: 'GK Angle & Positioning', category: 'tactical', isCore: false, positionSpecificFor: ['Goalkeeper'], description: 'Narrowing shooting angles along arc relative to ball position.', coachingCue: 'Set position before striker contacts ball.', defaultScore: 3 },
-      { id: 'fb_gk_shot_stopping', name: 'GK Shot Stopping', category: 'technical', isCore: false, positionSpecificFor: ['Goalkeeper'], description: 'Diving technique, parrying away from danger zones, reaction saves.', coachingCue: 'Push off nearest foot, parry wide or over crossbar.', defaultScore: 3 },
-      { id: 'fb_gk_1v1_defending', name: 'GK 1v1 Defending & Smothering', category: 'tactical', isCore: false, positionSpecificFor: ['Goalkeeper'], description: 'Brave spread save, staying big, closing space before smothering.', coachingCue: 'Stay on feet as long as possible, spread frame.', defaultScore: 3 },
-      { id: 'fb_def_tackling', name: 'Tackling & Block Tackles', category: 'technical', isCore: false, positionSpecificFor: ['Defender'], description: 'Timing block tackle or poke tackle cleanly without fouling.', coachingCue: 'Plant firm non-tackling foot, strike center of ball.', defaultScore: 3 },
-      { id: 'fb_def_interception', name: 'Interception & Anticipation', category: 'tactical', isCore: false, positionSpecificFor: ['Defender'], description: 'Reading passer intention to step in front and win possession.', coachingCue: 'Anticipate pass trajectory before delivery.', defaultScore: 3 },
-      { id: 'fb_def_positioning', name: 'Defensive Line & Cover', category: 'tactical', isCore: false, positionSpecificFor: ['Defender'], description: 'Holding defensive line, tracking offside trap, providing cover.', coachingCue: 'Communicate line depth, shift as a compact unit.', defaultScore: 3 },
-      { id: 'fb_def_aerial', name: 'Aerial Duels & Headers', category: 'technical', isCore: false, positionSpecificFor: ['Defender'], description: 'Timing jump and heading clear for distance and safety.', coachingCue: 'Attack ball at peak height, direct wide.', defaultScore: 3 },
-      { id: 'fb_def_buildup', name: 'Build-Up & Progressive Passing', category: 'technical', isCore: false, positionSpecificFor: ['Defender'], description: 'Breaking initial press line with grounded penetrative passes.', coachingCue: 'Disguise pass direction, hit midfield feet.', defaultScore: 3 },
-      { id: 'fb_mid_scanning', name: 'Pre-Orientation & Scanning', category: 'tactical', isCore: false, positionSpecificFor: ['Midfielder'], description: 'Head checks (3-5 times per possession) before receiving.', coachingCue: 'Look over shoulders continuously when ball moves.', defaultScore: 3 },
-      { id: 'fb_mid_passing_range', name: 'Passing Range & Switching Play', category: 'technical', isCore: false, positionSpecificFor: ['Midfielder'], description: 'Diagonal switches of play, chipped passes, through balls.', coachingCue: 'Wrap foot around ball for trajectory control.', defaultScore: 3 },
-      { id: 'fb_mid_decision', name: 'Tempo Control & Decision Making', category: 'tactical', isCore: false, positionSpecificFor: ['Midfielder'], description: 'Knowing when to accelerate attack vs retain and reset possession.', coachingCue: 'Play simple 1-touch when closed down.', defaultScore: 3 },
-      { id: 'fb_mid_retention', name: 'Ball Shielding & Retention', category: 'technical', isCore: false, positionSpecificFor: ['Midfielder'], description: 'Using body to shield ball from aggressive pressing defenders.', coachingCue: 'Arm bar for protection, low center of gravity.', defaultScore: 3 },
-      { id: 'fb_mid_transition', name: 'Transition Play (Attack to Defense)', category: 'tactical', isCore: false, positionSpecificFor: ['Midfielder'], description: 'Immediate counter-press or defensive recovery on turnover.', coachingCue: 'First 3 seconds after loss: press or recover sprint.', defaultScore: 3 },
-      { id: 'fb_fwd_finishing', name: 'Box Finishing & Volleys', category: 'technical', isCore: false, positionSpecificFor: ['Forward'], description: 'One-touch finishing from crosses, headers, and rebounds.', coachingCue: 'Anticipate second balls, attack front post.', defaultScore: 3 },
-      { id: 'fb_fwd_movement', name: 'Penetrative Runs & Movement', category: 'tactical', isCore: false, positionSpecificFor: ['Forward'], description: 'Curved runs staying onside, peeling off defender shoulders.', coachingCue: 'Hold run until passer looks up, bend trajectory.', defaultScore: 3 },
-      { id: 'fb_fwd_1v1_attack', name: '1v1 Isolation Attack', category: 'technical', isCore: false, positionSpecificFor: ['Forward'], description: 'Direct driving at defender in the box to create shot or cross.', coachingCue: 'Shift defender onto back foot, explode by.', defaultScore: 3 },
-      { id: 'fb_fwd_offball_runs', name: 'Counter-Attack & Channel Runs', category: 'tactical', isCore: false, positionSpecificFor: ['Forward'], description: 'Sprinting into wide channels on defensive turnovers.', coachingCue: 'Exploit space behind opponent fullbacks.', defaultScore: 3 },
-      { id: 'fb_fwd_chance_creation', name: 'Chance Creation & Final Pass', category: 'technical', isCore: false, positionSpecificFor: ['Forward'], description: 'Cutbacks, square passes across goal, and laying off to runners.', coachingCue: 'Pick up teammate in central pocket.', defaultScore: 3 }
-    ],
+    skills: FOOTBALL_SKILLS,
     drills: [
       {
         id: 'fb_drill_dribble',
-        skillId: 'fb_dribbling',
+        skillId: 'fb_dribbling_close',
         skillName: 'Dribbling & Ball Control',
         drillName: 'Tight Cones Figure-8 Weave + 1v1 Gate Drive',
         focus: 'Close touches, sole rolls, explosive burst out of tight space.',
@@ -719,27 +704,15 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
     icon: 'Target',
     color: '#F59E0B',
     positions: [
-      { id: 'Guard', name: 'Guard (Point / Shooting Guard)', description: 'Playmaking, ball handling, perimeter shooting, and on-ball perimeter defense.', skills: ['bb_gd_handles', 'bb_gd_pnr', 'bb_gd_shooting', 'bb_gd_perimeter_def'] },
-      { id: 'Forward', name: 'Forward (Small / Power Forward)', description: 'Mid-range shooting, slashing, wing rebounding, and defensive versatility.', skills: ['bb_fwd_slashing', 'bb_fwd_midrange', 'bb_fwd_rebounding', 'bb_fwd_help_def'] },
-      { id: 'Center', name: 'Center / Big', description: 'Post scoring, rim protection, box-outs, screen setting, and paint presence.', skills: ['bb_ctr_post_moves', 'bb_ctr_rim_protection', 'bb_ctr_boxout', 'bb_ctr_screen'] }
+      { id: 'Guard', name: 'Guard (Point / Shooting Guard)', description: 'Playmaking, ball handling, perimeter shooting, and on-ball perimeter defense.', skills: ['bb_dribbling_both_hands', 'bb_crossover_moves', 'bb_catch_and_shoot', 'bb_onball_defense_stance', 'bb_pnr_ballhandler'] },
+      { id: 'Forward', name: 'Forward (Small / Power Forward)', description: 'Mid-range shooting, slashing, wing rebounding, and defensive versatility.', skills: ['bb_pullup_jumper', 'bb_closeout_technique', 'bb_boxout_mechanics', 'bb_helpside_defense'] },
+      { id: 'Center', name: 'Center / Big', description: 'Post scoring, rim protection, box-outs, screen setting, and paint presence.', skills: ['bb_post_moves', 'bb_boxout_mechanics', 'bb_pnr_screener', 'bb_vertical_leap'] }
     ],
-    skills: [
-      { id: 'bb_dribbling_both_hands', name: 'Dribbling & Ball Handling', category: 'technical', isCore: true, description: 'Crossover, between legs, behind back dribbles with eyes up.', coachingCue: 'Pound ball hard, stay low, eyes scanning court.', defaultScore: 3 },
-      { id: 'bb_shooting_form', name: 'Shooting Form & BEEF', category: 'technical', isCore: true, description: 'Balance, Eyes, Elbow under ball, Follow-through mechanics.', coachingCue: 'Hold follow-through cookie jar finish.', defaultScore: 3 },
-      { id: 'bb_layup_package', name: 'Layup Execution (Both Hands)', category: 'technical', isCore: true, description: 'Right and left foot takeoff layups with soft touch off backboard.', coachingCue: 'High knee drive, kiss ball off glass square.', defaultScore: 3 },
-      { id: 'bb_passing_vision', name: 'Passing & Court Vision', category: 'technical', isCore: true, description: 'Chest pass, bounce pass, overhead pass through passing lanes.', coachingCue: 'Step into pass, snap thumbs down.', defaultScore: 3 },
-      { id: 'bb_defensive_stance', name: 'On-Ball Defense & Slide', category: 'technical', isCore: true, description: 'Low active stance, quick lateral slide without crossing feet.', coachingCue: 'Chest up, active hands, slide on balls of feet.', defaultScore: 3 },
-      { id: 'bb_spatial_awareness', name: 'Floor Spacing & Cut Timing', category: 'tactical', isCore: true, description: 'Filling open lanes, give-and-go cuts, backdoor awareness.', coachingCue: 'Cut with purpose when defender turns head.', defaultScore: 3 },
-      { id: 'bb_decision_making', name: 'Fastbreak Decision Making', category: 'tactical', isCore: true, description: 'Pushing tempo vs pulling back, hit-ahead passes on transition.', coachingCue: 'Advance ball with pass before dribble.', defaultScore: 3 },
-      { id: 'bb_lateral_quickness', name: 'Lateral Agility & Footwork', category: 'physical', isCore: true, description: 'Explosive lateral recovery and drop-step reaction.', coachingCue: 'Short, fast shuffle steps.', defaultScore: 3 },
-      { id: 'bb_vertical_rebound', name: 'Vertical Jump & Box Out', category: 'physical', isCore: true, description: 'Two-foot power jump and fighting for positional dominance.', coachingCue: 'Make contact first, secure ball with two hands.', defaultScore: 3 },
-      { id: 'bb_communication', name: 'Floor Vocalization & Leadership', category: 'gameBehaviour', isCore: true, description: 'Calling screens ("Pick left!"), communicating switches.', coachingCue: 'Loud and early communication.', defaultScore: 4 },
-      { id: 'bb_coachability', name: 'Coachability & Competitive Drive', category: 'gameBehaviour', isCore: true, description: 'Sprint back on defense, listen during timeouts, high motor.', coachingCue: 'Next play mentality.', defaultScore: 4 }
-    ],
+    skills: BASKETBALL_SKILLS,
     drills: [
       {
         id: 'bb_drill_mikan',
-        skillId: 'bb_layup_package',
+        skillId: 'bb_layup_right_hand',
         skillName: 'Layup Execution',
         drillName: 'Continuous Mikan Drill + Reverse Finishes',
         focus: 'Left and right hand touch under rim, high release point.',
@@ -757,28 +730,17 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
     icon: 'Award',
     color: '#3B82F6',
     positions: [
-      { id: 'Batter', name: 'Batter (Top / Middle Order)', description: 'Shot selection, footwork, front/back foot defense, strike rotation.', skills: ['ck_bat_front_foot', 'ck_bat_back_foot', 'ck_bat_strike_rotation', 'ck_bat_running'] },
-      { id: 'Fast Bowler', name: 'Pace Bowler', description: 'Run-up rhythm, release point, seam presentation, swing, yorkers.', skills: ['ck_bowl_runup', 'ck_bowl_line_length', 'ck_bowl_seam_swing', 'ck_bowl_pace'] },
-      { id: 'Spin Bowler', name: 'Spin Bowler (Off / Leg / Left Arm)', description: 'Flight, drift, turn, variations, field setting discipline.', skills: ['ck_spin_revs', 'ck_spin_flight_drift', 'ck_spin_variations', 'ck_spin_accuracy'] },
-      { id: 'Wicketkeeper', name: 'Wicketkeeper', description: 'Glovework, standing up to spin, diving takes, stumping reflexes.', skills: ['ck_wk_glovework', 'ck_wk_standing_up', 'ck_wk_stumping', 'ck_wk_byes'] },
-      { id: 'All-Rounder', name: 'All-Rounder', description: 'Impact with both bat and ball, high fielding leadership.', skills: ['ck_all_batting', 'ck_all_bowling', 'ck_all_match_impact'] }
+      { id: 'Batter', name: 'Batter (Top / Middle Order)', description: 'Shot selection, footwork, front/back foot defense, strike rotation.', skills: ['ck_bat_stance_grip', 'ck_bat_front_foot_def', 'ck_bat_back_foot_def', 'ck_strike_rotation', 'ck_gap_finding_placement'] },
+      { id: 'Fast Bowler', name: 'Pace Bowler', description: 'Run-up rhythm, release point, seam presentation, swing, yorkers.', skills: ['ck_bowl_runup_rhythm', 'ck_bowl_seam_presentation', 'ck_bowl_line_length', 'ck_bowl_yorker_bouncer'] },
+      { id: 'Spin Bowler', name: 'Spin Bowler (Off / Leg / Left Arm)', description: 'Flight, drift, turn, variations, field setting discipline.', skills: ['ck_spin_revs_grip', 'ck_spin_flight_drift', 'ck_bowl_line_length'] },
+      { id: 'Wicketkeeper', name: 'Wicketkeeper', description: 'Glovework, standing up to spin, diving takes, stumping reflexes.', skills: ['ck_wicketkeeping_glovework', 'ck_fielding_catching_slips', 'ck_drs_review_awareness'] },
+      { id: 'All-Rounder', name: 'All-Rounder', description: 'Impact with both bat and ball, high fielding leadership.', skills: ['ck_bat_cover_straight_drive', 'ck_bowl_line_length', 'ck_fielding_direct_hit', 'ck_game_phase_tempo'] }
     ],
-    skills: [
-      { id: 'ck_bat_stance', name: 'Batting Stance & Grip', category: 'technical', isCore: true, description: 'Balanced stance, V-grip alignment, still head at bowler release.', coachingCue: 'Eyes level, weight balanced across balls of feet.', defaultScore: 3 },
-      { id: 'ck_bat_drive', name: 'Front Foot Defense & Drives', category: 'technical', isCore: true, description: 'Leaning into pitch of ball, playing under the eyes with high elbow.', coachingCue: 'Front knee bent, head leading into shot.', defaultScore: 3 },
-      { id: 'ck_bat_back_foot', name: 'Back Foot Defense & Cut / Pull', category: 'technical', isCore: true, description: 'Transferring weight back, rolling wrists on pull shots.', coachingCue: 'Back and across, hit downwards safely.', defaultScore: 3 },
-      { id: 'ck_bowl_action', name: 'Bowling Action & Release', category: 'technical', isCore: true, description: 'Smooth repeatable run-up, high front arm, clean wrist snap.', coachingCue: 'Pull front arm down hard, snap wrist at top.', defaultScore: 3 },
-      { id: 'ck_bowl_accuracy', name: 'Line & Length Consistency', category: 'technical', isCore: true, description: 'Hitting good length channel repeatedly over 6-ball overs.', coachingCue: 'Target top of off-stump target marker.', defaultScore: 3 },
-      { id: 'ck_fielding_catching', name: 'Fielding & Catching Technique', category: 'technical', isCore: true, description: 'Soft hands catching, cupped grip, closing in ground fielding.', coachingCue: 'Watch ball into hands, bend knees to ground.', defaultScore: 3 },
-      { id: 'ck_throwing_accuracy', name: 'Overarm Throwing Accuracy', category: 'technical', isCore: true, description: 'Flat direct-hit throws to keeper / bowler ends with speed.', coachingCue: 'Step towards target, high elbow follow through.', defaultScore: 3 },
-      { id: 'ck_game_awareness', name: 'Match Tactics & Strike Rotation', category: 'tactical', isCore: true, description: 'Finding gaps, calling "YES/NO/WAIT" loudly, field awareness.', coachingCue: 'Loud decisive calling, look for quick singles.', defaultScore: 3 },
-      { id: 'ck_running_wickets', name: 'Running Between Wickets & Speed', category: 'physical', isCore: true, description: 'Explosive turn at crease, grounding bat over line, sliding bat.', coachingCue: 'Turn blindside facing ball, stretch bat in hand.', defaultScore: 3 },
-      { id: 'ck_discipline', name: 'Patience & Match Focus', category: 'gameBehaviour', isCore: true, description: 'Composure under pressure, accepting umpire decisions, teamwork.', coachingCue: 'Reset focus ball-by-ball.', defaultScore: 4 }
-    ],
+    skills: CRICKET_SKILLS,
     drills: [
       {
         id: 'ck_drill_target_bowl',
-        skillId: 'ck_bowl_accuracy',
+        skillId: 'ck_bowl_line_length',
         skillName: 'Line & Length Consistency',
         drillName: 'Spot Bowling Target Pitch Drill',
         focus: 'Hitting 2x2ft target mat on good length 6 out of 6 balls.',
@@ -796,23 +758,15 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
     icon: 'Flame',
     color: '#8B5CF6',
     positions: [
-      { id: 'All-Court Player', name: 'All-Court Player', description: 'Balanced baseline power, net transition, touch volleys, and complete court coverage.', skills: ['tn_forehand', 'tn_backhand', 'tn_serve', 'tn_volley', 'tn_footwork'] },
-      { id: 'Baseline Aggressor', name: 'Baseline Aggressor', description: 'Heavy topspin, deep baseline rallying, angle creation, and aggressive return.', skills: ['tn_forehand', 'tn_backhand', 'tn_topspin_depth', 'tn_serve'] },
-      { id: 'Serve & Volley', name: 'Serve & Volley / Doubles Specialist', description: 'First serve percentage, quick split-step, first volley touch, and overhead smashes.', skills: ['tn_serve', 'tn_volley', 'tn_overhead', 'tn_reflexes'] }
+      { id: 'All-Court Player', name: 'All-Court Player', description: 'Balanced baseline power, net transition, touch volleys, and complete court coverage.', skills: ['tn_forehand_topspin', 'tn_backhand_drive', 'tn_serve_flat_slice', 'tn_forehand_volley', 'tn_split_step_timing'] },
+      { id: 'Baseline Aggressor', name: 'Baseline Aggressor', description: 'Heavy topspin, deep baseline rallying, angle creation, and aggressive return.', skills: ['tn_forehand_topspin', 'tn_backhand_drive', 'tn_serve_flat_slice'] },
+      { id: 'Serve & Volley', name: 'Serve & Volley / Doubles Specialist', description: 'First serve percentage, quick split-step, first volley touch, and overhead smashes.', skills: ['tn_serve_flat_slice', 'tn_forehand_volley', 'tn_backhand_volley', 'tn_overhead_smash'] }
     ],
-    skills: [
-      { id: 'tn_forehand', name: 'Forehand Topspin & Drive', category: 'technical', isCore: true, description: 'Low-to-high swing path, windshield wiper finish, weight transfer.', coachingCue: 'Unit turn early, strike out in front of body.', defaultScore: 3 },
-      { id: 'tn_backhand', name: 'Backhand (1-Hand / 2-Hand)', category: 'technical', isCore: true, description: 'Clean contact point, non-dominant hand drive on two-hander.', coachingCue: 'Shoulders turned perpendicular to net, smooth extension.', defaultScore: 3 },
-      { id: 'tn_serve', name: 'Serve Mechanics & Ball Toss', category: 'technical', isCore: true, description: 'Trophy pose, consistent 12-o-clock toss, pronation on contact.', coachingCue: 'High toss into court, full upward reach.', defaultScore: 3 },
-      { id: 'tn_volley', name: 'Net Volleys & Touch', category: 'technical', isCore: true, description: 'Punching volley without backswing, keeping racket head above wrist.', coachingCue: 'Step with opposite foot, punch firmly.', defaultScore: 3 },
-      { id: 'tn_footwork_split', name: 'Split-Step & Court Recovery', category: 'physical', isCore: true, description: 'Split-step timed with opponent contact, cross-over recovery.', coachingCue: 'Hop on opponent contact, recover to center mark.', defaultScore: 3 },
-      { id: 'tn_point_construction', name: 'Point Construction & Tactics', category: 'tactical', isCore: true, description: 'Targeting opponent weakness, crosscourt depth, change of pace.', coachingCue: 'High percentage balls crosscourt over lowest net center.', defaultScore: 3 },
-      { id: 'tn_mental_resilience', name: 'Mental Composure & Focus', category: 'gameBehaviour', isCore: true, description: 'Quick reset after unforced errors, positive body language.', coachingCue: 'Breathe between points, ritual reset.', defaultScore: 4 }
-    ],
+    skills: TENNIS_SKILLS,
     drills: [
       {
         id: 'tn_drill_crosscourt',
-        skillId: 'tn_forehand',
+        skillId: 'tn_forehand_topspin',
         skillName: 'Forehand Topspin',
         drillName: 'Crosscourt Deep Target Rally (50-Ball Challenge)',
         focus: 'Consistent topspin depth past the service line.',
@@ -830,23 +784,14 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
     icon: 'ShieldCheck',
     color: '#0D2B52',
     positions: [
-      { id: 'Classical / Rapid Player', name: 'Competitive Tournament Player', description: 'Full board vision, opening preparation, deep calculation, and endgame conversion.', skills: ['ch_opening', 'ch_tactics', 'ch_strategy', 'ch_endgame', 'ch_time_mgmt'] },
-      { id: 'Junior Grassroots', name: 'Grassroots & Scholastic Player', description: 'Piece values, basic checkmates, avoiding blunders, and disciplined move validation.', skills: ['ch_tactics', 'ch_blunder_check', 'ch_basic_mates', 'ch_discipline'] }
+      { id: 'Classical / Rapid Player', name: 'Competitive Tournament Player', description: 'Full board vision, opening preparation, deep calculation, and endgame conversion.', skills: ['ch_opening_principles', 'ch_forks_pins', 'ch_calculation_depth', 'ch_king_pawn_endgame', 'ch_time_management_clock'] },
+      { id: 'Junior Grassroots', name: 'Grassroots & Scholastic Player', description: 'Piece values, basic checkmates, avoiding blunders, and disciplined move validation.', skills: ['ch_forks_pins', 'ch_blunder_check_filter', 'ch_basic_mating_patterns', 'ch_sportsmanship_handshake'] }
     ],
-    skills: [
-      { id: 'ch_tactics', name: 'Tactical Pattern Recognition', category: 'technical', isCore: true, description: 'Pins, forks, skewers, discovered attacks, and deflection tactics.', coachingCue: 'Look for checks, captures, and threats on every move.', defaultScore: 3 },
-      { id: 'ch_calculation', name: 'Calculation Depth & Accuracy', category: 'technical', isCore: true, description: 'Calculating 2-4 moves ahead without visual board manipulation.', coachingCue: 'Candidate moves first; evaluate opponent forcing replies.', defaultScore: 3 },
-      { id: 'ch_opening', name: 'Opening Principles & Development', category: 'tactical', isCore: true, description: 'Controlling center, rapid piece development, king safety (castling).', coachingCue: 'Develop pieces quickly, do not move same piece twice without reason.', defaultScore: 3 },
-      { id: 'ch_strategy', name: 'Pawn Structure & Strategic Plans', category: 'tactical', isCore: true, description: 'Identifying weak squares, outposts, open files, and pawn breaks.', coachingCue: 'Formulate a clear plan based on position imbalance.', defaultScore: 3 },
-      { id: 'ch_endgame', name: 'Endgame Technique & Conversion', category: 'technical', isCore: true, description: 'King activity, opposition, pawn promotion, and fundamental checkmates (R+K, Q+K).', coachingCue: 'Activate king aggressively once queens leave the board.', defaultScore: 3 },
-      { id: 'ch_blunder_check', name: 'Blunder Prevention & Defense', category: 'tactical', isCore: true, description: 'Double checking opponent threats before releasing the piece.', coachingCue: 'Sit on hands: ask "What is opponent threatening?" before moving.', defaultScore: 3 },
-      { id: 'ch_time_mgmt', name: 'Time Management & Clock Discipline', category: 'physical', isCore: true, description: 'Balancing clock time with move complexity; avoiding time trouble.', coachingCue: 'Spend time on critical branch points, play simple moves quickly.', defaultScore: 3 },
-      { id: 'ch_composure', name: 'Mental Focus & Sportsmanship', category: 'gameBehaviour', isCore: true, description: 'Maintaining emotional calm after difficult positions; shaking hands gracefully.', coachingCue: 'Remain calm under pressure, fight till checkmate.', defaultScore: 4 }
-    ],
+    skills: CHESS_SKILLS,
     drills: [
       {
         id: 'ch_drill_puzzle',
-        skillId: 'ch_tactics',
+        skillId: 'ch_forks_pins',
         skillName: 'Tactical Pattern Recognition',
         drillName: 'Puzzle Rush & Thematic Tactical Blitz',
         focus: 'Solving 20 thematic puzzles (forks/pins) under 5 minutes.',
@@ -864,25 +809,14 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
     icon: 'Zap',
     color: '#EC4899',
     positions: [
-      { id: 'Singles Specialist', name: 'Singles Specialist', description: 'Endurance rallies, corner-to-corner recovery, deep clears, and drop shots.', skills: ['bm_footwork', 'bm_smash', 'bm_drop', 'bm_clear', 'bm_defense'] },
-      { id: 'Doubles Specialist', name: 'Doubles Specialist', description: 'Front-court interceptions, drive exchanges, flat game, and rapid rotation.', skills: ['bm_net_kill', 'bm_drives', 'bm_serve_return', 'bm_rotation'] }
+      { id: 'Singles Specialist', name: 'Singles Specialist', description: 'Endurance rallies, corner-to-corner recovery, deep clears, and drop shots.', skills: ['bm_six_corner_footwork', 'bm_forehand_smash', 'bm_drop_shot_fast', 'bm_high_clear', 'bm_smash_defense_block'] },
+      { id: 'Doubles Specialist', name: 'Doubles Specialist', description: 'Front-court interceptions, drive exchanges, flat game, and rapid rotation.', skills: ['bm_net_kill_tap', 'bm_flat_drive_exchange', 'bm_short_low_serve', 'bm_doubles_rotation'] }
     ],
-    skills: [
-      { id: 'bm_footwork', name: '6-Corner Court Footwork', category: 'physical', isCore: true, description: 'Chasse steps, split-step, scissor kick, and rapid recovery to T.', coachingCue: 'Push off rear foot, return to central base after every shot.', defaultScore: 3 },
-      { id: 'bm_grip_switch', name: 'Grip Switching (Forehand / Backhand)', category: 'technical', isCore: true, description: 'Quick loose grip transitions between forehand, backhand, and panhandle.', coachingCue: 'Loose relaxed fingers, tighten only at moment of impact.', defaultScore: 3 },
-      { id: 'bm_smash', name: 'Forehand Smash Power & Angle', category: 'technical', isCore: true, description: 'Pronation of forearm, steep downward angle, hitting at highest contact.', coachingCue: 'Turn sideways, scissor jump, strike shuttle in front.', defaultScore: 3 },
-      { id: 'bm_drop_shot', name: 'Drop Shot & Net Slice', category: 'technical', isCore: true, description: 'Disguised stroke action landing tightly over the tape.', coachingCue: 'Maintain smash preparation, decelerate racket face gently.', defaultScore: 3 },
-      { id: 'bm_high_clear', name: 'High Clear & Defensive Lob', category: 'technical', isCore: true, description: 'Deep high trajectory landing within 1 foot of rear boundary.', coachingCue: 'High elbow, full extension, hit shuttle high and deep.', defaultScore: 3 },
-      { id: 'bm_net_play', name: 'Net Tumble & Hairpin Spin', category: 'technical', isCore: true, description: 'Delicate touch spinning shuttle cork tightly across net tape.', coachingCue: 'Soft relaxed wrist, guide shuttle nose.', defaultScore: 3 },
-      { id: 'bm_short_serve', name: 'Short & Flick Serve Precision', category: 'technical', isCore: true, description: 'Skimming net line consistently on low serve, unexpected flick serve.', coachingCue: 'Stable base, smooth push forward with thumb.', defaultScore: 3 },
-      { id: 'bm_shot_anticipation', name: 'Tactical Anticipation & Deception', category: 'tactical', isCore: true, description: 'Reading opponent body prep, exploiting open court corners.', coachingCue: 'Watch opponent racket angle, move early.', defaultScore: 3 },
-      { id: 'bm_match_stamina', name: 'Explosive Agility & Match Stamina', category: 'physical', isCore: true, description: 'High heart-rate recovery during 30+ shot continuous rallies.', coachingCue: 'Low center of gravity, spring-loaded calves.', defaultScore: 3 },
-      { id: 'bm_fair_play', name: 'Discipline & Sportsmanship', category: 'gameBehaviour', isCore: true, description: 'Fair line calls, respect towards opponent and umpire, resilience.', coachingCue: 'Focus on next rally with energetic composure.', defaultScore: 4 }
-    ],
+    skills: BADMINTON_SKILLS,
     drills: [
       {
         id: 'bm_drill_shadow',
-        skillId: 'bm_footwork',
+        skillId: 'bm_six_corner_footwork',
         skillName: '6-Corner Court Footwork',
         drillName: '6-Corner Shadow Footwork Routine (20 Reps x 3 Sets)',
         focus: 'Fluid movement to all 4 corners and net with split-step at center.',
@@ -900,24 +834,16 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
     icon: 'Trophy',
     color: '#EF4444',
     positions: [
-      { id: 'Sprinter', name: 'Sprinter (100m / 200m / 400m)', description: 'Block starts, drive phase, upright sprint mechanics, and speed endurance.', skills: ['ath_block_start', 'ath_drive_phase', 'ath_max_velocity', 'ath_speed_endurance'] },
-      { id: 'Middle / Long Distance', name: 'Middle & Long Distance (800m - 5000m)', description: 'Aerobic threshold, race lap pacing, kick finish, and oxygen economy.', skills: ['ath_aerobic_pace', 'ath_stride_economy', 'ath_tactical_kick', 'ath_breathing'] },
-      { id: 'Jumps Specialist', name: 'Jumper (Long / High / Triple Jump)', description: 'Runway speed, plant foot angle, takeoff lift, and flight landing.', skills: ['ath_approach_run', 'ath_takeoff_power', 'ath_flight_landing'] },
-      { id: 'Throws Specialist', name: 'Thrower (Shot Put / Javelin / Discus)', description: 'Rotational kinetic chain, explosive release velocity, and core power.', skills: ['ath_kinetic_chain', 'ath_release_angle', 'ath_explosive_power'] }
+      { id: 'Sprinter', name: 'Sprinter (100m / 200m / 400m)', description: 'Block starts, drive phase, upright sprint mechanics, and speed endurance.', skills: ['ath_block_start_setup', 'ath_acceleration_drive_phase', 'ath_top_speed_mechanics', 'ath_speed_endurance_finish'] },
+      { id: 'Middle / Long Distance', name: 'Middle & Long Distance (800m - 5000m)', description: 'Aerobic threshold, race lap pacing, kick finish, and oxygen economy.', skills: ['ath_middle_distance_stride', 'ath_distance_pacing_laps', 'ath_kick_finish_surge', 'ath_vo2_max_aerobic_engine'] },
+      { id: 'Jumps Specialist', name: 'Jumper (Long / High / Triple Jump)', description: 'Runway speed, plant foot angle, takeoff lift, and flight landing.', skills: ['ath_long_jump_approach', 'ath_long_jump_takeoff_flight', 'ath_plyometric_bounding_power'] },
+      { id: 'Throws Specialist', name: 'Thrower (Shot Put / Javelin / Discus)', description: 'Rotational kinetic chain, explosive release velocity, and core power.', skills: ['ath_shot_put_glide_rotation', 'ath_javelin_cross_steps', 'ath_ankle_stiffness_elasticity'] }
     ],
-    skills: [
-      { id: 'ath_sprint_mechanics', name: 'Sprint Posture & Arm Action', category: 'technical', isCore: true, description: 'Upright torso, 90-degree arm swings from shoulder, dorsiflexed ankles.', coachingCue: 'Drive knees high, strike ground directly beneath hips.', defaultScore: 3 },
-      { id: 'ath_block_start', name: 'Block Start & Acceleration Phase', category: 'technical', isCore: true, description: 'Low explosive drive from blocks, 45-degree body lean, powerful first 5 strides.', coachingCue: 'Push hard off both pedals, do not stand up immediately.', defaultScore: 3 },
-      { id: 'ath_stride_cadence', name: 'Stride Length & Frequency Balance', category: 'technical', isCore: true, description: 'Optimizing cadence without overstriding or braking.', coachingCue: 'Quick active ground contact, pull ground under body.', defaultScore: 3 },
-      { id: 'ath_pacing_strategy', name: 'Lap Pacing & Energy Distribution', category: 'tactical', isCore: true, description: 'Even split pacing, drafting behind leaders, timing final surge.', coachingCue: 'Know your target 200m/400m split times, stay composed.', defaultScore: 3 },
-      { id: 'ath_explosive_power', name: 'Explosive Lower Body Power', category: 'physical', isCore: true, description: 'Plyometric force production in bounding and vertical lift.', coachingCue: 'Stiff ankle joint, explode like a loaded spring.', defaultScore: 3 },
-      { id: 'ath_cardio_endurance', name: 'Cardiovascular Aerobic Base (VO2 Max)', category: 'physical', isCore: true, description: 'Sustaining high mechanical output over extended training blocks.', coachingCue: 'Rhythmic breathing, relax shoulders during fatigue.', defaultScore: 3 },
-      { id: 'ath_grit', name: 'Mental Toughness & Race Focus', category: 'gameBehaviour', isCore: true, description: 'Pushing through lactic burn, race day calm, positive self-talk.', coachingCue: 'Embrace the fatigue in the final 100 meters.', defaultScore: 4 }
-    ],
+    skills: ATHLETICS_SKILLS,
     drills: [
       {
         id: 'ath_drill_a_skips',
-        skillId: 'ath_sprint_mechanics',
+        skillId: 'ath_sprint_posture',
         skillName: 'Sprint Posture & Mechanics',
         drillName: 'A-Skips, B-Skips & High Knee Wall Drives',
         focus: 'Knee lift, dorsiflexion, explosive downward claw action.',
@@ -935,25 +861,16 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
     icon: 'Activity',
     color: '#06B6D4',
     positions: [
-      { id: 'Setter', name: 'Setter', description: 'Tempo setting, jump sets, offensive distribution, and second-touch leadership.', skills: ['vb_setting_accuracy', 'vb_tempo_distribution', 'vb_defense'] },
-      { id: 'Attacker / Hitter', name: 'Outside / Opposite Hitter', description: 'Approach footwork, vertical leap, attacking line/cross, block timing.', skills: ['vb_spike_approach', 'vb_shot_variety', 'vb_blocking'] },
-      { id: 'Middle Blocker', name: 'Middle Blocker', description: 'Lateral seal blocks, quick attacks (A/B balls), reading opponent setter.', skills: ['vb_block_reading', 'vb_quick_spike', 'vb_lateral_slide'] },
-      { id: 'Libero', name: 'Libero / Defensive Specialist', description: 'Serve receive platform, pancake dives, chase-down defense, vocal leader.', skills: ['vb_serve_receive', 'vb_floor_defense', 'vb_freeball_pass'] }
+      { id: 'Setter', name: 'Setter', description: 'Tempo setting, jump sets, offensive distribution, and second-touch leadership.', skills: ['vb_overhead_set_fingerwork', 'vb_back_set_execution', 'vb_setter_dump_attack'] },
+      { id: 'Attacker / Hitter', name: 'Outside / Opposite Hitter', description: 'Approach footwork, vertical leap, attacking line/cross, block timing.', skills: ['vb_spike_approach_footwork', 'vb_spike_arm_swing_snap', 'vb_line_and_cross_spike', 'vb_block_footwork_seal'] },
+      { id: 'Middle Blocker', name: 'Middle Blocker', description: 'Lateral seal blocks, quick attacks (A/B balls), reading opponent setter.', skills: ['vb_block_footwork_seal', 'vb_quick_attack_tempo', 'vb_deciding_line_vs_cross_block'] },
+      { id: 'Libero', name: 'Libero / Defensive Specialist', description: 'Serve receive platform, pancake dives, chase-down defense, vocal leader.', skills: ['vb_forearm_pass_platform', 'vb_floor_defense_dive', 'vb_freeball_pass_target', 'vb_serve_receive_seam'] }
     ],
-    skills: [
-      { id: 'vb_forearm_pass', name: 'Forearm Passing (Bump Platform)', category: 'technical', isCore: true, description: 'Locked elbows, thumbs parallel, angling platform towards target setter.', coachingCue: 'Quiet upper body, absorb with legs, point platform to target.', defaultScore: 3 },
-      { id: 'vb_overhead_set', name: 'Overhead Setting Fingerwork', category: 'technical', isCore: true, description: 'Soft finger contact above forehead, extending arms and legs together.', coachingCue: 'Form a ball-shaped triangle window with thumbs and index fingers.', defaultScore: 3 },
-      { id: 'vb_serve_overhand', name: 'Overhand Float / Jump Serve', category: 'technical', isCore: true, description: 'Clean palm contact on center of ball, stopping hand for float action.', coachingCue: 'Solid wrist, strike ball flat with open hand.', defaultScore: 3 },
-      { id: 'vb_spike_approach', name: '3-Step Spike Approach & Swing', category: 'technical', isCore: true, description: 'Left-right-left (or right-left-right) acceleration, dual arm backswing, high snap.', coachingCue: 'Slow to fast approach, explode up with both arms.', defaultScore: 3 },
-      { id: 'vb_block_position', name: 'Block Timing & Penetration', category: 'tactical', isCore: true, description: 'Pressing hands across the net plane, timing jump with attacker.', coachingCue: 'Hands spread wide, penetrate into opponent court.', defaultScore: 3 },
-      { id: 'vb_court_coverage', name: 'Rotational Positioning & Cover', category: 'tactical', isCore: true, description: 'Covering hitters on blocked spikes, covering tip balls.', coachingCue: 'Stay on toes, low defensive ready position.', defaultScore: 3 },
-      { id: 'vb_vertical_leap', name: 'Vertical Jump & Lateral Mobility', category: 'physical', isCore: true, description: 'Repeat jump endurance throughout long multi-set matches.', coachingCue: 'Land soft on two feet to protect knees.', defaultScore: 3 },
-      { id: 'vb_call_communication', name: 'Team Vocalization ("MINE / IN / OUT")', category: 'gameBehaviour', isCore: true, description: 'Calling ball decisively, organizing defense, positive energy.', coachingCue: 'Call the ball early before it crosses the net.', defaultScore: 4 }
-    ],
+    skills: VOLLEYBALL_SKILLS,
     drills: [
       {
         id: 'vb_drill_butterfly',
-        skillId: 'vb_forearm_pass',
+        skillId: 'vb_forearm_pass_platform',
         skillName: 'Forearm Passing',
         drillName: 'Serve-Receive Target Accuracy Butterfly Drill',
         focus: 'Passing accurately into the setter target ring with 85%+ success.',
@@ -971,24 +888,15 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
     icon: 'ShieldCheck',
     color: '#F97316',
     positions: [
-      { id: 'Raider', name: 'Raider (Lead / Support Raider)', description: 'Cant maintenance, toe touches, hand touches, dubki evasion, and bonus line jumps.', skills: ['kb_cant_breath', 'kb_toe_touch', 'kb_dubki_evasion', 'kb_bonus_line', 'kb_escape_burst'] },
-      { id: 'Corner Defender', name: 'Corner Defender (Left / Right Corner)', description: 'Ankle catch, diving tackle, orchestrating chain movement, corner holds.', skills: ['kb_ankle_catch', 'kb_chain_lead', 'kb_diving_tackle', 'kb_positioning'] },
-      { id: 'Cover Defender', name: 'Cover Defender (Left / Right Cover)', description: 'Dash block, thigh hold, waist hold, stopping raider midline reach.', skills: ['kb_dash_block', 'kb_thigh_hold', 'kb_chain_support'] }
+      { id: 'Raider', name: 'Raider (Lead / Support Raider)', description: 'Cant maintenance, toe touches, hand touches, dubki evasion, and bonus line jumps.', skills: ['kb_cant_breath_chant', 'kb_toe_touch_sweep', 'kb_dubki_evasion', 'kb_bonus_line_crossing', 'kb_turning_escape_burst'] },
+      { id: 'Corner Defender', name: 'Corner Defender (Left / Right Corner)', description: 'Ankle catch, diving tackle, orchestrating chain movement, corner holds.', skills: ['kb_ankle_catch_corner', 'kb_chain_tackle_hold', 'kb_diving_ankle_hold', 'kb_super_tackle_strategy'] },
+      { id: 'Cover Defender', name: 'Cover Defender (Left / Right Cover)', description: 'Dash block, thigh hold, waist hold, stopping raider midline reach.', skills: ['kb_dash_block_cover', 'kb_thigh_hold_grip', 'kb_waist_hold_back', 'kb_chain_coordination_movement'] }
     ],
-    skills: [
-      { id: 'kb_cant_breath', name: 'Continuous Cant & Lung Capacity', category: 'physical', isCore: true, description: 'Unbroken audible "Kabaddi-Kabaddi" chant under intense physical duress.', coachingCue: 'Deep diaphragmatic inhale before crossing midline.', defaultScore: 3 },
-      { id: 'kb_toe_touch', name: 'Toe Touch & Hand Touch Skill', category: 'technical', isCore: true, description: 'Extended leg sweep targeting defender feet without losing balance.', coachingCue: 'Quick extension and immediate retreat, body weight on back foot.', defaultScore: 3 },
-      { id: 'kb_dubki_evasion', name: 'Dubki & Escape Evasion', category: 'technical', isCore: true, description: 'Ducking under defender chains or spinning out of tackles.', coachingCue: 'Drop hips below defenders waist level, spring forward.', defaultScore: 3 },
-      { id: 'kb_ankle_catch', name: 'Ankle Catch & Grip Strength', category: 'technical', isCore: true, description: 'Timing grip on raider ankle from corner, pulling inward.', coachingCue: 'Clamp both hands around ankle, pull raider toward mat.', defaultScore: 3 },
-      { id: 'kb_thigh_hold', name: 'Thigh Hold & Dash Block', category: 'technical', isCore: true, description: 'Explosive forward tackle around both thighs to stop forward momentum.', coachingCue: 'Shoulder contact on thigh, wrap arms tightly.', defaultScore: 3 },
-      { id: 'kb_chain_coordination', name: 'Chain Defense & Synergy', category: 'tactical', isCore: true, description: 'Coordinated semi-circle movement holding hands without breaking chain.', coachingCue: 'Move in unison with corner, do not let raider split chain.', defaultScore: 3 },
-      { id: 'kb_agility_reaction', name: 'Explosive Agility & Mat Quickness', category: 'physical', isCore: true, description: 'Lateral shuffling, rapid direction changes on mat.', coachingCue: 'Stay on balls of feet, low defensive stance.', defaultScore: 3 },
-      { id: 'kb_courage', name: 'Courage, Discipline & Sportsmanship', category: 'gameBehaviour', isCore: true, description: 'Bravery on high-stake raids (Do-or-Die), respectful play.', coachingCue: 'Fearless approach, back your teammates on every tackle.', defaultScore: 4 }
-    ],
+    skills: KABADDI_SKILLS,
     drills: [
       {
         id: 'kb_drill_toe_touch',
-        skillId: 'kb_toe_touch',
+        skillId: 'kb_toe_touch_sweep',
         skillName: 'Toe Touch Skill',
         drillName: '3-Cone Rapid Toe Touch & Midline Sprint',
         focus: 'Stepping into 3 simulated defender cones, touching low, and springing back across midline.',
@@ -1006,22 +914,14 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
     icon: 'Target',
     color: '#14B8A6',
     positions: [
-      { id: 'Attacking Looper', name: 'Attacking Looper (Forehand / Backhand)', description: 'Topspin loops, fast third-ball attacks, counter-looping, and active footwork.', skills: ['tt_fh_loop', 'tt_bh_drive', 'tt_serve_spins', 'tt_footwork'] },
-      { id: 'All-Round / Defender', name: 'All-Round / Modern Chopper', description: 'Heavy backspin chops, tactical blocks, push variations, and counter-attacks.', skills: ['tt_push_chop', 'tt_block', 'tt_spin_reading'] }
+      { id: 'Attacking Looper', name: 'Attacking Looper (Forehand / Backhand)', description: 'Topspin loops, fast third-ball attacks, counter-looping, and active footwork.', skills: ['tt_forehand_topspin_loop', 'tt_backhand_topspin_loop', 'tt_pendulum_serve_spin', 'tt_third_ball_attack_plan'] },
+      { id: 'All-Round / Defender', name: 'All-Round / Modern Chopper', description: 'Heavy backspin chops, tactical blocks, push variations, and counter-attacks.', skills: ['tt_chop_defense_backspin', 'tt_active_block_placement', 'tt_reading_serve_spin_grip'] }
     ],
-    skills: [
-      { id: 'tt_fh_drive_loop', name: 'Forehand Drive & Topspin Loop', category: 'technical', isCore: true, description: 'Brushing ball at top of bounce, waist rotation, closed racket angle.', coachingCue: 'Relaxed arm, brush up and forward across ball surface.', defaultScore: 3 },
-      { id: 'tt_bh_push_block', name: 'Backhand Push & Active Block', category: 'technical', isCore: true, description: 'Short backspin push over net, absorbing fast attacks with firm block.', coachingCue: 'Short compact stroke, open face for push, closed for block.', defaultScore: 3 },
-      { id: 'tt_serve_variation', name: 'Serve Spin Variety (Side / Top / Back)', category: 'technical', isCore: true, description: 'Pendulum and reverse pendulum serves with deceptive spin.', coachingCue: 'Fast wrist snap under ball, keep trajectory low over net.', defaultScore: 3 },
-      { id: 'tt_spin_reading', name: 'Spin Recognition & Return', category: 'tactical', isCore: true, description: 'Reading racket angle at contact to determine spin type.', coachingCue: 'Watch opponent racket face during contact.', defaultScore: 3 },
-      { id: 'tt_footwork_pivot', name: 'Footwork & Pivot Step', category: 'physical', isCore: true, description: 'Quick 2-step side jumps, pivoting around backhand corner to hit forehand.', coachingCue: 'Stay light on toes, never cross feet.', defaultScore: 3 },
-      { id: 'tt_reaction_speed', name: 'Reflex & Reaction Speed', category: 'physical', isCore: true, description: 'Micro-second reaction times on close-table exchanges.', coachingCue: 'Racket ready in neutral stance after every stroke.', defaultScore: 3 },
-      { id: 'tt_mental_patience', name: 'Patience & Point Focus', category: 'gameBehaviour', isCore: true, description: 'Remaining calm during deuce games, avoiding rushed unforced errors.', coachingCue: 'Construct the rally, don’t smash prematurely.', defaultScore: 4 }
-    ],
+    skills: TABLE_TENNIS_SKILLS,
     drills: [
       {
         id: 'tt_drill_falkenberg',
-        skillId: 'tt_footwork_pivot',
+        skillId: 'tt_falkenberg_footwork',
         skillName: 'Footwork & Pivot Step',
         drillName: 'Falkenberg 3-Ball Footwork Drill',
         focus: 'Backhand, Pivot Forehand, Wide Forehand transition sequence.',
@@ -1039,23 +939,15 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
     icon: 'Award',
     color: '#0284C7',
     positions: [
-      { id: 'Freestyle / Sprint', name: 'Freestyle & Sprint Specialist', description: 'Streamlined body roll, high elbow catch, 6-beat kick rhythm, and flip turns.', skills: ['sw_free_catch', 'sw_kick_tempo', 'sw_flip_turn', 'sw_sprint_speed'] },
-      { id: 'Individual Medley', name: 'All-Stroke / IM Specialist', description: 'Proficiency across Butterfly, Backstroke, Breaststroke, and Freestyle.', skills: ['sw_breast_kick', 'sw_backstroke_roll', 'sw_fly_undulation', 'sw_transitions'] },
-      { id: 'Distance Swimmer', name: 'Distance Specialist (400m - 1500m)', description: 'Aerobic pacing, 2-beat kick efficiency, stroke count optimization, and endurance.', skills: ['sw_distance_pace', 'sw_breath_control', 'sw_stroke_count'] }
+      { id: 'Freestyle / Sprint', name: 'Freestyle & Sprint Specialist', description: 'Streamlined body roll, high elbow catch, 6-beat kick rhythm, and flip turns.', skills: ['sw_freestyle_evf_catch', 'sw_freestyle_flutter_kick', 'sw_freestyle_flip_turn', 'sw_streamline_off_wall'] },
+      { id: 'Individual Medley', name: 'All-Stroke / IM Specialist', description: 'Proficiency across Butterfly, Backstroke, Breaststroke, and Freestyle.', skills: ['sw_breaststroke_whip_kick', 'sw_backstroke_arm_rotation', 'sw_butterfly_dolphin_undulation', 'sw_medley_transition_turns'] },
+      { id: 'Distance Swimmer', name: 'Distance Specialist (400m - 1500m)', description: 'Aerobic pacing, 2-beat kick efficiency, stroke count optimization, and endurance.', skills: ['sw_pacing_even_splits', 'sw_stroke_count_efficiency', 'sw_aerobic_vo2_lap_stamina'] }
     ],
-    skills: [
-      { id: 'sw_freestyle_technique', name: 'Freestyle Stroke & High Elbow Catch', category: 'technical', isCore: true, description: 'Early vertical forearm (EVF), body roll along axis, smooth breathing rhythm.', coachingCue: 'Reach forward, press palm down and back like pulling over a barrel.', defaultScore: 3 },
-      { id: 'sw_kick_technique', name: 'Flutter Kick & Propulsive Mechanics', category: 'technical', isCore: true, description: 'Kick generated from hips with floppy relaxed ankles, minimal knee bend.', coachingCue: 'Small, fast kicks inside body slipstream, point toes.', defaultScore: 3 },
-      { id: 'sw_breast_back_skills', name: 'Breaststroke & Backstroke Proficiency', category: 'technical', isCore: true, description: 'Whip kick timing in breaststroke, straight-arm recovery in backstroke.', coachingCue: 'Pull-Breathe-Kick-Glide cycle in breaststroke.', defaultScore: 3 },
-      { id: 'sw_streamline_turns', name: 'Streamline Push-Off & Flip Turns', category: 'technical', isCore: true, description: 'Tight streamline position behind ears, explosive wall push with dolphin kicks.', coachingCue: 'Lock thumbs, squeeze ears between biceps off the wall.', defaultScore: 3 },
-      { id: 'sw_stroke_efficiency', name: 'Stroke Count & Distance Per Stroke', category: 'tactical', isCore: true, description: 'Minimizing strokes per 25m/50m lap to maximize hydrodynamics.', coachingCue: 'Count strokes per lap; strive for long gliding distance.', defaultScore: 3 },
-      { id: 'sw_aerobic_capacity', name: 'Cardiovascular Lap Stamina', category: 'physical', isCore: true, description: 'Sustaining high heart rate without technique breakdown.', coachingCue: 'Maintain body position high on water surface even when tired.', defaultScore: 3 },
-      { id: 'sw_lane_discipline', name: 'Lane Etiquette & Training Grit', category: 'gameBehaviour', isCore: true, description: 'Leaving on interval clock times, touching wall on every turn, coachability.', coachingCue: 'Finish every set hard to the wall.', defaultScore: 4 }
-    ],
+    skills: SWIMMING_SKILLS,
     drills: [
       {
         id: 'sw_drill_catchup',
-        skillId: 'sw_freestyle_technique',
+        skillId: 'sw_freestyle_evf_catch',
         skillName: 'Freestyle Stroke Mechanics',
         drillName: 'Catch-Up Drill with Kickboard / Finger-Tip Drag',
         focus: 'Full stroke extension and high elbow recovery over water.',
@@ -1073,22 +965,14 @@ export const SPORT_TEMPLATES: Record<CoachingSportId, SportTemplate> = {
     icon: 'Sparkles',
     color: '#84CC16',
     positions: [
-      { id: 'General Fitness Athlete', name: 'Functional Fitness & Athletic Conditioning', description: 'Core strength, cardiovascular fitness, functional mobility, and injury prevention.', skills: ['yg_core_plank', 'yg_functional_squat', 'yg_mobility', 'yg_stamina'] },
-      { id: 'Yoga Practitioner', name: 'Hatha / Ashtanga Yoga Practitioner', description: 'Asana stability, Surya Namaskar flow, balance postures, and pranayama.', skills: ['yg_surya_namaskar', 'yg_balance_postures', 'yg_pranayama', 'yg_mindfulness'] }
+      { id: 'General Fitness Athlete', name: 'Functional Fitness & Athletic Conditioning', description: 'Core strength, cardiovascular fitness, functional mobility, and injury prevention.', skills: ['yg_plank_core_hold', 'yg_functional_squat_mechanics', 'yg_hamstring_flexibility_range', 'yg_athletic_mobility_routine'] },
+      { id: 'Yoga Practitioner', name: 'Hatha / Ashtanga Yoga Practitioner', description: 'Asana stability, Surya Namaskar flow, balance postures, and pranayama.', skills: ['yg_surya_namaskar_12flow', 'yg_vrikshasana_tree_balance', 'yg_anulom_vilom_pranayama', 'yg_mental_stillness_meditation'] }
     ],
-    skills: [
-      { id: 'yg_surya_namaskar', name: 'Surya Namaskar (12-Step Flow)', category: 'technical', isCore: true, description: 'Synchronized movement with breath across all 12 sequential postures.', coachingCue: 'Inhale on expansion, exhale on forward folding.', defaultScore: 3 },
-      { id: 'yg_asana_alignment', name: 'Standing & Balancing Asanas (Vrikshasana, Trikonasana)', category: 'technical', isCore: true, description: 'Rooted foot placement, pelvic neutrality, gaze point (Drishti) focus.', coachingCue: 'Fix gaze on one non-moving point, engage core.', defaultScore: 3 },
-      { id: 'yg_core_strength', name: 'Core Stability & Plank Endurance', category: 'physical', isCore: true, description: 'Holding neutral spine plank, boat pose (Navasana) with steady breath.', coachingCue: 'Draw navel to spine, keep shoulders away from ears.', defaultScore: 3 },
-      { id: 'yg_hamstring_mobility', name: 'Full-Body Flexibility & Joint Range', category: 'physical', isCore: true, description: 'Hamstring, hip flexor, and thoracic spine flexibility (Paschimottanasana).', coachingCue: 'Lengthen spine before folding forward, avoid hunching.', defaultScore: 3 },
-      { id: 'yg_pranayama_breath', name: 'Pranayama & Breath Regulation (Anulom Vilom, Kapalbhati)', category: 'technical', isCore: true, description: 'Rhythmic alternate nostril breathing and diaphragmatic control.', coachingCue: 'Smooth, silent inhalation; gentle prolonged exhalation.', defaultScore: 3 },
-      { id: 'yg_body_awareness', name: 'Postural Ergonomics & Proprioception', category: 'tactical', isCore: true, description: 'Self-correcting posture during sitting, standing, and running.', coachingCue: 'Crown of head reaching tall, shoulders relaxed downward.', defaultScore: 3 },
-      { id: 'yg_mindfulness_discipline', name: 'Mindfulness, Focus & Caliber', category: 'gameBehaviour', isCore: true, description: 'Mental stillness during Shavasana, daily practice dedication.', coachingCue: 'Observe thoughts without judgment, return to breath.', defaultScore: 4 }
-    ],
+    skills: YOGA_FITNESS_SKILLS,
     drills: [
       {
         id: 'yg_drill_flow',
-        skillId: 'yg_surya_namaskar',
+        skillId: 'yg_surya_namaskar_12flow',
         skillName: 'Surya Namaskar Flow',
         drillName: '6 Rounds Surya Namaskar Breath-Synchronized Flow',
         focus: 'Smooth transition between postures with full breath awareness.',
@@ -1493,6 +1377,29 @@ class AcademyService {
     if (activeProgram?.id) {
       academicCoachingCloudService.deleteCloudAthlete(id).catch(err => console.warn('Cloud athlete deletion error:', err));
     }
+  }
+
+  deletePlayersBulk(ids: string[]): number {
+    if (!ids || ids.length === 0) return 0;
+    const idSet = new Set(ids);
+    const existing = this.getPlayers();
+    const remaining = existing.filter(p => !idSet.has(p.id));
+    const deletedCount = existing.length - remaining.length;
+    setLocalData(PLAYERS_KEY, remaining);
+
+    // Sync batch deletion to Cloud
+    const activeProgram = academicCoachingCloudService.getLocalProgram();
+    if (activeProgram?.id) {
+      academicCoachingCloudService.deleteCloudAthletesBatch(ids).catch(err => console.warn('Cloud batch athlete deletion error:', err));
+    }
+
+    return deletedCount;
+  }
+
+  deletePlayersBySport(sport: CoachingSportId): number {
+    const existing = this.getPlayers();
+    const toDelete = existing.filter(p => p.sport === sport).map(p => p.id);
+    return this.deletePlayersBulk(toDelete);
   }
 
   // --- Bulk Import Students from CSV/Excel or Paste List ---

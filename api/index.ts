@@ -22,28 +22,66 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // Secure AI Initialization (Server-side only)
-// Note: While we don't want to expose keys to the client, we allow VITE_ prefixes on the server 
-// for compatibility with common Vite/Vercel setup patterns.
-const getGeminiKeys = () => {
+// Note: Google Gemini API keys start with AIza or standard Google key formats.
+// OpenAI/OpenRouter keys (starting with sk-) must NEVER be passed to @google/genai.
+const isGoogleApiKey = (key: string): boolean => {
+  if (!key || typeof key !== "string") return false;
+  const clean = key.trim().replace(/^["']|["']$/g, '');
+  if (clean.length < 20) return false;
+  // Exclude OpenAI/OpenRouter keys that start with sk-
+  if (clean.startsWith("sk-") || clean.startsWith("sk_")) return false;
+  return true;
+};
+
+const getGeminiKeys = (): string[] => {
   const keys: string[] = [];
-  const standardNames = ["GEMINI_API_KEY", "API_KEY", "VITE_GEMINI_API_KEY", "GOOGLE_API_KEY"];
-  standardNames.forEach(name => {
+  // Prioritize primary official GEMINI_API_KEY first
+  const primaryNames = ["GEMINI_API_KEY", "GOOGLE_API_KEY", "API_KEY", "VITE_GEMINI_API_KEY"];
+  for (const name of primaryNames) {
     const val = process.env[name];
     if (val && val.trim() !== "" && val !== "undefined" && val !== "null") {
-      keys.push(val.trim().replace(/^["']|["']$/g, ''));
-    }
-  });
-
-  for (let i = 1; i <= 20; i++) {
-    const key = process.env[`GEMINI_KEY_${i}`];
-    if (key && key.trim() !== "" && key !== "undefined" && key !== "null") {
-      keys.push(key.trim().replace(/^["']|["']$/g, ''));
+      const clean = val.trim().replace(/^["']|["']$/g, '');
+      if (isGoogleApiKey(clean) && !keys.includes(clean)) {
+        keys.push(clean);
+      }
     }
   }
-  return [...new Set(keys)].filter(k => k.length > 10);
+
+  for (let i = 1; i <= 20; i++) {
+    const val = process.env[`GEMINI_KEY_${i}`];
+    if (val && val.trim() !== "" && val !== "undefined" && val !== "null") {
+      const clean = val.trim().replace(/^["']|["']$/g, '');
+      if (isGoogleApiKey(clean) && !keys.includes(clean)) {
+        keys.push(clean);
+      }
+    }
+  }
+
+  return keys;
+};
+
+const getOpenRouterKeys = (): string[] => {
+  const keys: string[] = [];
+  const primaryNames = ["OPENROUTER_API_KEY", "VITE_OPENROUTER_API_KEY"];
+  for (const name of primaryNames) {
+    const val = process.env[name];
+    if (val && val.trim() !== "" && val !== "undefined" && val !== "null") {
+      const clean = val.trim().replace(/^["']|["']$/g, '');
+      if (!keys.includes(clean)) keys.push(clean);
+    }
+  }
+  for (let i = 1; i <= 20; i++) {
+    const val = process.env[`GEMINI_KEY_${i}`];
+    if (val && val.startsWith("sk-or-")) {
+      const clean = val.trim().replace(/^["']|["']$/g, '');
+      if (!keys.includes(clean)) keys.push(clean);
+    }
+  }
+  return keys;
 };
 
 const getGroqKey = () => {
@@ -57,12 +95,15 @@ const getGroqKey = () => {
 const getAI = () => {
   const geminiKeys = getGeminiKeys();
   const groqKey = getGroqKey();
+  const openRouterKeys = getOpenRouterKeys();
   
   return { 
     hasGemini: geminiKeys.length > 0,
     hasGroq: !!groqKey,
+    hasOpenRouter: openRouterKeys.length > 0,
     geminiCount: geminiKeys.length,
     groqConfigured: !!groqKey,
+    openRouterCount: openRouterKeys.length,
     env: process.env.NODE_ENV
   };
 };
@@ -330,11 +371,18 @@ apiRouter.get("/ai/test", async (req, res) => {
         apiKey: geminiKeys[0],
         httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
       });
-      const response = await ai.models.generateContent({
-        model: "gemini-3.7-flash",
-        contents: [{ role: 'user', parts: [{ text: "Say 'Gemini Connection Successful'" }] }]
-      });
-      return res.json({ message: response.text, provider: "gemini" });
+      const testModels = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest", "gemini-3.7-flash"];
+      for (const tModel of testModels) {
+        try {
+          const response = await ai.models.generateContent({
+            model: tModel,
+            contents: [{ role: 'user', parts: [{ text: "Say 'Gemini Connection Successful'" }] }]
+          });
+          return res.json({ message: response.text, provider: "gemini", model: tModel });
+        } catch (mErr) {
+          continue;
+        }
+      }
     }
     
     const groqKey = getGroqKey();
@@ -397,7 +445,7 @@ apiRouter.post("/ai/generate", async (req, res) => {
 
     // 1. Try Gemini first (with rotation and model fallback)
     if (geminiKeys.length > 0) {
-      const shuffledKeys = [...geminiKeys].sort(() => Math.random() - 0.5);
+      const keysToTry = [...geminiKeys];
       
       // Determine which models we can try
       const modelsToTry = [
@@ -411,7 +459,7 @@ apiRouter.post("/ai/generate", async (req, res) => {
       // Filter out duplicates but keep order
       const uniqueModels = [...new Set(modelsToTry)];
 
-      for (const key of shuffledKeys) {
+      for (const key of keysToTry) {
         const ai = new GoogleGenAI({ 
           apiKey: key,
           httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
@@ -597,6 +645,94 @@ apiRouter.post("/ai/generate", async (req, res) => {
   } catch (globalError: any) {
     console.error("Critical error in /ai/generate:", globalError);
     res.status(500).json({ error: "Internal server error during AI generation.", details: globalError.message });
+  }
+});
+
+// Dedicated Audio Transcription Endpoint (Gemini 3.5 Transcribe)
+apiRouter.post("/ai/transcribe", async (req, res) => {
+  try {
+    const { 
+      audioBase64, 
+      mimeType = "audio/webm", 
+      prompt = "Transcribe this audio recording verbatim and accurately. Keep sports terminology, referee rules, physical education vocabulary, player names, and tactical terms exact." 
+    } = req.body;
+
+    if (!audioBase64 || typeof audioBase64 !== "string") {
+      return res.status(400).json({ error: "Missing audioBase64 data in request body." });
+    }
+
+    // Clean base64 string if it contains data URI header
+    const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
+
+    const geminiKeys = getGeminiKeys();
+    if (geminiKeys.length === 0) {
+      return res.status(500).json({ 
+        error: "No Gemini API keys configured for transcription.",
+        message: "Please configure GEMINI_API_KEY in the Environment Variables."
+      });
+    }
+
+    let lastError: any = null;
+    const modelsToTry = ["gemini-3.5-transcribe", "gemini-2.5-flash", "gemini-3.7-flash"];
+
+    for (const key of geminiKeys) {
+      try {
+        const ai = new GoogleGenAI({ 
+          apiKey: key,
+          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+        });
+
+        const audioPart = {
+          inlineData: {
+            mimeType: mimeType || "audio/webm",
+            data: cleanBase64,
+          },
+        };
+
+        for (const currentModel of modelsToTry) {
+          try {
+            console.log(`Transcribing audio with ${currentModel} (mimeType: ${mimeType})...`);
+
+            const response = await ai.models.generateContent({
+              model: currentModel,
+              contents: { 
+                parts: [
+                  audioPart, 
+                  { text: prompt }
+                ] 
+              },
+            });
+
+            const transcription = response.text || "";
+            console.log(`Transcription succeeded with ${currentModel}`);
+
+            return res.json({
+              text: transcription.trim(),
+              model: currentModel,
+              provider: "gemini",
+              success: true
+            });
+          } catch (modelErr: any) {
+            console.warn(`Model ${currentModel} transcription attempt failed:`, modelErr?.message);
+            lastError = modelErr;
+            continue;
+          }
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn("Transcription error with current key:", err?.message);
+        continue;
+      }
+    }
+
+    throw lastError || new Error("Failed to transcribe audio with available keys.");
+  } catch (error: any) {
+    console.error("Critical error in /ai/transcribe:", error);
+    res.status(500).json({ 
+      error: "Audio transcription failed.", 
+      message: error.message || "Failed to process audio transcription.",
+      details: error.stack
+    });
   }
 });
 

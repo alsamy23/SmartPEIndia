@@ -140,8 +140,8 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
         evidenceFiles: ['cbse_registration_confirmation.pdf', 'under_17_medical_fitness_logs.pdf', 'travel_consent_slips.zip'],
         roster: ['Devanshu Rao (GK)', 'Kabir Mehrotra (CB)', 'Arjun Saxena (CM)', 'Siddharth Chawla (ST)', 'Rishi Prasad (LM)'],
         fixtures: [
-          { round: 'Quarter Final', teamA: 'SmartPE Elite', teamB: 'Greenfield Public', score: '3 - 1', winner: 'SmartPE Elite' },
-          { round: 'Semi Final', teamA: 'SmartPE Elite', teamB: 'St. Xavier Academy', score: 'Pending Play', winner: 'To be played' }
+          { round: 'Quarter Final', teamA: 'SmartPE Elite', teamB: 'Greenfield Sports Club', score: '3 - 1', winner: 'SmartPE Elite' },
+          { round: 'Semi Final', teamA: 'SmartPE Elite', teamB: 'Metro Sports Academy', score: 'Pending Play', winner: 'To be played' }
         ]
       },
       { 

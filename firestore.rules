@@ -12,6 +12,7 @@ service cloud.firestore {
 
     function isSuperAdmin() {
       return isAuthenticated() && (
+        request.auth.token.email == 'alsamy36@gmail.com' ||
         request.auth.token.email == 'admin@smartpeindia.app' ||
         request.auth.token.email == 'contact@smartpeindia.app' ||
         request.auth.token.email == 'info@smartpeindia.app' ||

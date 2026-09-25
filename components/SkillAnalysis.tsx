@@ -174,7 +174,7 @@ const SkillAnalysis: React.FC = () => {
       streamRef.current = stream;
       setIsLive(true);
     } catch (err: any) {
-      console.error("Camera error:", err);
+      console.warn("Camera access denied or unavailable:", err);
       if (isMounted.current) {
         setError(`Camera Error: ${err.message || 'Access Denied'}`);
       }

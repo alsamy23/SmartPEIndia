@@ -1366,9 +1366,9 @@ const FitnessTests: React.FC = () => {
           {/* Header */}
           <div className="bg-indigo-900 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
             <div className="relative z-10 max-w-2xl">
-              <h2 className="text-4xl font-black mb-4 uppercase tracking-tighter">KIFT Testing Suite</h2>
+              <h2 className="text-4xl font-black mb-4 uppercase tracking-tighter">Student Fitness Assessment</h2>
               <p className="text-indigo-200 text-lg font-medium leading-relaxed">
-                Khelo India Fitness Test (CBSE Format). Standardized batteries for Primary to Senior Secondary grades.
+                Standardized Khelo India (KIFT) and physical literacy batteries for Primary to Senior Secondary grades.
               </p>
             </div>
             <Trophy className="absolute right-[-20px] bottom-[-40px] w-64 h-64 text-white/10 rotate-12" />

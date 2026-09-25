@@ -888,7 +888,7 @@ export interface CoachProfile {
 const DEFAULT_COACH_PROFILE: CoachProfile = {
   id: 'coach_default',
   coachName: 'Coach Suresh Nair',
-  programName: 'St. Xavier Sports Academy & After-School Club',
+  programName: 'Pinnacle Sports Coaching Academy & After-School Club',
   programType: 'after_school_academy',
   primarySport: 'football',
   city: 'Bengaluru / Mumbai',

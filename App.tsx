@@ -8,33 +8,34 @@ import {
   BookOpen, 
   Sparkles, 
   LayoutDashboard, 
-  Menu,
-  X,
-  Dumbbell,
-  Target,
-  ShieldCheck,
-  TrendingUp,
-  Wrench,
-  Wifi,
-  AlertTriangle,
-  CalendarRange,
-  RotateCcw,
-  Loader2,
-  GraduationCap,
-  Trophy,
-  Microscope,
-  Book,
-  Activity,
-  AlertCircle,
-  ClipboardList,
-  ClipboardCheck,
-  FileText,
-  UserCheck,
-  Mail,
-  Zap,
-  Shield,
-  Video,
-  Terminal
+  Menu, 
+  X, 
+  Dumbbell, 
+  Target, 
+  ShieldCheck, 
+  TrendingUp, 
+  Wrench, 
+  Wifi, 
+  AlertTriangle, 
+  CalendarRange, 
+  RotateCcw, 
+  Loader2, 
+  GraduationCap, 
+  Trophy, 
+  Microscope, 
+  Book, 
+  Activity, 
+  AlertCircle, 
+  ClipboardList, 
+  ClipboardCheck, 
+  FileText, 
+  UserCheck, 
+  Mail, 
+  Zap, 
+  Shield, 
+  Video, 
+  Terminal,
+  School
 } from 'lucide-react';
 import Dashboard from './components/Dashboard.tsx';
 import AIPlanner from './components/AIPlanner.tsx';
@@ -74,6 +75,9 @@ import WelcomeOnboardingModal from './components/WelcomeOnboardingModal.tsx';
 import PracticalAssessmentHub from './components/PracticalAssessmentHub.tsx';
 import { CoachingAcademyHub } from './components/coaching/CoachingAcademyHub.tsx';
 import { GlobalSearch } from './components/GlobalSearch.tsx';
+import { VoiceAgentModal } from './components/VoiceAgentModal.tsx';
+import { SpotlightBanner, SpotlightData } from './components/SpotlightBanner.tsx';
+import { FloatingVoiceAgentButton } from './components/FloatingVoiceAgentButton.tsx';
 import { logError } from './services/logService.ts';
 import { fitnessService } from './services/fitnessService.ts';
 import { auth } from './services/firebase.ts';
@@ -92,7 +96,7 @@ const navigation = [
   { 
     section: 'Coaching & Academy',
     items: [
-      { id: 'coaching-academy', name: 'Academy & Player Dev', icon: Trophy, isNew: true, subtitle: 'Individual athlete development, 1–5 coaching scale, AI guidance & parent reports.' },
+      { id: 'coaching-academy', name: 'Coaching & Academy', icon: Trophy, isNew: true, subtitle: 'Individual player development, sports library, assessments & parent reports.' },
     ]
   },
   
@@ -112,7 +116,7 @@ const navigation = [
     section: 'Assess',
     items: [
       { id: 'cbse-practical', name: 'CBSE Practical (30M)', icon: ClipboardCheck, subtitle: 'Class 11 & 12 30-mark practical scoring & award sheet.' },
-      { id: 'fitness', name: 'Fitness Tests', icon: Activity, subtitle: 'All Khelo India Fitness tests pre-loaded.' },
+      { id: 'fitness', name: 'Student Fitness Assessment', icon: Activity, subtitle: 'All Khelo India & standard fitness tests pre-loaded.' },
       { id: 'khelo', name: 'Khelo India Battery', icon: Trophy, subtitle: 'Official battery tests and student profiles.' },
       { id: 'tournament-fixtures', name: 'Tournament Fixtures', icon: Trophy, subtitle: 'Generate Knockout Brackets & Round Robin League schedules.' },
       { id: 'testpaper', name: 'Question Paper Generator', icon: ClipboardList, subtitle: 'Create MCQ and theory papers for PE.' },
@@ -175,20 +179,35 @@ interface MobileHeaderProps {
   setIsSidebarOpen: (open: boolean) => void;
   schoolName?: string | null;
   schoolLogo?: string | null;
+  onOpenVoiceAgent?: () => void;
 }
-const MobileHeader: React.FC<MobileHeaderProps> = React.memo(({ isSidebarOpen, setIsSidebarOpen, schoolName, schoolLogo }) => {
+const MobileHeader: React.FC<MobileHeaderProps> = React.memo(({ isSidebarOpen, setIsSidebarOpen, schoolName, schoolLogo, onOpenVoiceAgent }) => {
   return (
     <header className="md:hidden sticky top-0 bg-white backdrop-blur-xl text-slate-900 px-4 py-3 flex items-center justify-between z-30 border-b border-slate-200 shadow-sm print:hidden">
       <div className="flex-grow-0 flex-shrink-0">
         <Logo variant="color" size="md" customLogoUrl={schoolLogo} customSchoolName={schoolName} />
       </div>
-      <button 
-        onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-        className="ml-auto flex-shrink-0 p-2.5 bg-slate-100 border border-slate-200 rounded-2xl active:scale-90 transition-all flex items-center justify-center hover:bg-slate-200 text-slate-700"
-        aria-label="Toggle Navigation Menu"
-      >
-        {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
-      </button>
+      <div className="flex items-center gap-2 ml-auto">
+        {onOpenVoiceAgent && (
+          <button
+            type="button"
+            onClick={onOpenVoiceAgent}
+            className="p-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-2xl active:scale-90 transition-all flex items-center justify-center gap-1 text-xs font-black"
+            aria-label="Open Voice AI Assistant"
+            title="Voice Assistant"
+          >
+            <Sparkles size={16} className="text-amber-500 animate-pulse" />
+            <span className="text-[10px]">Voice AI</span>
+          </button>
+        )}
+        <button 
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+          className="p-2.5 bg-slate-100 border border-slate-200 rounded-2xl active:scale-90 transition-all flex items-center justify-center hover:bg-slate-200 text-slate-700"
+          aria-label="Toggle Navigation Menu"
+        >
+          {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </div>
     </header>
   );
 });
@@ -206,6 +225,8 @@ interface SidebarProps {
   setIsAuthView: (view: boolean) => void;
   schoolName?: string | null;
   schoolLogo?: string | null;
+  activeWorkspace: 'school' | 'academy';
+  setActiveWorkspace: (ws: 'school' | 'academy') => void;
 }
 const Sidebar: React.FC<SidebarProps> = React.memo(({
   activeTab,
@@ -218,7 +239,9 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
   handleLogout,
   setIsAuthView,
   schoolName,
-  schoolLogo
+  schoolLogo,
+  activeWorkspace,
+  setActiveWorkspace
 }) => {
   return (
     <aside className={`
@@ -241,11 +264,53 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
         </button>
       </div>
 
+      {/* Workspace Switcher Selector */}
+      <div className="mx-6 mb-4 p-1.5 bg-slate-900 border border-white/10 rounded-2xl shadow-inner">
+        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-2 py-1 mb-1 flex items-center justify-between">
+          <span>Active Workspace</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveWorkspace('school');
+              localStorage.setItem('smartpe_active_workspace', 'school');
+              handleTabChange('dashboard');
+            }}
+            className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl font-black text-[11px] uppercase tracking-wider transition-all ${
+              activeWorkspace === 'school'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30 ring-1 ring-white/20'
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <School size={14} />
+            <span>School PE</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveWorkspace('academy');
+              localStorage.setItem('smartpe_active_workspace', 'academy');
+              handleTabChange('coaching-academy');
+            }}
+            className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl font-black text-[11px] uppercase tracking-wider transition-all ${
+              activeWorkspace === 'academy'
+                ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-900/30 ring-1 ring-white/20'
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Trophy size={14} />
+            <span>Coaching & Academy</span>
+          </button>
+        </div>
+      </div>
+
       {/* API Status Badge - Interactive */}
-      <div className="mx-6 mb-8">
+      <div className="mx-6 mb-4">
         <button 
           onClick={handleSelectKey}
-          className="w-full bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5 flex items-center justify-between hover:bg-slate-800 transition-all group"
+          className="w-full bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3 flex items-center justify-between hover:bg-slate-800 transition-all group"
         >
           <div className="flex items-center space-x-3">
             <div className={`w-2 h-2 rounded-full ${
@@ -263,19 +328,19 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
         </button>
       </div>
 
-      <nav className="mt-4 px-4 space-y-1.5 overflow-y-auto max-h-[calc(100vh-380px)] custom-scrollbar">
+      <nav className="mt-2 px-4 space-y-1.5 overflow-y-auto max-h-[calc(100vh-420px)] custom-scrollbar">
         {navigation.map((item, idx) => {
           if ('section' in item && item.items) {
             return (
-              <div key={`section-${idx}`} className="py-4">
-                <p className="px-6 mb-3 text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">{item.section}</p>
-                <div className="space-y-1.5">
+              <div key={`section-${idx}`} className="py-3">
+                <p className="px-6 mb-2 text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">{item.section}</p>
+                <div className="space-y-1">
                   {item.items.map((subItem) => (
                     <button
                       key={subItem.id}
                       onClick={() => handleTabChange(subItem.id as Tab)}
                       className={`
-                        w-full flex items-center justify-start text-left space-x-4 px-6 py-4 rounded-2xl transition-all duration-300 relative group
+                        w-full flex items-center justify-start text-left space-x-4 px-6 py-3.5 rounded-2xl transition-all duration-300 relative group
                         ${activeTab === subItem.id 
                           ? 'bg-white text-on-surface shadow-2xl shadow-white/5 scale-[1.02] font-black font-sans' 
                           : 'text-slate-500 hover:bg-white/5 hover:text-white font-bold font-sans'}
@@ -299,7 +364,7 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
                 key={item.id}
                 onClick={() => handleTabChange(item.id as Tab)}
                 className={`
-                  w-full flex items-center justify-start text-left space-x-4 px-6 py-4 rounded-2xl transition-all duration-300 relative group
+                  w-full flex items-center justify-start text-left space-x-4 px-6 py-3.5 rounded-2xl transition-all duration-300 relative group
                   ${activeTab === item.id 
                     ? 'bg-white text-on-surface shadow-2xl shadow-white/5 scale-[1.02] font-black' 
                     : 'text-slate-500 hover:bg-white/5 hover:text-white font-bold'}
@@ -368,29 +433,83 @@ interface StickyHeaderProps {
   setHighlightStudentId: (id: string | null) => void;
   schoolName?: string | null;
   schoolLogo?: string | null;
+  activeWorkspace: 'school' | 'academy';
+  setActiveWorkspace: (ws: 'school' | 'academy') => void;
+  onOpenVoiceAgent?: () => void;
 }
 const StickyHeader: React.FC<StickyHeaderProps> = React.memo(({
   activeTab,
   handleTabChange,
   setHighlightStudentId,
   schoolName,
-  schoolLogo
+  schoolLogo,
+  activeWorkspace,
+  setActiveWorkspace,
+  onOpenVoiceAgent
 }) => {
   return (
     <div className="relative md:sticky md:top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 md:px-8 md:py-3.5 print:hidden shadow-sm flex items-center justify-between gap-4">
       {/* Primary Header dedicated to Smart PE / Custom School Logo */}
-      <div className="hidden md:flex items-center cursor-pointer" onClick={() => handleTabChange('dashboard')}>
-        <Logo variant="color" size="lg" customLogoUrl={schoolLogo} customSchoolName={schoolName} />
+      <div className="hidden md:flex items-center gap-4">
+        <div className="cursor-pointer" onClick={() => handleTabChange('dashboard')}>
+          <Logo variant="color" size="lg" customLogoUrl={schoolLogo} customSchoolName={schoolName} />
+        </div>
+
+        {/* Quick Workspace Switch Pill in Header */}
+        <button
+          type="button"
+          onClick={() => {
+            const nextWs = activeWorkspace === 'school' ? 'academy' : 'school';
+            setActiveWorkspace(nextWs);
+            localStorage.setItem('smartpe_active_workspace', nextWs);
+            handleTabChange(nextWs === 'academy' ? 'coaching-academy' : 'dashboard');
+          }}
+          className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
+            activeWorkspace === 'academy'
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-900 hover:bg-amber-500/20'
+              : 'bg-blue-500/10 border-blue-500/30 text-blue-900 hover:bg-blue-500/20'
+          }`}
+          title="Toggle between School and Academy workspaces"
+        >
+          {activeWorkspace === 'academy' ? (
+            <>
+              <Trophy size={14} className="text-amber-600" />
+              <span>🏆 Coaching & Academy</span>
+            </>
+          ) : (
+            <>
+              <School size={14} className="text-blue-600" />
+              <span>🏫 School PE</span>
+            </>
+          )}
+        </button>
+
+        {/* Voice AI Guide Pill */}
+        {onOpenVoiceAgent && (
+          <button
+            type="button"
+            onClick={onOpenVoiceAgent}
+            className="hidden xl:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200/80 text-indigo-900 hover:bg-indigo-100/70 text-xs font-black uppercase tracking-wider transition-all shadow-sm hover:scale-105 active:scale-95"
+            title="Ask Voice AI Assistant & Find Features"
+          >
+            <Sparkles size={14} className="text-amber-500 animate-pulse" />
+            <span>Voice Guide</span>
+          </button>
+        )}
       </div>
+
       <div className="w-full md:max-w-xs lg:max-w-sm">
-        <GlobalSearch onNavigate={(tabId, data) => {
-          handleTabChange(tabId as Tab);
-          if (data?.studentId) {
-            setHighlightStudentId(data.studentId);
-          } else {
-            setHighlightStudentId(null);
-          }
-        }} />
+        <GlobalSearch 
+          onOpenVoiceAgent={onOpenVoiceAgent}
+          onNavigate={(tabId, data) => {
+            handleTabChange(tabId as Tab);
+            if (data?.studentId) {
+              setHighlightStudentId(data.studentId);
+            } else {
+              setHighlightStudentId(null);
+            }
+          }} 
+        />
       </div>
     </div>
   );
@@ -436,7 +555,13 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({ activeTab,
 });
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const savedWs = localStorage.getItem('smartpe_active_workspace');
+    return savedWs === 'academy' ? 'coaching-academy' : 'dashboard';
+  });
+  const [activeWorkspace, setActiveWorkspace] = useState<'school' | 'academy'>(() => {
+    return (localStorage.getItem('smartpe_active_workspace') as 'school' | 'academy') || 'school';
+  });
   const [isPending, startTransition] = useTransition();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState<'checking' | 'ok' | 'missing' | 'quota'>('checking');
@@ -459,6 +584,8 @@ const App: React.FC = () => {
   const [selectedReportStudentId, setSelectedReportStudentId] = useState<string | null>(null);
   const [coachingReportId, setCoachingReportId] = useState<string | null>(null);
   const [highlightStudentId, setHighlightStudentId] = useState<string | null>(null);
+  const [isVoiceAgentOpen, setIsVoiceAgentOpen] = useState(false);
+  const [spotlightInfo, setSpotlightInfo] = useState<SpotlightData | null>(null);
   const [toasts, setToasts] = useState<ToastConfig[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmConfig | null>(null);
 
@@ -1051,6 +1178,7 @@ const App: React.FC = () => {
           setIsSidebarOpen={setIsSidebarOpen} 
           schoolName={schoolBranding.schoolName}
           schoolLogo={schoolBranding.schoolLogo}
+          onOpenVoiceAgent={() => setIsVoiceAgentOpen(true)}
         />
 
         {/* Mobile Sidebar Backdrop */}
@@ -1074,6 +1202,8 @@ const App: React.FC = () => {
           setIsSidebarOpen={setIsSidebarOpen} 
           schoolName={schoolBranding.schoolName}
           schoolLogo={schoolBranding.schoolLogo}
+          activeWorkspace={activeWorkspace}
+          setActiveWorkspace={setActiveWorkspace}
         />
 
         {/* Content Area */}
@@ -1084,6 +1214,15 @@ const App: React.FC = () => {
             setHighlightStudentId={setHighlightStudentId} 
             schoolName={schoolBranding.schoolName}
             schoolLogo={schoolBranding.schoolLogo}
+            activeWorkspace={activeWorkspace}
+            setActiveWorkspace={setActiveWorkspace}
+            onOpenVoiceAgent={() => setIsVoiceAgentOpen(true)}
+          />
+
+          {/* Voice Guide Spotlight Beacon on Screen */}
+          <SpotlightBanner
+            spotlight={spotlightInfo}
+            onDismiss={() => setSpotlightInfo(null)}
           />
           {globalError && (
             <div className="max-w-7xl mx-auto px-6 pt-6 md:px-12">
@@ -1108,10 +1247,28 @@ const App: React.FC = () => {
               </div>
             </div>
           )}
-          <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6 lg:p-6 min-h-full print:p-0">
+          <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6 lg:p-6 min-h-full print:p-0 pb-20 md:pb-6">
             {renderContent()}
           </div>
           <Disclaimer />
+
+          {/* Floating Voice AI Copilot Button */}
+          <FloatingVoiceAgentButton 
+            onClick={() => setIsVoiceAgentOpen(true)} 
+            isOpen={isVoiceAgentOpen} 
+          />
+
+          {/* Voice AI Assistant & Feature Guide Modal */}
+          <VoiceAgentModal
+            isOpen={isVoiceAgentOpen}
+            onClose={() => setIsVoiceAgentOpen(false)}
+            onNavigate={(tabId, spotlight) => {
+              handleTabChange(tabId as Tab);
+              if (spotlight) {
+                setSpotlightInfo({ ...spotlight, tabId });
+              }
+            }}
+          />
 
           {/* Welcome Onboarding Modal for New / Signed-In Users */}
           <WelcomeOnboardingModal
@@ -1122,11 +1279,13 @@ const App: React.FC = () => {
             onNavigateTab={handleTabChange}
           />
 
-          {/* Mobile Bottom Navigation */}
-          <MobileBottomNav 
-            activeTab={activeTab} 
-            handleTabChange={handleTabChange} 
-          />
+          {/* Mobile Bottom Navigation - Displayed exclusively for School PE, hidden in Coaching & Academy to avoid layout collision */}
+          {activeWorkspace !== 'academy' && activeTab !== 'coaching-academy' && activeTab !== 'coaching-assessment' && (
+            <MobileBottomNav 
+              activeTab={activeTab} 
+              handleTabChange={handleTabChange} 
+            />
+          )}
         </main>
     </div>
   </ErrorBoundary>

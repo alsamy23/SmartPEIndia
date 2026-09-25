@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Loader2, BookOpen, User, ArrowRight, LayoutDashboard, Wrench, GraduationCap, X, FileText, Sparkles, Filter, Check, Trophy, CalendarRange } from 'lucide-react';
+import { VoiceTranscribeButton } from './VoiceTranscribeButton';
 import { fitnessService, Student } from '../services/fitnessService.ts';
 import { isBrandSuperAdmin } from '../types';
 import { auth } from '../services/firebase.ts';
@@ -7,6 +8,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 interface GlobalSearchProps {
   onNavigate: (tabId: string, data?: any) => void;
+  onOpenVoiceAgent?: () => void;
 }
 
 type SearchCategory = 'all' | 'tools' | 'students' | 'resources';
@@ -71,7 +73,7 @@ const RESOURCES: Omit<SearchItem, 'category'>[] = [
   { title: 'Sports & Nutrition', tabId: 'theory', subtitle: 'Class 12 - Unit 5' },
 ];
 
-export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
+export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate, onOpenVoiceAgent }) => {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<SearchCategory>('all');
@@ -253,7 +255,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
         <input
           ref={inputRef}
           type="text"
-          className="block w-full pl-10 pr-20 py-2.5 bg-white/90 backdrop-blur-md border border-slate-200 rounded-xl leading-5 placeholder-slate-400 text-slate-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all text-xs font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
+          className="block w-full pl-10 pr-28 py-2.5 bg-white/90 backdrop-blur-md border border-slate-200 rounded-xl leading-5 placeholder-slate-400 text-slate-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all text-xs font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
           placeholder="Search students, tools, or theory (Ctrl+K)..."
           value={query}
           onChange={(e) => {
@@ -263,22 +265,42 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
           onFocus={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
         />
-        {!query && (
-          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-            <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+        <div className="absolute inset-y-0 right-0 pr-2 flex items-center gap-1.5">
+          {onOpenVoiceAgent && (
+            <button
+              type="button"
+              onClick={onOpenVoiceAgent}
+              className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-black uppercase tracking-wider"
+              title="Open Voice AI Assistant & Feature Guide"
+            >
+              <Sparkles size={13} className="text-amber-500 animate-pulse" />
+              <span className="hidden md:inline">Voice AI</span>
+            </button>
+          )}
+          <VoiceTranscribeButton
+            onTranscribe={(text) => {
+              setQuery(text);
+              setIsOpen(true);
+            }}
+            promptContext="Transcribe this search query for physical education students, drills, tools, or sports syllabus."
+            size="sm"
+            variant="ghost"
+          />
+          {!query && (
+            <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 hidden sm:inline">
               Ctrl K
             </span>
-          </div>
-        )}
-        {query && (
-          <button 
-            onClick={clearSearch}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-            title="Clear search"
-          >
-            <X size={15} />
-          </button>
-        )}
+          )}
+          {query && (
+            <button 
+              onClick={clearSearch}
+              className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              title="Clear search"
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
       </div>
 
       {isOpen && query.trim().length > 0 && (

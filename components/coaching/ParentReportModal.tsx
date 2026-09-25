@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
+import { toJpeg } from 'html-to-image';
 import { 
   Printer, 
   Share2, 
@@ -37,6 +37,7 @@ import {
   detectAgeCategory,
   AGE_CATEGORY_BENCHMARKS
 } from '../../services/academyService';
+import { academicCoachingCloudService } from '../../services/academicCoachingCloudService';
 import { showToast } from '../../services/toast';
 
 interface ParentReportModalProps {
@@ -58,6 +59,12 @@ export const ParentReportModal: React.FC<ParentReportModalProps> = ({
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedSummary, setCopiedSummary] = useState(false);
+
+  // Retrieve Academy Branding & Setup
+  const program = academicCoachingCloudService.getLocalProgram();
+  const academyName = program?.programName || 'SmartPE Sports Academy';
+  const academyLogo = program?.logoUrl || '';
+  const headCoachOrDirector = program?.headCoachName || 'Academy Director';
 
   const sportTemplate = SPORT_TEMPLATES[assessment.sport as CoachingSportId] || SPORT_TEMPLATES.football;
   const levelStyle = getDevelopmentLevelColor(assessment.developmentLevel);
@@ -208,7 +215,7 @@ export const ParentReportModal: React.FC<ParentReportModalProps> = ({
     }
   };
 
-  // High-Resolution Direct PDF Exporter using html2canvas and jsPDF
+  // High-Resolution Direct PDF Exporter using html-to-image and jsPDF
   const handleDownloadPDF = async () => {
     const element = printRef.current;
     if (!element) {
@@ -220,42 +227,105 @@ export const ParentReportModal: React.FC<ParentReportModalProps> = ({
       setIsExportingPDF(true);
       showToast('Generating official Merit Report PDF...', 'info');
 
-      // Small pause to ensure layout stabilization
+      // Expand scroll container for complete capture
+      const originalMaxHeight = element.style.maxHeight;
+      const originalOverflow = element.style.overflow;
+      const originalBorder = element.style.border;
+      const originalBoxShadow = element.style.boxShadow;
+
+      element.style.maxHeight = 'none';
+      element.style.overflow = 'visible';
+      element.style.border = 'none';
+      element.style.boxShadow = 'none';
+
+      // Brief pause to ensure DOM repaint & layout stabilization
       await new Promise(r => setTimeout(r, 150));
 
-      const canvas = await html2canvas(element, {
-        scale: 2, // 300 DPI high resolution
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        ignoreElements: (node) => {
-          return node.classList?.contains('no-print') || 
-                 node.classList?.contains('print-hide') || 
-                 node.tagName === 'BUTTON';
-        }
+      let imgData: string;
+      try {
+        imgData = await toJpeg(element, {
+          quality: 0.95,
+          pixelRatio: 2,
+          backgroundColor: '#ffffff',
+          cacheBust: true,
+          filter: (node) => {
+            if (node instanceof HTMLElement) {
+              return !(
+                node.classList?.contains('no-print') || 
+                node.classList?.contains('print-hide') || 
+                node.tagName === 'BUTTON'
+              );
+            }
+            return true;
+          }
+        });
+      } catch (firstPassError) {
+        console.warn('Initial toJpeg pass had font/asset issue, retrying with skipFonts:', firstPassError);
+        imgData = await toJpeg(element, {
+          quality: 0.95,
+          pixelRatio: 2,
+          backgroundColor: '#ffffff',
+          skipFonts: true,
+          filter: (node) => {
+            if (node instanceof HTMLElement) {
+              return !(
+                node.classList?.contains('no-print') || 
+                node.classList?.contains('print-hide') || 
+                node.tagName === 'BUTTON'
+              );
+            }
+            return true;
+          }
+        });
+      } finally {
+        // Restore layout container styles
+        element.style.maxHeight = originalMaxHeight;
+        element.style.overflow = originalOverflow;
+        element.style.border = originalBorder;
+        element.style.boxShadow = originalBoxShadow;
+      }
+
+      const img = new Image();
+      img.src = imgData;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
       });
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = 210;
-      const pdfHeight = 297;
-      
-      const imgWidth = pdfWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const isCertificate = reportViewMode === 'certificate';
+      const orientation = isCertificate ? 'l' : 'p';
+      const pdf = new jsPDF(orientation, 'mm', 'a4');
+      const pageWidth = isCertificate ? 297 : 210;
+      const pageHeight = isCertificate ? 210 : 297;
 
-      let heightLeft = imgHeight;
-      let position = 0;
+      const imgWidth = pageWidth;
+      const imgHeight = (img.height * imgWidth) / img.width;
 
-      // First Page
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= pdfHeight;
+      if (isCertificate) {
+        // Fit certificate gracefully onto single landscape sheet
+        if (imgHeight > pageHeight) {
+          const scale = pageHeight / imgHeight;
+          const scaledWidth = imgWidth * scale;
+          const xOffset = (pageWidth - scaledWidth) / 2;
+          pdf.addImage(imgData, 'JPEG', xOffset, 0, scaledWidth, pageHeight, undefined, 'FAST');
+        } else {
+          const yOffset = (pageHeight - imgHeight) / 2;
+          pdf.addImage(imgData, 'JPEG', 0, yOffset, imgWidth, imgHeight, undefined, 'FAST');
+        }
+      } else {
+        // Multi-page report
+        let heightLeft = imgHeight;
+        let position = 0;
 
-      // Handle multi-page pagination smoothly
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
         pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-        heightLeft -= pdfHeight;
+        heightLeft -= pageHeight;
+
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+          heightLeft -= pageHeight;
+        }
       }
 
       // Metadata properties
@@ -269,7 +339,7 @@ export const ParentReportModal: React.FC<ParentReportModalProps> = ({
 
       const safePlayerName = player.name.replace(/\s+/g, '_');
       const safeSport = sportTemplate.name.replace(/[^a-zA-Z0-9]/g, '_');
-      const filePrefix = reportViewMode === 'certificate' ? 'Merit_Certificate' : 'Merit_Report';
+      const filePrefix = isCertificate ? 'Merit_Certificate' : 'Merit_Report';
       const filename = `${safePlayerName}_${filePrefix}_${safeSport}.pdf`;
 
       pdf.save(filename);
@@ -285,10 +355,12 @@ export const ParentReportModal: React.FC<ParentReportModalProps> = ({
 
   // Formatted summary for coaches to forward directly to parents on WhatsApp
   const generateWhatsAppSummary = () => {
-    return `🏆 *SMARTPE INDIA • ATHLETIC MERIT REPORT*
+    return `🏆 *${academyName.toUpperCase()} • ATHLETIC MERIT REPORT*
+(Co-Certified with SmartPE India Athletic Evaluation Framework)
+
 👤 *Athlete:* ${player.name} (${player.age} yrs, ${player.gender})
-🏅 *Sport Category:* ${sportTemplate.name} • ${player.position}
-📅 *Assessment:* ${assessment.assessmentType} (${assessment.assessmentDate})
+🏅 *Sport:* ${sportTemplate.name} • ${player.position}
+📅 *Assessment Cycle:* ${assessment.assessmentType} (${assessment.assessmentDate})
 ⭐ *Overall Score:* ${assessment.overallScore}/100 [${assessment.developmentLevel}]
 🎖️ *Merit Distinction:* ${merit.category} (Grade ${merit.grade})
 
@@ -309,7 +381,7 @@ ${assessment.developmentPriorities.map(p => `• ${p}`).join('\n')}
 
 ${assessment.coachRecommendation ? `🏋️ *Recommended Home Practice:*\n${assessment.coachRecommendation}\n` : ''}
 ${assessment.nextGoals?.length ? `🚀 *Next 90-Day Goals:*\n${assessment.nextGoals.map(g => `• ${g.goal} (${g.skill})`).join('\n')}\n` : ''}
-👨‍🏫 *Evaluated by:* Coach ${assessment.coachName}
+👨‍🏫 *Evaluated by:* Coach ${assessment.coachName} (${academyName})
 🔗 *Digital Merit Report Link:* ${window.location.origin}${window.location.pathname}#merit-report-${assessment.id}`;
   };
 
@@ -626,24 +698,39 @@ ${assessment.nextGoals?.length ? `🚀 *Next 90-Day Goals:*\n${assessment.nextGo
               {/* Official Report Header Banner */}
               <div className="bg-white border-2 border-slate-900 rounded-2xl p-5 sm:p-7 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b-2 border-slate-100 pb-5 gap-4">
-                  <div>
-                    <div className="flex items-center space-x-2 mb-1.5">
-                      <span className="px-2.5 py-0.5 bg-slate-900 text-white rounded-md text-[10px] font-black uppercase tracking-widest">
-                        SmartPE India
-                      </span>
-                      <span className="px-2.5 py-0.5 bg-amber-100 text-amber-900 rounded-md text-[10px] font-black uppercase tracking-wider border border-amber-300">
-                        Athletic Merit & Performance Evaluation
-                      </span>
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-900 rounded-md text-[10px] font-black uppercase tracking-wider">
-                        {sportTemplate.name}
-                      </span>
+                  <div className="flex items-start space-x-4">
+                    {academyLogo ? (
+                      <div className="w-16 h-16 rounded-2xl border-2 border-slate-900 bg-white p-1 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                        <img 
+                          src={academyLogo} 
+                          alt={academyName} 
+                          className="w-full h-full object-contain" 
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-16 h-16 rounded-2xl bg-amber-500 text-slate-950 font-black text-2xl flex items-center justify-center shrink-0 shadow-md">
+                        {academyName.charAt(0)}
+                      </div>
+                    )}
+                    <div>
+                      <div className="flex items-center flex-wrap gap-2 mb-1.5">
+                        <span className="px-2.5 py-0.5 bg-slate-900 text-white rounded-md text-[10px] font-black uppercase tracking-wider">
+                          {academyName}
+                        </span>
+                        <span className="px-2.5 py-0.5 bg-amber-100 text-amber-900 rounded-md text-[10px] font-black uppercase tracking-wider border border-amber-300">
+                          Co-Certified with SmartPE India
+                        </span>
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-900 rounded-md text-[10px] font-black uppercase tracking-wider">
+                          {sportTemplate.name}
+                        </span>
+                      </div>
+                      <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                        Player Development & Merit Report
+                      </h1>
+                      <p className="text-xs text-slate-500 font-semibold mt-1">
+                        Comprehensive technical rubric, match intelligence, physical conditioning, and developmental coaching trajectory.
+                      </p>
                     </div>
-                    <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                      Player Development & Merit Report
-                    </h1>
-                    <p className="text-xs text-slate-500 font-semibold mt-1">
-                      Comprehensive technical rubric, match intelligence, physical conditioning, and developmental coaching trajectory.
-                    </p>
                   </div>
 
                   {/* Merit Distinction Seal Card */}
@@ -973,9 +1060,9 @@ ${assessment.nextGoals?.length ? `🚀 *Next 90-Day Goals:*\n${assessment.nextGo
                 <div className="space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Head Coach / Academy Director</p>
                   <div className="border-b-2 border-slate-300 pb-1">
-                    <p className="font-black text-slate-900">SmartPE Coaching Directorate</p>
+                    <p className="font-black text-slate-900">{headCoachOrDirector} ({academyName})</p>
                   </div>
-                  <p className="text-[10px] text-slate-400">Official Departmental Endorsement</p>
+                  <p className="text-[10px] text-slate-400">Official Academy Endorsement</p>
                 </div>
 
                 <div className="space-y-2">
@@ -998,15 +1085,29 @@ ${assessment.nextGoals?.length ? `🚀 *Next 90-Day Goals:*\n${assessment.nextGo
               {/* Ornate Gold Border Inset */}
               <div className="border-2 border-amber-500/80 p-6 sm:p-8 rounded-2xl relative">
                 
-                {/* Certificate Top Crest Header */}
-                <div className="flex items-center justify-center space-x-3 mb-4">
+                {/* Certificate Top Crest Header with Academy Logo & SmartPE Accreditation */}
+                <div className="flex items-center justify-center space-x-4 mb-3">
+                  {academyLogo && (
+                    <div className="h-16 w-auto max-w-[140px] flex items-center justify-center">
+                      <img 
+                        src={academyLogo} 
+                        alt={academyName} 
+                        className="max-h-16 max-w-full object-contain drop-shadow" 
+                      />
+                    </div>
+                  )}
+                  {academyLogo && <div className="h-10 w-0.5 bg-amber-400 opacity-60" />}
                   <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 font-black flex items-center justify-center shadow-lg">
                     <Trophy size={26} />
                   </div>
                 </div>
 
-                <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-600 mb-1 font-display">
-                  SMARTPE INDIA • ATHLETIC ACADEMY OF EXCELLENCE
+                <p className="text-base sm:text-lg font-black uppercase tracking-[0.25em] text-slate-950 mb-0.5 font-display">
+                  {academyName.toUpperCase()}
+                </p>
+
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 mb-2">
+                  IN CO-ACADEMIC ACCREDITATION WITH SMARTPE INDIA
                 </p>
 
                 <h1 className="text-3xl sm:text-4xl font-black text-slate-900 uppercase tracking-wider font-display mb-2">
@@ -1073,13 +1174,13 @@ ${assessment.nextGoals?.length ? `🚀 *Next 90-Day Goals:*\n${assessment.nextGo
                   <div>
                     <p className="text-xs font-black text-slate-900">Coach {assessment.coachName}</p>
                     <p className="text-[10px] text-slate-400 font-medium">Evaluator / Lead Sports Coach</p>
-                    <p className="text-[10px] text-slate-400 font-mono mt-1">Date: {assessment.assessmentDate}</p>
+                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">Date: {assessment.assessmentDate}</p>
                   </div>
 
                   <div className="text-right">
-                    <p className="text-xs font-black text-slate-900">Academy Board of Sports</p>
-                    <p className="text-[10px] text-slate-400 font-medium">SmartPE India Athletic Directorate</p>
-                    <p className="text-[10px] text-slate-400 font-mono mt-1">ID: #{assessment.id.slice(0, 8)}</p>
+                    <p className="text-xs font-black text-slate-900">{headCoachOrDirector}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">{academyName} • SmartPE Board</p>
+                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">ID: #{assessment.id.slice(0, 8)}</p>
                   </div>
                 </div>
 

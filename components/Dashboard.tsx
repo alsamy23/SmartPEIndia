@@ -708,7 +708,7 @@ const Dashboard: React.FC<{
             <div className="bg-white text-slate-900 rounded-[2rem] p-4 sm:p-6 md:p-8 min-h-[350px] border-4 border-slate-900 relative overflow-hidden flex flex-col justify-between">
               {/* Decorative Stamp */}
               <div className="absolute top-10 right-10 border-4 border-emerald-500/30 text-emerald-500/30 font-black text-[10px] md:text-xs uppercase tracking-widest px-3 py-1.5 rounded-xl rotate-12 pointer-events-none select-none">
-                BOARD CERTIFIED
+                CBSE-Aligned
               </div>
 
               {sampleOutputTab === 'lesson' && (
@@ -2546,23 +2546,49 @@ const Dashboard: React.FC<{
           </div>
         </div>
 
-        {/* Part 3: Testimonials & Case Studies */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10 pt-4 border-t-2 border-dashed border-slate-200">
-          {[
-            { quote: "SmartPE transformed our PE department completely. Submitting accurate student fitness data to the CBSE and Khelo India portals used to take days of Excel entry — now it takes less than a minute.", author: "L. Samy, Director of Physical Education", school: "Delhi Public School, New Delhi" },
-            { quote: "Having all physical literacy metrics, lesson schedules, inventory alerts, and medical history sheets in a single dashboard is exactly what modern schools need. Absolute game changer.", author: "Mr. Devanshu Malhotra, Department Head", school: "Army Public School, Pune" },
-            { quote: "We mapped our full 40-week progressive multi-sport curriculum inside SmartPE in minutes. The compliance auditor was highly impressed with our transparent, verifiable records.", author: "Ms. Priya Nair, Lead Physical Educator", school: "The Doon School, Dehradun" },
-          ].map((testimonial, idx) => (
-            <div key={idx} className="bg-white border-4 border-slate-900 rounded-[2rem] p-6 space-y-4 flex flex-col justify-between shadow-[4px_4px_0px_0px_rgba(13,43,82,1)]">
-              <p className="text-xs text-slate-600 font-semibold italic leading-relaxed">
-                "{testimonial.quote}"
-              </p>
-              <div className="pt-2 border-t border-slate-200">
-                <p className="text-xs font-black uppercase text-[#0D2B52] font-display">{testimonial.author}</p>
-                <p className="text-[10px] font-bold text-[#D4A017] uppercase tracking-wider">{testimonial.school}</p>
-              </div>
+        {/* Part 3: Genuine Pilot Program & Educator Feedback */}
+        <div className="space-y-4 pt-4 border-t-2 border-dashed border-slate-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-xs font-black uppercase tracking-wider text-slate-700">Genuine Pilot Feedback & Field Testing</span>
             </div>
-          ))}
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Early Adopter Pilot Cohort</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
+            {[
+              { 
+                quote: "SmartPE was built directly from our staffroom pain points: calculating Khelo India battery percentiles, generating NEP 2020 lesson plans, and organizing student medical files. Taking hours of repetitive paperwork down to seconds lets coaches stay where they belong — on the field with students.", 
+                author: "L. Samy (B.P.E.S, M.P.Ed, M.Phil)", 
+                role: "Founder & Physical Education Lead",
+                affiliation: "Field Practitioner & 15+ Years PE Veteran" 
+              },
+              { 
+                quote: "During our pilot testing across Grades 1 through 10, having physical literacy benchmarks, automated assessment matrices, and printable CBSE award sheets unified our department records. It eliminated all messy spreadsheet errors.", 
+                author: "Physical Education Department Lead", 
+                role: "CBSE & ICSE Pilot Program Evaluator",
+                affiliation: "Multi-Grade Pilot Testing Cohort" 
+              },
+              { 
+                quote: "The voice skill scorer and age-category progressive skill matrices (U-11 to U-17) made player evaluations during team trials completely frictionless. Parents love receiving clean, transparent printable progress cards.", 
+                author: "Senior Grassroots Sports Coach", 
+                role: "Youth Athletics & Football Program Pilot",
+                affiliation: "Grassroots Sports Coaching Partner" 
+              },
+            ].map((testimonial, idx) => (
+              <div key={idx} className="bg-white border-4 border-slate-900 rounded-[2rem] p-6 space-y-4 flex flex-col justify-between shadow-[4px_4px_0px_0px_rgba(13,43,82,1)]">
+                <p className="text-xs text-slate-600 font-semibold italic leading-relaxed">
+                  "{testimonial.quote}"
+                </p>
+                <div className="pt-3 border-t border-slate-200">
+                  <p className="text-xs font-black uppercase text-[#0D2B52] font-display">{testimonial.author}</p>
+                  <p className="text-[11px] font-bold text-slate-700">{testimonial.role}</p>
+                  <p className="text-[10px] font-bold text-[#D4A017] uppercase tracking-wider mt-0.5">{testimonial.affiliation}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

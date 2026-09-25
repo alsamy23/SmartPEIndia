@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 import { toJpeg } from 'html-to-image';
 import { 
   FileText, 
@@ -1387,41 +1386,59 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
       pdf.save(`${name}.pdf`);
       toast.success("PDF Report downloaded successfully!");
     } catch (error) {
-      console.error("PDF high-fidelity generation failed, using html2canvas fallback:", error);
+      console.warn("PDF high-fidelity generation encountered an issue, attempting skipFonts mode:", error);
       
       try {
         const el = reportRef.current;
-        const canvas = await html2canvas(el, {
-          scale: 2,
-          useCORS: true,
+        if (!el) throw new Error("Report element not found");
+
+        const originalMaxHeight = el.style.maxHeight;
+        const originalOverflow = el.style.overflow;
+        const originalBorder = el.style.border;
+        const originalBoxShadow = el.style.boxShadow;
+
+        el.style.maxHeight = 'none';
+        el.style.overflow = 'visible';
+        el.style.border = 'none';
+        el.style.boxShadow = 'none';
+
+        const dataUrl = await toJpeg(el, {
+          quality: 0.95,
+          pixelRatio: 2,
           backgroundColor: '#ffffff',
-          logging: false,
-          ignoreElements: (node) => {
-            return node.classList.contains('print:hidden') || node.classList.contains('no-print') || node.tagName === 'BUTTON';
-          },
-          onclone: (clonedDoc) => {
-            const card = clonedDoc.querySelector('.max-h-\\[80vh\\]') as HTMLElement;
-            if (card) {
-              card.style.maxHeight = 'none';
-              card.style.overflow = 'visible';
-              card.style.border = 'none';
-              card.style.boxShadow = 'none';
+          skipFonts: true,
+          filter: (node) => {
+            if (node instanceof HTMLElement) {
+              return !(node.classList.contains('print:hidden') || node.classList.contains('no-print') || node.tagName === 'BUTTON');
             }
+            return true;
           }
         });
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        el.style.maxHeight = originalMaxHeight;
+        el.style.overflow = originalOverflow;
+        el.style.border = originalBorder;
+        el.style.boxShadow = originalBoxShadow;
+
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+
         const pdf = new jsPDF('p', 'mm', 'a4');
         const imgWidth = 210;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        const imgHeight = (img.height * imgWidth) / img.width;
         
-        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+        pdf.addImage(dataUrl, 'JPEG', 0, 0, imgWidth, imgHeight);
         const name = reportData ? reportData.title.replace(/\s+/g, '_').toLowerCase() : 'fitness_report';
         pdf.save(`${name}.pdf`);
-        toast.success("PDF downloaded successfully via fallback!");
+        toast.success("PDF downloaded successfully!");
       } catch (fbErr) {
-        console.error("Fallback failed:", fbErr);
-        toast.error("Could not download PDF directly in this sandbox. Try standard Print!");
+        console.error("PDF generation fallback failed:", fbErr);
+        toast.error("Direct PDF compilation failed. Opening standard print window...");
+        handlePrint();
       }
     } finally {
       setDownloadingPdf(false);

@@ -146,16 +146,16 @@ export const CoachingAcademyHub: React.FC<CoachingAcademyHubProps> = ({
                   SmartPE India
                 </span>
                 <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px] font-black uppercase border border-amber-500/30">
-                  Coaching & Academy Mode
+                  Coaching & Academy
                 </span>
               </div>
               <h2 className="text-sm font-black text-white">
-                Individual Player Development & Academy Suite
+                Coaching & Academy Workspace
               </h2>
             </div>
           </div>
 
-          {/* Right Header Actions: Academy Database & Switch back to School PE */}
+          {/* Right Header Actions: Academy Settings & Switch back to School PE */}
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setIsDatabaseModalOpen(true)}
@@ -163,9 +163,9 @@ export const CoachingAcademyHub: React.FC<CoachingAcademyHubProps> = ({
             >
               <Database size={15} />
               <span className="hidden sm:inline font-black">
-                {activeProgram?.programName ? activeProgram.programName : 'Academy Database'}
+                {activeProgram?.programName ? activeProgram.programName : 'Academy Settings'}
               </span>
-              <span className="sm:hidden font-black">Academy DB</span>
+              <span className="sm:hidden font-black">Settings</span>
               <span className="w-2 h-2 rounded-full bg-emerald-950 animate-pulse ml-0.5" title="Firebase Isolated Cloud Sync" />
             </button>
 
@@ -176,23 +176,23 @@ export const CoachingAcademyHub: React.FC<CoachingAcademyHubProps> = ({
               >
                 <School size={15} className="text-blue-400" />
                 <span className="hidden sm:inline">Switch to</span>
-                <span className="font-black text-white">School PE (CBSE)</span>
+                <span className="font-black text-white">School PE</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* 8 Primary Navigation Tabs */}
+        {/* Standardized Primary Navigation Tabs */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center space-x-1 overflow-x-auto py-1 border-t border-slate-800 scrollbar-none">
           {[
             { id: 'dashboard', label: 'Dashboard', icon: Activity },
             { id: 'players', label: 'Players', icon: Users },
-            { id: 'teams-batches', label: 'Teams / Batches', icon: Layers },
-            { id: 'sports', label: 'Sports Library', icon: BookOpen },
-            { id: 'assessments', label: 'Conduct Assessment', icon: ClipboardCheck },
-            { id: 'training-plans', label: 'Training Goals', icon: Target },
-            { id: 'skill-progress', label: 'Skill Progress', icon: TrendingUp },
-            { id: 'reports', label: 'Reports Archive', icon: FileText }
+            { id: 'teams-batches', label: 'Teams & Batches', icon: Layers },
+            { id: 'sports', label: 'Sports', icon: BookOpen },
+            { id: 'assessments', label: 'Assessments', icon: ClipboardCheck },
+            { id: 'skill-progress', label: 'Player Development', icon: TrendingUp },
+            { id: 'reports', label: 'Reports', icon: FileText },
+            { id: 'training-plans', label: 'Training Goals', icon: Target }
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
