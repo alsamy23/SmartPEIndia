@@ -31,23 +31,47 @@ export interface SEOConfig {
 export const DEFAULT_SEO_CONFIG: SEOConfig = {
   canonicalUrl: 'https://smartpeindia.app/',
   allowCrawling: true,
-  metaTitlePrefix: 'Smart PE India (smartpeindia.app)',
-  metaDescription: "Smart PE India (smartpeindia.app) is India's #1 AI platform for Physical Education teachers & schools. Generate CBSE/ICSE PE lesson plans in seconds, calculate Khelo India fitness test scores, manage sports curricula, and track student health.",
-  socialTitle: "Smart PE India (smartpeindia.app) - India's #1 AI Platform for PE Teachers",
-  socialDescription: "Generate CBSE/ICSE PE lesson plans in seconds, calculate Khelo India fitness scores, and design your curriculum on smartpeindia.app.",
+  metaTitlePrefix: 'SmartPE India',
+  metaDescription: "SmartPE helps Indian schools plan PE lessons, track student fitness, assess sports skills and manage physical education records in one platform.",
+  socialTitle: "Physical Education Software for Indian Schools | SmartPE India",
+  socialDescription: "SmartPE helps Indian schools plan PE lessons, track student fitness, assess sports skills and manage physical education records in one platform.",
   socialImageUrl: 'https://smartpeindia.app/logo.png',
   shareUrlFormat: 'domain_only',
   sitemapActive: true,
-  keywords: 'smartpeindia, smartpeindia.app, Smart PE India, Smart PE, Physical Education India, PE Teachers India, CBSE PE Lesson Plan, ICSE PE Syllabus, Khelo India Fitness Test, Khelo India Calculator, School Fitness Management, Sports Curriculum, AI Lesson Planner, L Samy PE, शारीरिक शिक्षा',
-  author: 'Smart PE India Team',
-  siteName: 'Smart PE India',
+  keywords: 'physical education software, physical education software India, PE teacher software, physical education management system, school PE management, CBSE physical education, CBSE PE lesson planner, student fitness assessment, Khelo India fitness assessment, PE assessment, physical education assessment, PE department management, school sports management, smartpeindia',
+  author: 'SmartPE India',
+  siteName: 'SmartPE India',
   twitterHandle: '@smartpeindia',
   routeOverrides: {
     dashboard: {
-      title: 'Smart PE India | #1 AI Platform for Physical Education Teachers & Schools',
-      description: 'smartpeindia.app organizes your entire PE department in one platform. From CBSE curriculum mapping to field-ready scoring, fitness tracking, parent letters, and AI lesson planning.',
-      keywords: 'smartpeindia, smartpeindia.app, PE Teacher Dashboard, CBSE Sports Management, School Fitness Overview',
+      title: 'Physical Education Software for Indian Schools | SmartPE India',
+      description: 'SmartPE helps Indian schools plan PE lessons, track student fitness, assess sports skills and manage physical education records in one platform.',
+      keywords: 'physical education software, physical education software India, PE teacher software, physical education management system, school PE management, PE department management',
       canonicalPath: '/'
+    },
+    'cbse-physical-education': {
+      title: 'CBSE Physical Education Tools for Schools | SmartPE India',
+      description: 'Plan CBSE PE lessons, manage 30-mark practical assessments, track student fitness, and streamline PE department records with SmartPE India.',
+      keywords: 'CBSE physical education, CBSE PE lesson planner, CBSE PE assessment, CBSE physical education resources, CBSE PE teacher tools, practical assessment',
+      canonicalPath: '/cbse-physical-education'
+    },
+    'khelo-india-fitness-assessment': {
+      title: 'Khelo India Fitness Assessment for Schools | SmartPE India',
+      description: 'Manage student fitness assessment data using SmartPE. Record SAI battery test scores, calculate percentiles, and generate official fitness report cards.',
+      keywords: 'Khelo India fitness assessment, student fitness assessment, school fitness assessment, student fitness tracker, PE fitness report card, fitness test calculator',
+      canonicalPath: '/khelo-india-fitness-assessment'
+    },
+    'ai-pe-lesson-planner': {
+      title: 'AI PE Lesson Planner for Physical Education Teachers | SmartPE India',
+      description: 'Generate structured physical education lesson plans in under 60 seconds. Aligned with CBSE and Indian school sports curricula to save teacher time.',
+      keywords: 'AI PE lesson planner, physical education lesson planner, PE lesson plans, structured lesson planning, PE curriculum planning, sports activity planning',
+      canonicalPath: '/ai-pe-lesson-planner'
+    },
+    'physical-education-assessment': {
+      title: 'Physical Education Assessment & Fitness Reports | SmartPE India',
+      description: 'Comprehensive student fitness assessments, sports skill assessment rubrics, practical scoring, student records, and printable school PE progress reports.',
+      keywords: 'PE assessment, physical education assessment, student fitness assessment, sports skill assessment, fitness reports, PE department reporting',
+      canonicalPath: '/physical-education-assessment'
     },
     planner: {
       title: 'Smart PE India | PE Lesson Planner (CBSE & ICSE)',

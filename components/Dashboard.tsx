@@ -36,6 +36,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { storageService, SavedItem } from '../services/storageService.ts';
 import Logo from './Logo.tsx';
 import { WeeklyCalendarView } from './WeeklyCalendarView.tsx';
+import { trackEvent } from '../services/analytics.ts';
 
 const data = [
   { name: 'Mon', connections: 4 },
@@ -249,6 +250,25 @@ const Dashboard: React.FC<{
 
   React.useEffect(() => {
     setHistory(storageService.getAllItems());
+
+    // Homepage scroll tracking
+    const handleScroll = () => {
+      const scrollY = window.scrollY;
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      if (docHeight <= 0) return;
+      const scrolledRatio = scrollY / docHeight;
+      if (scrolledRatio >= 0.5 && !sessionStorage.getItem('scrolled_home_50')) {
+        sessionStorage.setItem('scrolled_home_50', 'true');
+        trackEvent('scroll_50', { page_location: '/', page_title: 'Physical Education Software for Indian Schools' });
+      }
+      if (scrolledRatio >= 0.9 && !sessionStorage.getItem('scrolled_home_90')) {
+        sessionStorage.setItem('scrolled_home_90', 'true');
+        trackEvent('scroll_90', { page_location: '/', page_title: 'Physical Education Software for Indian Schools' });
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
@@ -315,45 +335,62 @@ const Dashboard: React.FC<{
         <div className="lg:col-span-7 relative z-10 space-y-4 md:space-y-5 text-left">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#D4A017]/15 border border-[#D4A017]/40 rounded-full">
             <span className="w-2 h-2 rounded-full bg-[#D4A017] animate-ping"></span>
-            <span className="text-[9.5px] font-black uppercase text-[#0D2B52] tracking-widest">Digital PE Department • Built for Indian Schools</span>
+            <span className="text-[9.5px] font-black uppercase text-[#0D2B52] tracking-widest">
+              Physical Education Software • Built for Indian Schools
+            </span>
           </div>
 
           <div className="space-y-2">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] xl:text-[3.5rem] font-black font-display tracking-tighter leading-[0.95] text-[#0D2B52] uppercase">
-              The Digital <br className="hidden md:block"/>
-              PE Department.<br/>
-              <span className="text-[#D4A017]">School-Ready.</span>
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[2.85rem] xl:text-[3.2rem] font-black font-display tracking-tight leading-[0.98] text-[#0D2B52] uppercase">
+              Physical Education Software <br className="hidden md:block"/>
+              <span className="text-[#D4A017]">for Indian Schools</span>
             </h1>
             
-            <p className="text-xs sm:text-sm text-[#333333] max-w-lg leading-relaxed font-medium">
-              Plan PE lessons, track student fitness, assess practical performance, and maintain school-ready records &mdash; all in one place. Built specifically for physical education teachers, coordinators, and school principals in India.
+            {/* First-Screen WHAT / WHO / WHAT IT DOES Definition */}
+            <div className="flex flex-wrap gap-2 py-1">
+              <span className="px-2.5 py-0.5 rounded-md bg-[#0D2B52]/10 border border-[#0D2B52]/20 text-[10px] font-black uppercase text-[#0D2B52]">
+                <strong>WHO:</strong> Indian Schools, PE Teachers & HODs
+              </span>
+              <span className="px-2.5 py-0.5 rounded-md bg-[#D4A017]/20 border border-[#D4A017]/40 text-[10px] font-black uppercase text-slate-900">
+                <strong>WHAT IT DOES:</strong> Plan • Assess • Track • Report
+              </span>
+            </div>
+
+            <p className="text-xs sm:text-sm text-[#333333] max-w-xl leading-relaxed font-medium">
+              SmartPE helps Indian schools plan PE lessons, track student fitness, conduct Khelo India fitness assessments, assess sports skills, and manage physical education records in one school-ready platform.
             </p>
           </div>
 
-          {/* Action Buttons with Brand Styling */}
+          {/* Action Buttons with Brand Styling & GA4 Analytics Tracking */}
           <div className="flex flex-col sm:flex-row gap-3">
             <button 
-              onClick={() => onNavigate?.('planner')}
+              onClick={() => {
+                trackEvent('hero_cta_click', { cta_name: 'explore_smartpe_hero', page_location: '/', target_tab: 'planner' });
+                onNavigate?.('planner');
+              }}
               className="group w-full sm:w-auto px-6 py-3.5 bg-[#0D2B52] text-white rounded-full font-black text-xs uppercase tracking-wider transition-all hover:bg-[#164077] hover:-translate-y-0.5 active:translate-y-0 shadow-[3px_3px_0px_0px_rgba(13,43,82,1)] border-2 border-slate-900 text-center flex items-center justify-center space-x-2 cursor-pointer"
             >
-              <span>Get Started for Free</span>
+              <span>Explore SmartPE</span>
               <span className="font-sans font-black text-sm text-[#D4A017]">&rarr;</span>
             </button>
             
             <button 
-              onClick={() => onNavigate?.('tools')}
+              onClick={() => {
+                trackEvent('hero_cta_click', { cta_name: 'see_pe_features_hero', page_location: '/', target_tab: 'tools' });
+                onNavigate?.('tools');
+              }}
               className="w-full sm:w-auto px-6 py-3.5 bg-white border-2 border-[#0D2B52]/30 text-[#0D2B52] rounded-full font-black text-xs uppercase tracking-wider hover:border-[#0D2B52] hover:bg-slate-50 transition-all text-center flex items-center justify-center cursor-pointer"
             >
-              Explore Platform
+              See PE Features
             </button>
           </div>
 
           {/* Underneath columns representing three keys */}
           <div className="grid grid-cols-3 gap-3 pt-3.5 border-t border-slate-200">
             {[
-              { num: '01', title: 'Plan PE Lessons', desc: 'Syllabus and plans in 60s' },
-              { num: '02', title: 'Track Fitness', desc: 'Pre-loaded Khelo India' },
-              { num: '03', title: 'School Reports', desc: 'Print-ready compliance' }
+              { num: '01', title: 'Plan PE Lessons', desc: 'CBSE & sports plans in 60s' },
+              { num: '02', title: 'Student Fitness', desc: 'Khelo India & motor tests' },
+              { num: '03', title: 'School PE Reports', desc: 'Print-ready student records' }
             ].map((col, idx) => (
               <div key={idx} className="space-y-0.5">
                 <span className="text-[9px] font-black text-[#D4A017] block">{col.num}</span>
@@ -414,6 +451,115 @@ const Dashboard: React.FC<{
             {/* Big center action logo watermark */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
               <Logo showText={false} className="scale-[2.5] rotate-12" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 🌟 FEATURED PHYSICAL EDUCATION SOLUTIONS & SEO MODULES */}
+      <section className="bg-white border-4 border-slate-900 rounded-[2.5rem] p-6 sm:p-8 md:p-10 space-y-6 shadow-[8px_8px_0px_0px_rgba(13,43,82,1)]">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 border-b-2 border-slate-200 pb-4">
+          <div className="space-y-1">
+            <span className="text-[10px] font-black uppercase tracking-widest text-[#D4A017]">NATIONAL CURRICULUM & ASSESSMENT</span>
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-[#0D2B52] uppercase font-display">
+              Physical Education Software Modules
+            </h2>
+          </div>
+          <p className="text-xs text-slate-500 font-medium max-w-md">
+            Dedicated digital workspaces built for Indian physical education teachers, school HODs, and administrators.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div 
+            onClick={() => {
+              trackEvent('feature_click', { feature_name: 'cbse_physical_education_card', page_location: '/' });
+              onNavigate?.('cbse-physical-education');
+            }}
+            className="p-5 rounded-2xl bg-gradient-to-br from-blue-50/70 to-white border-2 border-slate-900 hover:shadow-[4px_4px_0px_0px_rgba(13,43,82,1)] hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between group"
+          >
+            <div className="space-y-2.5">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black">
+                <GraduationCap size={20} />
+              </div>
+              <h3 className="text-sm font-black text-[#0D2B52] uppercase group-hover:text-blue-700 font-display">
+                CBSE Physical Education Tools
+              </h3>
+              <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                Syllabus mapping across Strands 1–4, Class 11 & 12 30-mark practical scoring, and PE department workflows.
+              </p>
+            </div>
+            <div className="pt-3 flex items-center text-xs font-black text-blue-900 group-hover:translate-x-1 transition-transform">
+              <span>Explore CBSE Tools &rarr;</span>
+            </div>
+          </div>
+
+          <div 
+            onClick={() => {
+              trackEvent('feature_click', { feature_name: 'khelo_india_card', page_location: '/' });
+              onNavigate?.('khelo-india-fitness-assessment');
+            }}
+            className="p-5 rounded-2xl bg-gradient-to-br from-emerald-50/70 to-white border-2 border-slate-900 hover:shadow-[4px_4px_0px_0px_rgba(13,43,82,1)] hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between group"
+          >
+            <div className="space-y-2.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black">
+                <Activity size={20} />
+              </div>
+              <h3 className="text-sm font-black text-[#0D2B52] uppercase group-hover:text-emerald-700 font-display">
+                Khelo India Fitness Assessment
+              </h3>
+              <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                Manage student fitness assessment data. Record official SAI battery scores, calculate percentiles, and print reports.
+              </p>
+            </div>
+            <div className="pt-3 flex items-center text-xs font-black text-emerald-900 group-hover:translate-x-1 transition-transform">
+              <span>Explore Fitness Tests &rarr;</span>
+            </div>
+          </div>
+
+          <div 
+            onClick={() => {
+              trackEvent('feature_click', { feature_name: 'ai_lesson_planner_card', page_location: '/' });
+              onNavigate?.('ai-pe-lesson-planner');
+            }}
+            className="p-5 rounded-2xl bg-gradient-to-br from-amber-50/70 to-white border-2 border-slate-900 hover:shadow-[4px_4px_0px_0px_rgba(13,43,82,1)] hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between group"
+          >
+            <div className="space-y-2.5">
+              <div className="w-10 h-10 rounded-xl bg-[#D4A017] text-slate-950 flex items-center justify-center font-black">
+                <Sparkles size={20} />
+              </div>
+              <h3 className="text-sm font-black text-[#0D2B52] uppercase group-hover:text-amber-700 font-display">
+                AI PE Lesson Planner
+              </h3>
+              <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                Generate structured PE lesson plans in 60s with warm-ups, skill drills, lead-up games, and safety rubrics.
+              </p>
+            </div>
+            <div className="pt-3 flex items-center text-xs font-black text-amber-900 group-hover:translate-x-1 transition-transform">
+              <span>Try Lesson Planner &rarr;</span>
+            </div>
+          </div>
+
+          <div 
+            onClick={() => {
+              trackEvent('feature_click', { feature_name: 'pe_assessment_reports_card', page_location: '/' });
+              onNavigate?.('physical-education-assessment');
+            }}
+            className="p-5 rounded-2xl bg-gradient-to-br from-purple-50/70 to-white border-2 border-slate-900 hover:shadow-[4px_4px_0px_0px_rgba(13,43,82,1)] hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between group"
+          >
+            <div className="space-y-2.5">
+              <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black">
+                <ClipboardCheck size={20} />
+              </div>
+              <h3 className="text-sm font-black text-[#0D2B52] uppercase group-hover:text-purple-700 font-display">
+                PE Assessment & Reports
+              </h3>
+              <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                Sports skill rubrics, student fitness cards, practical exam awards, and inspection-ready principal reports.
+              </p>
+            </div>
+            <div className="pt-3 flex items-center text-xs font-black text-purple-900 group-hover:translate-x-1 transition-transform">
+              <span>Explore Assessment &rarr;</span>
             </div>
           </div>
         </div>

@@ -73,6 +73,10 @@ import BrandWelcomeHub from './components/BrandWelcomeHub.tsx';
 import PricingAndPlans from './components/PricingAndPlans.tsx';
 import WelcomeOnboardingModal from './components/WelcomeOnboardingModal.tsx';
 import PracticalAssessmentHub from './components/PracticalAssessmentHub.tsx';
+import CbsePhysicalEducationPage from './components/seo/CbsePhysicalEducationPage.tsx';
+import KheloIndiaFitnessPage from './components/seo/KheloIndiaFitnessPage.tsx';
+import AiLessonPlannerPage from './components/seo/AiLessonPlannerPage.tsx';
+import PeAssessmentPage from './components/seo/PeAssessmentPage.tsx';
 import { CoachingAcademyHub } from './components/coaching/CoachingAcademyHub.tsx';
 import { GlobalSearch } from './components/GlobalSearch.tsx';
 import { VoiceAgentModal } from './components/VoiceAgentModal.tsx';
@@ -85,7 +89,60 @@ import { onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth
 import { trackEvent } from './services/analytics.ts';
 import { toast, SHOW_TOAST_EVENT, SHOW_CONFIRM_EVENT, ToastConfig, ConfirmConfig } from './services/toast.ts';
 
-type Tab = 'dashboard' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'coaching-assessment' | 'coaching-academy' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
+type Tab = 'dashboard' | 'cbse-physical-education' | 'khelo-india-fitness-assessment' | 'ai-pe-lesson-planner' | 'physical-education-assessment' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'coaching-assessment' | 'coaching-academy' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
+
+// Helper to determine initial tab from URL pathname, query, or hash
+const getInitialTab = (): Tab => {
+  if (typeof window === 'undefined') return 'dashboard';
+  
+  const path = window.location.pathname.replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase();
+  const hash = window.location.hash.replace(/^#+/, '').toLowerCase();
+
+  const seoPathMap: Record<string, Tab> = {
+    'cbse-physical-education': 'cbse-physical-education',
+    'khelo-india-fitness-assessment': 'khelo-india-fitness-assessment',
+    'ai-pe-lesson-planner': 'ai-pe-lesson-planner',
+    'physical-education-assessment': 'physical-education-assessment',
+  };
+
+  if (seoPathMap[path]) return seoPathMap[path];
+  if (seoPathMap[hash]) return seoPathMap[hash];
+
+  const hashToTab: Record<string, Tab> = {
+    'lesson-planner': 'planner',
+    'yearly-planner': 'yearly',
+    'weekly-planner': 'weekly-planner',
+    'workload-planner': 'workload-planner',
+    'skill-progressions': 'skillmastery',
+    'theory': 'theory',
+    'fitness-tests': 'fitness',
+    'khelo-india': 'khelo',
+    'tournament-fixtures': 'tournament-fixtures',
+    'testpaper': 'testpaper',
+    'skill-analysis': 'skill-analysis',
+    'rules': 'rules',
+    'principal-dashboard': 'principal-dashboard',
+    'department-office': 'department-office',
+    'parentletters': 'parentletters',
+    'widgets': 'widgets',
+    'compliance': 'compliance',
+    'tools': 'tools',
+    'students': 'school-students',
+    'school-results': 'school-results',
+    'teams': 'school-teams',
+    'fitness-reports': 'fitness-reports',
+    'school-admin': 'school-admin',
+    'pricing': 'subscription-plans',
+    'welcome': 'brand-welcome',
+    'about': 'about',
+    'contact': 'contact'
+  };
+
+  if (hashToTab[hash]) return hashToTab[hash];
+
+  const savedWs = localStorage.getItem('smartpe_active_workspace');
+  return savedWs === 'academy' ? 'coaching-academy' : 'dashboard';
+};
 
 import { BoardType, Language } from './types.ts';
 
@@ -555,10 +612,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({ activeTab,
 });
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<Tab>(() => {
-    const savedWs = localStorage.getItem('smartpe_active_workspace');
-    return savedWs === 'academy' ? 'coaching-academy' : 'dashboard';
-  });
+  const [activeTab, setActiveTab] = useState<Tab>(() => getInitialTab());
   const [activeWorkspace, setActiveWorkspace] = useState<'school' | 'academy'>(() => {
     return (localStorage.getItem('smartpe_active_workspace') as 'school' | 'academy') || 'school';
   });
@@ -640,21 +694,16 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Synchronize browser history with Sidebar view to handle Android hardware back button natively
+  // Listen for browser popstate events (Forward/Back button navigation across paths and hashes)
   useEffect(() => {
-    if (isSidebarOpen) {
-      window.history.pushState({ sidebarOpen: true }, '');
-      
-      const handlePopState = (e: PopStateEvent) => {
-        setIsSidebarOpen(false);
-      };
-      
-      window.addEventListener('popstate', handlePopState);
-      return () => {
-        window.removeEventListener('popstate', handlePopState);
-      };
-    }
-  }, [isSidebarOpen]);
+    const handlePopState = () => {
+      const resolvedTab = getInitialTab();
+      setActiveTab(resolvedTab);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Synchronize browser history with Login view to handle Android hardware back button natively
   useEffect(() => {
@@ -954,6 +1003,22 @@ const App: React.FC = () => {
       trackEvent('tool_used', { tool_name: toolTabs[tabId] });
     }
 
+    // Synchronize browser URL pathname for clean SEO routes
+    const seoRoutes: Record<string, string> = {
+      'dashboard': '/',
+      'cbse-physical-education': '/cbse-physical-education',
+      'khelo-india-fitness-assessment': '/khelo-india-fitness-assessment',
+      'ai-pe-lesson-planner': '/ai-pe-lesson-planner',
+      'physical-education-assessment': '/physical-education-assessment',
+    };
+
+    if (seoRoutes[tabId]) {
+      const targetPath = seoRoutes[tabId];
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ tab: tabId }, '', targetPath);
+      }
+    }
+
     startTransition(() => {
       setActiveTab(tabId);
     });
@@ -982,6 +1047,10 @@ const App: React.FC = () => {
 
     switch (activeTab) {
       case 'dashboard': return <Dashboard apiStatus={apiStatus} debugInfo={debugInfo} onTestConnection={handleTestConnection} isTesting={isTesting} onNavigate={handleTabChange} />;
+      case 'cbse-physical-education': return <CbsePhysicalEducationPage onNavigate={handleTabChange} onOpenAuth={() => setIsAuthView(true)} />;
+      case 'khelo-india-fitness-assessment': return <KheloIndiaFitnessPage onNavigate={handleTabChange} onOpenAuth={() => setIsAuthView(true)} />;
+      case 'ai-pe-lesson-planner': return <AiLessonPlannerPage onNavigate={handleTabChange} onOpenAuth={() => setIsAuthView(true)} />;
+      case 'physical-education-assessment': return <PeAssessmentPage onNavigate={handleTabChange} onOpenAuth={() => setIsAuthView(true)} />;
       case 'yearly': return <YearlyPlanner onNavigate={handleTabChange} />;
       case 'weekly-planner': return <AcademicWeeklyPlanner />;
       case 'workload-planner': return <DepartmentWorkloadPlanner />;

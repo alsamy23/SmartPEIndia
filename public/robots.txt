@@ -1,6 +1,9 @@
 # Allow all search engine crawlers (Google, Bing, Yahoo, DuckDuckGo)
 User-agent: *
 Allow: /
+Disallow: /api/
+
+# Public assets & brand identity
 Allow: /favicon.ico
 Allow: /favicon.png
 Allow: /favicon.svg
@@ -13,6 +16,12 @@ Allow: /logo.png
 Allow: /logo.jpg
 Allow: /site.webmanifest
 Allow: /manifest.json
+
+# Public SEO Landing Pages
+Allow: /cbse-physical-education
+Allow: /khelo-india-fitness-assessment
+Allow: /ai-pe-lesson-planner
+Allow: /physical-education-assessment
 
 # Explicitly allow Googlebot-Image to index logos and brand favicons
 User-agent: Googlebot-Image

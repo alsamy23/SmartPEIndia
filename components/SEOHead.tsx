@@ -82,8 +82,75 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
   const ogDescription = routeOverride.ogDescription || metaDescription || config.socialDescription;
   const ogImage = routeOverride.ogImage || config.socialImageUrl;
 
-  // Determine Crawling Robots
-  const robotsSetting = config.allowCrawling ? 'index, follow' : 'noindex, nofollow';
+  // Determine Crawling Robots: strictly disallow indexing of private student/school dashboards
+  const isPrivateTab = [
+    'school-students', 
+    'school-results', 
+    'school-admin', 
+    'logs', 
+    'fitness-reports', 
+    'school-teams'
+  ].includes(activeTab);
+
+  const robotsSetting = (!isPrivateTab && config.allowCrawling) ? 'index, follow' : 'noindex, nofollow';
+
+  // Dynamic Schema.org structured data based on route
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://smartpeindia.app/#organization",
+        "name": "SmartPE India",
+        "url": "https://smartpeindia.app/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://smartpeindia.app/logo.png"
+        },
+        "description": "Physical Education Software and Sports Management Platform for Indian Schools."
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://smartpeindia.app/#website",
+        "url": "https://smartpeindia.app/",
+        "name": "SmartPE India",
+        "description": "Physical Education Software for Indian Schools",
+        "publisher": {
+          "@id": "https://smartpeindia.app/#organization"
+        }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://smartpeindia.app/#software",
+        "name": "SmartPE India",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "All",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "INR"
+        },
+        "description": "Physical education management system for Indian schools to plan PE lessons, track student fitness, conduct Khelo India assessments, and manage PE department records."
+      },
+      ...(cleanSubPath ? [{
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://smartpeindia.app/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": fullTitle,
+            "item": canonicalFullUrl
+          }
+        ]
+      }] : [])
+    ]
+  };
 
   return (
     <Helmet>
@@ -93,7 +160,7 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
       {/* Basic Meta Tags */}
       <meta name="description" content={metaDescription} />
       <meta name="keywords" content={keywords} />
-      <meta name="author" content={config.author || 'Smart PE India Team'} />
+      <meta name="author" content={config.author || 'SmartPE India'} />
       <meta name="robots" content={robotsSetting} />
       <meta name="googlebot" content={robotsSetting} />
 
@@ -114,7 +181,7 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
       <meta name="theme-color" content="#0D2B52" />
 
       {/* Open Graph / Facebook / WhatsApp Tags */}
-      <meta property="og:site_name" content={config.siteName || 'Smart PE India'} />
+      <meta property="og:site_name" content={config.siteName || 'SmartPE India'} />
       <meta property="og:type" content="website" />
       <meta property="og:title" content={ogTitle} />
       <meta property="og:description" content={ogDescription} />
@@ -127,6 +194,11 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
       <meta name="twitter:title" content={ogTitle} />
       <meta name="twitter:description" content={ogDescription} />
       <meta name="twitter:image" content={ogImage || 'https://smartpeindia.app/logo.png'} />
+
+      {/* Structured Data JSON-LD */}
+      <script type="application/ld+json">
+        {JSON.stringify(structuredData)}
+      </script>
     </Helmet>
   );
 };

@@ -6,86 +6,100 @@
   <!-- Main Homepage / Portal -->
   <url>
     <loc>https://smartpeindia.app/</loc>
-    <lastmod>2026-08-18</lastmod>
+    <lastmod>2026-09-28</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
     <image:image>
       <image:loc>https://smartpeindia.app/logo.png</image:loc>
-      <image:title>Smart PE India Logo</image:title>
-      <image:caption>India's #1 AI-Powered Platform for Physical Education Teachers</image:caption>
+      <image:title>SmartPE India Logo</image:title>
+      <image:caption>Physical Education Software for Indian Schools</image:caption>
     </image:image>
     <xhtml:link rel="alternate" hreflang="en-IN" href="https://smartpeindia.app/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://smartpeindia.app/"/>
   </url>
 
-  <!-- AI PE Lesson Plan Generator -->
+  <!-- Dedicated SEO Landing Pages -->
+  <url>
+    <loc>https://smartpeindia.app/cbse-physical-education</loc>
+    <lastmod>2026-09-28</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.95</priority>
+  </url>
+
+  <url>
+    <loc>https://smartpeindia.app/khelo-india-fitness-assessment</loc>
+    <lastmod>2026-09-28</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.95</priority>
+  </url>
+
+  <url>
+    <loc>https://smartpeindia.app/ai-pe-lesson-planner</loc>
+    <lastmod>2026-09-28</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.95</priority>
+  </url>
+
+  <url>
+    <loc>https://smartpeindia.app/physical-education-assessment</loc>
+    <lastmod>2026-09-28</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.95</priority>
+  </url>
+
+  <!-- Feature Modules -->
   <url>
     <loc>https://smartpeindia.app/#lesson-planner</loc>
-    <lastmod>2026-08-18</lastmod>
+    <lastmod>2026-09-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
 
-  <!-- Khelo India Fitness Assessment Calculator -->
   <url>
     <loc>https://smartpeindia.app/#fitness-tests</loc>
-    <lastmod>2026-08-18</lastmod>
+    <lastmod>2026-09-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
 
-  <!-- Khelo India Battery Portal -->
-  <url>
-    <loc>https://smartpeindia.app/#khelo-india</loc>
-    <lastmod>2026-08-18</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.85</priority>
-  </url>
-
-  <!-- Yearly PE Curriculum Planner -->
   <url>
     <loc>https://smartpeindia.app/#yearly-planner</loc>
-    <lastmod>2026-08-18</lastmod>
+    <lastmod>2026-09-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
 
-  <!-- Weekly Academic Planner -->
   <url>
-    <loc>https://smartpeindia.app/#weekly-planner</loc>
-    <lastmod>2026-08-18</lastmod>
+    <loc>https://smartpeindia.app/#khelo-india</loc>
+    <lastmod>2026-09-28</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    <priority>0.85</priority>
   </url>
 
-  <!-- Theory Master (CBSE / ICSE) -->
   <url>
     <loc>https://smartpeindia.app/#theory</loc>
-    <lastmod>2026-08-18</lastmod>
+    <lastmod>2026-09-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
 
-  <!-- Pricing & 1-Year Free Pass -->
   <url>
     <loc>https://smartpeindia.app/#pricing</loc>
-    <lastmod>2026-08-18</lastmod>
+    <lastmod>2026-09-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
-  <!-- About Smart PE India & Founder L. Samy -->
   <url>
     <loc>https://smartpeindia.app/#about</loc>
-    <lastmod>2026-08-18</lastmod>
+    <lastmod>2026-09-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
 
-  <!-- Contact & Support -->
   <url>
     <loc>https://smartpeindia.app/#contact</loc>
-    <lastmod>2026-08-18</lastmod>
+    <lastmod>2026-09-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

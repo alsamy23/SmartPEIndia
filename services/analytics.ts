@@ -10,6 +10,69 @@ declare global {
 }
 
 export interface AnalyticsEventParams {
+  hero_cta_click: {
+    cta_name: string;
+    page_location?: string;
+    target_tab?: string;
+    [key: string]: any;
+  };
+  signup_start: {
+    entry_point?: string;
+    role?: string;
+    [key: string]: any;
+  };
+  signup_complete: {
+    method?: string;
+    user_role?: string;
+    workspace?: string;
+    [key: string]: any;
+  };
+  demo_click: {
+    feature_name: string;
+    page_location?: string;
+    [key: string]: any;
+  };
+  lesson_planner_click: {
+    source: string;
+    grade_level?: string;
+    [key: string]: any;
+  };
+  fitness_assessment_click: {
+    source: string;
+    assessment_type?: string;
+    [key: string]: any;
+  };
+  assessment_click: {
+    source: string;
+    assessment_type?: string;
+    [key: string]: any;
+  };
+  report_preview: {
+    report_type: string;
+    format?: string;
+    [key: string]: any;
+  };
+  pricing_view: {
+    source?: string;
+    plan_highlighted?: string;
+    [key: string]: any;
+  };
+  feature_click: {
+    feature_name: string;
+    category?: string;
+    page_location?: string;
+    [key: string]: any;
+  };
+  scroll_50: {
+    page_location: string;
+    page_title?: string;
+    [key: string]: any;
+  };
+  scroll_90: {
+    page_location: string;
+    page_title?: string;
+    [key: string]: any;
+  };
   tool_used: {
     tool_name: string;
     category?: string;
