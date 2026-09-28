@@ -6,8 +6,10 @@ import Groq from "groq-sdk";
 import "dotenv/config";
 import path from "path";
 import { fileURLToPath } from "url";
+import firebaseConfig from "../firebase-applet-config.json" with { type: "json" };
 import { 
   getEmailConfig, 
+  checkBrevoStatus,
   buildCorporateWelcomeEmail, 
   buildCorporateFeatureEmail, 
   buildLessonPlannerNurtureEmail,
@@ -22,25 +24,154 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+// Controlled Request Limits (Anti-DOS):
+// General JSON body: 2MB max
+// Raw/Audio transcribe body: 15MB max (applied directly on /api/ai/transcribe)
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
-// Secure AI Initialization (Server-side only)
-// Note: Google Gemini API keys start with AIza or standard Google key formats.
-// OpenAI/OpenRouter keys (starting with sk-) must NEVER be passed to @google/genai.
+// Rate Limiting Storage (In-memory, clean interval every 5 mins)
+interface RateLimitBucket {
+  count: number;
+  resetAt: number;
+}
+const rateLimits = new Map<string, RateLimitBucket>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateLimits.entries()) {
+    if (bucket.resetAt <= now) {
+      rateLimits.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
+function checkRateLimit(key: string, maxRequests: number, windowMs: number): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  let bucket = rateLimits.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    bucket = { count: 1, resetAt: now + windowMs };
+    rateLimits.set(key, bucket);
+    return { allowed: true };
+  }
+
+  bucket.count++;
+  if (bucket.count > maxRequests) {
+    const retryAfter = Math.ceil((bucket.resetAt - now) / 1000);
+    return { allowed: false, retryAfter };
+  }
+  return { allowed: true };
+}
+
+// Token Verification Cache
+interface VerifiedTokenPayload {
+  uid: string;
+  email?: string;
+  expiresAt: number;
+}
+const tokenCache = new Map<string, VerifiedTokenPayload>();
+
+async function verifyFirebaseIdToken(token: string): Promise<VerifiedTokenPayload | null> {
+  if (!token || typeof token !== "string") return null;
+
+  // Check in-memory cache
+  const cached = tokenCache.get(token);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached;
+  }
+
+  try {
+    // Validate via Google Identity Toolkit
+    const apiKey = firebaseConfig.apiKey;
+    const url = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken: token })
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    const data = await res.json();
+    const user = data.users?.[0];
+    if (!user || !user.localId) {
+      return null;
+    }
+
+    const payload: VerifiedTokenPayload = {
+      uid: user.localId,
+      email: user.email,
+      expiresAt: Date.now() + 10 * 60 * 1000 // Cache for 10 minutes
+    };
+    tokenCache.set(token, payload);
+    return payload;
+  } catch (err) {
+    console.error("Token verification error:", err);
+    return null;
+  }
+}
+
+// Authentication Middleware
+interface AuthenticatedRequest extends express.Request {
+  user?: VerifiedTokenPayload;
+}
+
+const requireAuth = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ 
+      error: "Authentication required", 
+      message: "Please sign in to access this SmartPE service." 
+    });
+  }
+
+  const token = authHeader.split("Bearer ")[1]?.trim();
+  const verified = await verifyFirebaseIdToken(token);
+  if (!verified) {
+    return res.status(401).json({ 
+      error: "Invalid or expired session", 
+      message: "Your session has expired. Please refresh the page and sign in again." 
+    });
+  }
+
+  req.user = verified;
+  next();
+};
+
+const SUPER_ADMIN_EMAILS = [
+  "alsamy36@gmail.com",
+  "admin@smartpeindia.app",
+  "contact@smartpeindia.app",
+  "info@smartpeindia.app"
+];
+
+const requireAdmin = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
+  await requireAuth(req, res, () => {
+    const userEmail = req.user?.email?.toLowerCase();
+    if (!userEmail || !SUPER_ADMIN_EMAILS.includes(userEmail)) {
+      return res.status(403).json({ 
+        error: "Forbidden", 
+        message: "You do not have administrative privileges to execute this operation." 
+      });
+    }
+    next();
+  });
+};
+
+// Secure AI Secret Lookup (Strict Server-Side Only; Never use VITE_* fallbacks)
 const isGoogleApiKey = (key: string): boolean => {
   if (!key || typeof key !== "string") return false;
   const clean = key.trim().replace(/^["']|["']$/g, '');
   if (clean.length < 20) return false;
-  // Exclude OpenAI/OpenRouter keys that start with sk-
   if (clean.startsWith("sk-") || clean.startsWith("sk_")) return false;
   return true;
 };
 
 const getGeminiKeys = (): string[] => {
   const keys: string[] = [];
-  // Prioritize primary official GEMINI_API_KEY first
-  const primaryNames = ["GEMINI_API_KEY", "GOOGLE_API_KEY", "API_KEY", "VITE_GEMINI_API_KEY"];
+  const primaryNames = ["GEMINI_API_KEY", "GOOGLE_API_KEY", "API_KEY"];
   for (const name of primaryNames) {
     const val = process.env[name];
     if (val && val.trim() !== "" && val !== "undefined" && val !== "null") {
@@ -66,7 +197,7 @@ const getGeminiKeys = (): string[] => {
 
 const getOpenRouterKeys = (): string[] => {
   const keys: string[] = [];
-  const primaryNames = ["OPENROUTER_API_KEY", "VITE_OPENROUTER_API_KEY"];
+  const primaryNames = ["OPENROUTER_API_KEY"];
   for (const name of primaryNames) {
     const val = process.env[name];
     if (val && val.trim() !== "" && val !== "undefined" && val !== "null") {
@@ -85,7 +216,7 @@ const getOpenRouterKeys = (): string[] => {
 };
 
 const getGroqKey = () => {
-  const key = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
+  const key = process.env.GROQ_API_KEY;
   if (key && key.trim() !== "" && key !== "undefined" && key !== "null") {
     return key.trim().replace(/^["']|["']$/g, '');
   }
@@ -108,7 +239,7 @@ const getAI = () => {
   };
 };
 
-// API Routes
+// API Router
 const apiRouter = express.Router();
 
 apiRouter.get("/health", (req, res) => {
@@ -122,6 +253,7 @@ apiRouter.get("/health", (req, res) => {
       ...status
     });
   } catch (err: any) {
+    console.error("Health check error:", err);
     res.status(500).json({ status: "error", message: "Health check failed" });
   }
 });
@@ -132,13 +264,104 @@ apiRouter.get("/email/status", (req, res) => {
     const config = getEmailConfig();
     res.json(config);
   } catch (err: any) {
-    res.status(500).json({ configured: false, error: err.message });
+    console.error("Email status error:", err);
+    res.status(500).json({ configured: false, error: "Failed to read email status" });
   }
 });
 
-// Automated Corporate Welcome Email endpoint
-apiRouter.post("/email/welcome", async (req, res) => {
+// Check Brevo specific live account & sender verification status
+apiRouter.get("/email/brevo/status", async (req, res) => {
   try {
+    const status = await checkBrevoStatus();
+    res.json(status);
+  } catch (err: any) {
+    console.error("Brevo status error:", err);
+    res.status(500).json({ 
+      configured: false, 
+      connected: false, 
+      apiKeyFound: false, 
+      fromEmail: "alsamy36@gmail.com",
+      senderVerified: false, 
+      error: err.message || "Failed to inspect Brevo status" 
+    });
+  }
+});
+
+// Send a test email via active provider (Brevo / SMTP / Resend)
+apiRouter.post("/email/test", async (req, res) => {
+  try {
+    const { toEmail } = req.body;
+    const targetEmail = toEmail || "alsamy36@gmail.com";
+
+    if (!targetEmail || typeof targetEmail !== "string" || !targetEmail.includes("@")) {
+      return res.status(400).json({ success: false, error: "Valid recipient email address is required" });
+    }
+
+    const config = getEmailConfig();
+    const testSubject = `Smart PE India - Brevo Email Configuration Test 🚀`;
+    const testHtml = `
+      <!DOCTYPE html>
+      <html>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 32px 16px; margin: 0;">
+        <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+          <div style="background-color: #0D2B52; padding: 28px; text-align: center; color: #ffffff;">
+            <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase;">Smart PE India</h1>
+            <p style="margin: 4px 0 0 0; color: #D4A017; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Email Service Verification</p>
+          </div>
+          <div style="padding: 28px 24px; color: #334155; line-height: 1.6;">
+            <div style="display: inline-block; background-color: #dcfce7; color: #15803d; font-weight: 800; font-size: 12px; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; margin-bottom: 16px;">
+              ✓ Brevo Connection Successful
+            </div>
+            <h2 style="color: #0D2B52; font-size: 18px; margin: 0 0 12px 0;">Your Brevo Transactional Email is Active!</h2>
+            <p style="margin: 0 0 16px 0; font-size: 14px;">
+              Congratulations! Your Smart PE India portal is now integrated with Brevo. Transactional emails, 1-Year Free Founding Educator passes, and automated nurture sequences will be delivered seamlessly.
+            </p>
+            <div style="background-color: #f1f5f9; border-radius: 10px; padding: 14px 16px; margin: 20px 0; font-size: 13px;">
+              <p style="margin: 3px 0;"><strong>Active Provider:</strong> ${config.provider.toUpperCase()}</p>
+              <p style="margin: 3px 0;"><strong>Sender Address:</strong> ${config.fromEmail}</p>
+              <p style="margin: 3px 0;"><strong>Delivered To:</strong> ${targetEmail}</p>
+              <p style="margin: 3px 0;"><strong>Sent At:</strong> ${new Date().toUTCString()}</p>
+            </div>
+            <p style="font-size: 13px; color: #64748b; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
+              Best regards,<br>
+              <strong>Lurtha Samy (L. Samy)</strong><br>
+              Founder • Smart PE India (<a href="https://smartpeindia.app" style="color: #0D2B52;">smartpeindia.app</a>)
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    const testText = `Smart PE India - Brevo Email Configuration Test\n\nYour Brevo transactional email integration is operational!\n\nProvider: ${config.provider}\nSender: ${config.fromEmail}\nRecipient: ${targetEmail}\nTimestamp: ${new Date().toISOString()}`;
+
+    const result = await dispatchEmail(targetEmail, testSubject, testHtml, testText);
+
+    res.json({
+      success: result.success,
+      message: result.message,
+      provider: result.provider,
+      recipient: targetEmail,
+      config: {
+        configured: config.configured,
+        provider: config.provider,
+        fromEmail: config.fromEmail
+      }
+    });
+  } catch (error: any) {
+    console.error("Test email dispatch error:", error);
+    res.status(500).json({ success: false, error: error.message || "Failed to dispatch test email" });
+  }
+});
+
+// Automated Corporate Welcome Email endpoint (Protected with rate-limiting & auth)
+apiRouter.post("/email/welcome", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userKey = req.user?.uid || req.ip || "anon";
+    const rl = checkRateLimit(`email_welcome_${userKey}`, 10, 60 * 1000);
+    if (!rl.allowed) {
+      return res.status(429).json({ success: false, error: "Too many email requests. Please try again in a minute." });
+    }
+
     const { toEmail, email, recipientName, displayName, name, schoolName, uid } = req.body;
     const targetEmail = toEmail || email;
     const targetName = recipientName || displayName || name || "";
@@ -159,13 +382,19 @@ apiRouter.post("/email/welcome", async (req, res) => {
     });
   } catch (error: any) {
     console.error("Welcome email error:", error);
-    res.status(500).json({ success: false, error: error.message || "Failed to dispatch welcome email" });
+    res.status(500).json({ success: false, error: "Failed to dispatch welcome email" });
   }
 });
 
 // Trigger a specific step of the 3-part nurture sequence (Step 1, 2, or 3)
-apiRouter.post("/email/nurture/trigger", async (req, res) => {
+apiRouter.post("/email/nurture/trigger", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
+    const userKey = req.user?.uid || req.ip || "anon";
+    const rl = checkRateLimit(`email_nurture_${userKey}`, 10, 60 * 1000);
+    if (!rl.allowed) {
+      return res.status(429).json({ success: false, error: "Rate limit exceeded. Please wait a moment." });
+    }
+
     const { toEmail, email, step = 1, recipientName, displayName, name, schoolName } = req.body;
     const targetEmail = toEmail || email;
     const targetName = recipientName || displayName || name || "Physical Education Educator";
@@ -193,12 +422,12 @@ apiRouter.post("/email/nurture/trigger", async (req, res) => {
     });
   } catch (error: any) {
     console.error("Nurture trigger error:", error);
-    res.status(500).json({ success: false, error: error.message || "Failed to trigger nurture email" });
+    res.status(500).json({ success: false, error: "Failed to trigger nurture email" });
   }
 });
 
-// Automated Registration Date Evaluator: Checks user registration date and sends next due nurture email
-apiRouter.post("/email/nurture/evaluate", async (req, res) => {
+// Automated Registration Date Evaluator
+apiRouter.post("/email/nurture/evaluate", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { 
       toEmail, 
@@ -227,11 +456,11 @@ apiRouter.post("/email/nurture/evaluate", async (req, res) => {
     let dueStep: 1 | 2 | 3 | null = null;
 
     if (!step1SentAt) {
-      dueStep = 1; // Day 0 - Welcome & Pass
+      dueStep = 1;
     } else if (daysSinceRegistration >= 2 && !step2SentAt) {
-      dueStep = 2; // Day 2+ - Lesson Planner
+      dueStep = 2;
     } else if (daysSinceRegistration >= 5 && !step3SentAt) {
-      dueStep = 3; // Day 5+ - Khelo India & Fitness Tests
+      dueStep = 3;
     }
 
     if (!dueStep) {
@@ -277,11 +506,11 @@ apiRouter.post("/email/nurture/evaluate", async (req, res) => {
     });
   } catch (error: any) {
     console.error("Nurture evaluation error:", error);
-    res.status(500).json({ success: false, error: error.message || "Failed to evaluate nurture sequence" });
+    res.status(500).json({ success: false, error: "Failed to evaluate nurture sequence" });
   }
 });
 
-// Preview HTML for any nurture step
+// Preview HTML for nurture steps
 apiRouter.get("/email/nurture/preview", (req, res) => {
   try {
     const step = Number(req.query.step || 1) as (1 | 2 | 3);
@@ -298,13 +527,22 @@ apiRouter.get("/email/nurture/preview", (req, res) => {
       text: template.text
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error("Nurture preview error:", err);
+    res.status(500).json({ error: "Failed to generate preview" });
   }
 });
 
-// Dedicated Auth User Created Webhook (for external triggers or Cloud Functions)
+// Dedicated Auth User Created Webhook (Protected by secret signature)
 apiRouter.post("/webhooks/auth-user-created", async (req, res) => {
   try {
+    const secret = req.headers["x-webhook-secret"] || req.query.secret;
+    const expectedSecret = process.env.WEBHOOK_SECRET;
+
+    // If WEBHOOK_SECRET is configured, strictly enforce it
+    if (expectedSecret && secret !== expectedSecret) {
+      return res.status(403).json({ success: false, error: "Unauthorized webhook request" });
+    }
+
     const { email, toEmail, displayName, recipientName, uid, schoolName } = req.body;
     const targetEmail = email || toEmail;
     const targetName = displayName || recipientName || "";
@@ -324,12 +562,12 @@ apiRouter.post("/webhooks/auth-user-created", async (req, res) => {
     });
   } catch (error: any) {
     console.error("Auth webhook error:", error);
-    res.status(500).json({ success: false, error: error.message || "Webhook processing failed" });
+    res.status(500).json({ success: false, error: "Webhook processing failed" });
   }
 });
 
-// Corporate Feature Update & Announcement email endpoint
-apiRouter.post("/email/announcement", async (req, res) => {
+// Corporate Feature Update & Announcement email endpoint (Admin Only)
+apiRouter.post("/email/announcement", requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { toEmails, featureTitle, featureDescription, actionUrl } = req.body;
 
@@ -359,11 +597,12 @@ apiRouter.post("/email/announcement", async (req, res) => {
     });
   } catch (error: any) {
     console.error("Announcement email error:", error);
-    res.status(500).json({ success: false, error: error.message || "Failed to dispatch announcement" });
+    res.status(500).json({ success: false, error: "Failed to dispatch announcement" });
   }
 });
 
-apiRouter.get("/ai/test", async (req, res) => {
+// AI Diagnostic / Test Route (Admin Only)
+apiRouter.get("/ai/test", requireAdmin, async (req, res) => {
   try {
     const geminiKeys = getGeminiKeys();
     if (geminiKeys.length > 0) {
@@ -412,14 +651,26 @@ apiRouter.get("/ai/test", async (req, res) => {
       if (lastTestErr) throw lastTestErr;
     }
 
-    res.status(401).json({ error: "No AI API keys found" });
+    res.status(401).json({ error: "No AI API keys configured" });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || "Test failed" });
+    console.error("AI test error:", error);
+    res.status(500).json({ error: "AI test diagnostics failed" });
   }
 });
 
-apiRouter.post("/ai/generate", async (req, res) => {
+// AI Generation Endpoint (Protected by Firebase Auth & User Rate Limiting)
+apiRouter.post("/ai/generate", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
+    const userKey = req.user?.uid || req.ip || "anon";
+    // Limit to 30 generations per minute per user/IP
+    const rl = checkRateLimit(`ai_generate_${userKey}`, 30, 60 * 1000);
+    if (!rl.allowed) {
+      return res.status(429).json({ 
+        error: "Rate limit exceeded. Please wait a moment before sending another AI request.",
+        retryAfter: rl.retryAfter
+      });
+    }
+
     const { model, contents, config } = req.body;
     
     const resolveModel = (modelName: string): string => {
@@ -436,18 +687,16 @@ apiRouter.post("/ai/generate", async (req, res) => {
     
     if (geminiKeys.length === 0 && !groqKey) {
       return res.status(500).json({ 
-        error: "No AI API keys configured.",
-        message: "Please configure a valid GEMINI_API_KEY in the Environment Variables."
+        error: "AI service configuration error.",
+        message: "Please configure GEMINI_API_KEY in the Environment Variables."
       });
     }
 
     let lastError: any = null;
 
-    // 1. Try Gemini first (with rotation and model fallback)
+    // 1. Try Gemini first (with key rotation and fallback)
     if (geminiKeys.length > 0) {
       const keysToTry = [...geminiKeys];
-      
-      // Determine which models we can try
       const modelsToTry = [
         resolvedModel,
         "gemini-3.7-flash",
@@ -455,8 +704,6 @@ apiRouter.post("/ai/generate", async (req, res) => {
         "gemini-3.1-flash-lite",
         "gemini-2.5-flash"
       ];
-      
-      // Filter out duplicates but keep order
       const uniqueModels = [...new Set(modelsToTry)];
 
       for (const key of keysToTry) {
@@ -467,190 +714,130 @@ apiRouter.post("/ai/generate", async (req, res) => {
         
         for (const currentModel of uniqueModels) {
           try {
-            console.log(`Attempting generation with ${currentModel}...`);
-            
-            // Prepare contents
             const formattedContents = Array.isArray(contents) 
               ? contents 
               : (typeof contents === 'string' ? [{ role: 'user', parts: [{ text: contents }] }] : [contents]);
 
-            // Ensure thinkingLevel is only used if supported (Gemini 3 series)
             const finalConfig = { ...config };
             const isSupportedModel = currentModel.includes("gemini-3");
             
-            if (isSupportedModel && ThinkingLevel) {
-              if (!finalConfig.thinkingConfig) {
-                finalConfig.thinkingConfig = { thinkingLevel: (ThinkingLevel as any).LOW || "LOW" };
-              }
-            } else {
+            if (isSupportedModel && !finalConfig.thinkingConfig) {
+              finalConfig.thinkingConfig = { thinkingLevel: 'LOW' };
+            } else if (!isSupportedModel && finalConfig.thinkingConfig) {
               delete finalConfig.thinkingConfig;
             }
 
             const response = await ai.models.generateContent({
               model: currentModel,
               contents: formattedContents,
-              config: finalConfig,
+              config: finalConfig
             });
-
-            const textValue = response.text;
-
-            console.log(`Success with Gemini model: ${currentModel}`);
-            return res.json({
-              text: textValue,
-              provider: "gemini",
-              model: currentModel,
-              candidates: response.candidates
-            });
-          } catch (error: any) {
-            lastError = error;
-            const errorMsg = (error.message || JSON.stringify(error) || "").toLowerCase();
             
-            // Log the specific error for debugging
-            console.warn(`Gemini error with model ${currentModel}:`, errorMsg);
-
-            // Handle safety blocks
-            if (errorMsg.includes("safety") || errorMsg.includes("blocked")) {
-              console.error("Safety block triggered. Skipping to next provider/model.");
-              break; // Skip this key, try next model or provider
-            }
-
-            // If it's a definitive auth/expired error, try NEXT KEY
-            const isDefinitiveBadKey = errorMsg.includes("expired") || 
-                                      errorMsg.includes("renew") ||
-                                      errorMsg.includes("api key not valid") ||
-                                      errorMsg.includes("api_key_invalid") ||
-                                      (error.status === 401) ||
-                                      (error.status === 400 && errorMsg.includes("key"));
-
-            if (isDefinitiveBadKey) {
-              console.error(`Definitive bad key detected. Trying next key.`);
-              break; // Break inner loop to try next key
-            }
-
-            // Handle Quota
-            const isQuotaError = errorMsg.includes("429") || error.status === 429 || errorMsg.includes("resource_exhausted") || errorMsg.includes("quota");
-            if (isQuotaError) {
-              console.warn("Quota exceeded for this key. Trying next key.");
-              break; // Break inner loop to try next key
-            }
-
-            // For other errors, try next model on same key
-            continue;
-          }
-        }
-      }
-    }
-
-    // 2. Fallback to Groq if Gemini failed or wasn't available
-    if (groqKey) {
-      try {
-        console.log("Falling back to Groq...");
-        const groq = new Groq({ apiKey: groqKey });
-        
-        let prompt = "";
-        const processedContents = Array.isArray(contents) ? contents : (contents?.contents || contents);
-        
-        if (typeof contents === 'string') {
-          prompt = contents;
-        } else if (Array.isArray(processedContents)) {
-          prompt = processedContents.map((c: any) => {
-            if (typeof c === 'string') return c;
-            if (c.parts) return c.parts.map((p: any) => p.text).join("\n");
-            return "";
-          }).join("\n");
-        } else if (contents?.parts) {
-          prompt = contents.parts.map((p: any) => p.text).join("\n");
-        }
-
-        const systemPrompt = typeof config?.systemInstruction === 'string' 
-          ? config.systemInstruction 
-          : (config?.systemInstruction?.parts ? config.systemInstruction.parts.map((p: any) => p.text).join("\n") : "You are a professional assistant.");
-        
-        // Active Groq models after August 16, 2026 decommissioning of llama-3.3-70b-versatile
-        const groqModelsToTry = [
-          "openai/gpt-oss-120b",
-          "qwen/qwen3-32b",
-          "meta-llama/llama-4-scout-17b-16e-instruct",
-          "llama-3.1-8b-instant",
-          "gemma2-9b-it",
-          "openai/gpt-oss-20b"
-        ];
-
-        let groqSuccess = false;
-        let groqResult: any = null;
-
-        for (const groqModel of groqModelsToTry) {
-          try {
-            console.log(`Attempting Groq generation with model: ${groqModel}...`);
-            const completion = await groq.chat.completions.create({
-              messages: [
-                { role: "system", content: systemPrompt + (config?.responseMimeType === "application/json" ? "\n\nIMPORTANT: Return ONLY valid JSON that strictly follows this schema structure:\n" + JSON.stringify(config.responseSchema || {}) : "") },
-                { role: "user", content: prompt }
-              ],
-              model: groqModel,
-              temperature: config?.temperature || 0.7,
-              response_format: config?.responseMimeType === "application/json" ? { type: "json_object" } : undefined
+            return res.json({ 
+              text: response.text, 
+              provider: "gemini",
+              model: currentModel 
             });
-
-            groqResult = completion.choices[0]?.message?.content;
-            if (groqResult) {
-              groqSuccess = true;
-              console.log(`Success with Groq model: ${groqModel}`);
-              return res.json({
-                text: groqResult,
-                provider: "groq",
-                model: groqModel
-              });
-            }
           } catch (modelErr: any) {
-            console.warn(`Groq model ${groqModel} failed:`, modelErr.message);
+            console.warn(`Model ${currentModel} failed:`, modelErr?.message || modelErr);
             lastError = modelErr;
             continue;
           }
         }
-      } catch (groqError: any) {
-        console.error("Groq fallback execution failed:", groqError);
-        lastError = groqError;
       }
     }
 
-    let errorMessage = "AI generation failed after trying all available providers.";
+    // 2. Fallback to Groq if Gemini was exhausted
+    if (groqKey) {
+      try {
+        console.log("Attempting fallback with Groq...");
+        const groq = new Groq({ apiKey: groqKey });
+        
+        let promptText = "";
+        if (typeof contents === 'string') {
+          promptText = contents;
+        } else if (Array.isArray(contents)) {
+          promptText = contents.map((c: any) => {
+            if (typeof c === 'string') return c;
+            if (c.parts) return c.parts.map((p: any) => p.text || '').join('\n');
+            return '';
+          }).join('\n\n');
+        } else if (contents?.parts) {
+          promptText = contents.parts.map((p: any) => p.text || '').join('\n');
+        }
+
+        const groqModels = [
+          "openai/gpt-oss-120b",
+          "qwen/qwen3-32b",
+          "meta-llama/llama-4-scout-17b-16e-instruct",
+          "llama-3.3-70b-versatile",
+          "llama-3.1-8b-instant"
+        ];
+
+        for (const gModel of groqModels) {
+          try {
+            const completion = await groq.chat.completions.create({
+              messages: [
+                { role: "system", content: config?.systemInstruction || "You are an expert AI physical education assistant." },
+                { role: "user", content: promptText }
+              ],
+              model: gModel,
+              response_format: config?.responseMimeType === "application/json" ? { type: "json_object" } : undefined
+            });
+
+            return res.json({ 
+              text: completion.choices[0]?.message?.content, 
+              provider: "groq",
+              model: gModel 
+            });
+          } catch (gErr: any) {
+            console.warn(`Groq model ${gModel} failed:`, gErr?.message);
+            lastError = gErr;
+            continue;
+          }
+        }
+      } catch (groqErr) {
+        lastError = groqErr;
+        console.error("Groq fallback completely failed:", groqErr);
+      }
+    }
+
+    // Sanitize error outputs for production safety
     let statusCode = 500;
+    let errorMessage = "AI generation could not be completed at this time.";
+    const errorStr = (lastError?.message || "").toLowerCase();
 
-    const errorStr = (lastError?.message || JSON.stringify(lastError || "")).toLowerCase();
-    const isInvalidKey = errorStr.includes("expired") || 
-                        errorStr.includes("renew") ||
-                        errorStr.includes("api key not valid") ||
-                        errorStr.includes("api_key_invalid") ||
-                        errorStr.includes("api key") ||
-                        (lastError?.status === 401) ||
-                        (lastError?.status === 400 && errorStr.includes("key"));
-
-    if (isInvalidKey) {
+    if (errorStr.includes("expired") || errorStr.includes("invalid") || lastError?.status === 401) {
       statusCode = 401;
-      errorMessage = "Gemini API key is invalid or not configured. Please ensure a valid GEMINI_API_KEY is set in Settings > Secrets or Environment Variables.";
+      errorMessage = "AI service authentication error. Please verify GEMINI_API_KEY configuration.";
     } else if (errorStr.includes("quota") || errorStr.includes("429") || errorStr.includes("resource_exhausted")) {
       statusCode = 429;
-      errorMessage = "Gemini AI quota exceeded. Please try again in a few moments, or configure a fallback GROQ_API_KEY in Environment Variables.";
-    } else if (!groqKey && geminiKeys.length > 0) {
-      errorMessage = "AI generation failed. Please check your Gemini API key or network connection.";
+      errorMessage = "AI generation quota is temporarily saturated. Please try again in a few moments.";
     }
 
     res.status(statusCode).json({ 
       error: errorMessage,
-      message: errorMessage,
-      originalError: lastError?.message || errorStr,
-      details: lastError?.stack
+      message: errorMessage
     });
   } catch (globalError: any) {
     console.error("Critical error in /ai/generate:", globalError);
-    res.status(500).json({ error: "Internal server error during AI generation.", details: globalError.message });
+    res.status(500).json({ error: "Internal server error during AI generation." });
   }
 });
 
-// Dedicated Audio Transcription Endpoint (Gemini 3.5 Transcribe)
-apiRouter.post("/ai/transcribe", async (req, res) => {
+// Dedicated Audio Transcription Endpoint (Protected by Firebase Auth & User Rate Limiting)
+apiRouter.post("/ai/transcribe", express.json({ limit: "15mb" }), requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
+    const userKey = req.user?.uid || req.ip || "anon";
+    // Limit to 20 voice transcriptions per minute per user/IP
+    const rl = checkRateLimit(`ai_transcribe_${userKey}`, 20, 60 * 1000);
+    if (!rl.allowed) {
+      return res.status(429).json({ 
+        error: "Too many voice requests. Please wait a moment before recording again.",
+        retryAfter: rl.retryAfter
+      });
+    }
+
     const { 
       audioBase64, 
       mimeType = "audio/webm", 
@@ -661,9 +848,12 @@ apiRouter.post("/ai/transcribe", async (req, res) => {
       return res.status(400).json({ error: "Missing audioBase64 data in request body." });
     }
 
-    // Clean base64 string if it contains data URI header
-    const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
+    // Protect against massive memory bloat (>10MB base64 string)
+    if (audioBase64.length > 14 * 1024 * 1024) {
+      return res.status(413).json({ error: "Audio recording exceeds maximum permitted length (10MB). Please record shorter voice notes." });
+    }
 
+    const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
     const geminiKeys = getGeminiKeys();
     if (geminiKeys.length === 0) {
       return res.status(500).json({ 
@@ -673,7 +863,7 @@ apiRouter.post("/ai/transcribe", async (req, res) => {
     }
 
     let lastError: any = null;
-    const modelsToTry = ["gemini-3.5-transcribe", "gemini-2.5-flash", "gemini-3.7-flash"];
+    const modelsToTry = ["gemini-2.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.7-flash"];
 
     for (const key of geminiKeys) {
       try {
@@ -691,20 +881,20 @@ apiRouter.post("/ai/transcribe", async (req, res) => {
 
         for (const currentModel of modelsToTry) {
           try {
-            console.log(`Transcribing audio with ${currentModel} (mimeType: ${mimeType})...`);
-
             const response = await ai.models.generateContent({
               model: currentModel,
-              contents: { 
-                parts: [
-                  audioPart, 
-                  { text: prompt }
-                ] 
-              },
+              contents: [
+                audioPart,
+                { 
+                  text: prompt || "Listen to this audio recording carefully and transcribe the spoken words verbatim. Keep all sports terms, referee rules, drill positions, player names, and numbers exact. Return ONLY the transcribed text. Do NOT add commentary, conversational replies, quotes, or pleasantries."
+                }
+              ],
+              config: {
+                systemInstruction: "You are a professional Physical Education & Sports audio speech-to-text transcriber. Transcribe exactly what is spoken in the audio without adding conversational replies, pleasantries, or explanations. If no speech is detected, output nothing."
+              }
             });
 
             const transcription = response.text || "";
-            console.log(`Transcription succeeded with ${currentModel}`);
 
             return res.json({
               text: transcription.trim(),
@@ -725,13 +915,16 @@ apiRouter.post("/ai/transcribe", async (req, res) => {
       }
     }
 
-    throw lastError || new Error("Failed to transcribe audio with available keys.");
+    console.error("Transcription exhausted all keys/models:", lastError?.message || lastError);
+    return res.status(500).json({ 
+      error: "Audio transcription failed.", 
+      message: "Could not transcribe audio at this time. Please try again."
+    });
   } catch (error: any) {
     console.error("Critical error in /ai/transcribe:", error);
     res.status(500).json({ 
       error: "Audio transcription failed.", 
-      message: error.message || "Failed to process audio transcription.",
-      details: error.stack
+      message: "Failed to process audio transcription."
     });
   }
 });

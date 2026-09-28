@@ -29,6 +29,7 @@ import { toast } from '../services/toast';
 import { trackEvent } from '../services/analytics';
 import { sendAutomatedWelcomeEmail, sendFeatureAnnouncementEmail, getEmailConfigStatus, generateWelcomeEmailHtml } from '../services/emailService';
 import NurtureSequenceHub from './NurtureSequenceHub';
+import BrevoSetupHub from './BrevoSetupHub';
 
 interface BrandWelcomeHubProps {
   userEmail?: string | null;
@@ -50,7 +51,7 @@ export const BrandWelcomeHub: React.FC<BrandWelcomeHubProps> = ({
   const [customSchoolName, setCustomSchoolName] = useState(schoolName || 'Smart PE Partner School');
   const [emailViewMode, setEmailViewMode] = useState<'preview' | 'html' | 'text'>('preview');
   const [isSending, setIsSending] = useState(false);
-  const [activeTab, setActiveTab] = useState<'welcome' | 'nurture' | 'video' | 'email'>('welcome');
+  const [activeTab, setActiveTab] = useState<'welcome' | 'brevo' | 'nurture' | 'video' | 'email'>('welcome');
 
   // Dynamically compute the personalized HTML & plain text template
   const generatedEmail = useMemo(() => {
@@ -160,6 +161,18 @@ export const BrandWelcomeHub: React.FC<BrandWelcomeHubProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('brevo')}
+          className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-wider transition-all flex items-center space-x-2 ${
+            activeTab === 'brevo'
+              ? 'bg-[#0D2B52] text-[#D4A017] shadow-lg ring-2 ring-[#D4A017]'
+              : 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'
+          }`}
+        >
+          <Zap size={16} className="text-[#D4A017]" />
+          <span>⚡ Brevo Email Setup</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('nurture')}
           className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-wider transition-all flex items-center space-x-2 ${
             activeTab === 'nurture'
@@ -196,12 +209,21 @@ export const BrandWelcomeHub: React.FC<BrandWelcomeHubProps> = ({
         </button>
       </div>
 
+      {/* TAB: BREVO EMAIL SETUP */}
+      {activeTab === 'brevo' && (
+        <BrevoSetupHub
+          userEmail={recipientEmail}
+          onNavigateToNurture={() => setActiveTab('nurture')}
+        />
+      )}
+
       {/* TAB: 3-PART NURTURE SEQUENCE */}
       {activeTab === 'nurture' && (
         <NurtureSequenceHub
           userEmail={recipientEmail}
           userName={customRecipientName}
           schoolName={customSchoolName}
+          onNavigateToBrevo={() => setActiveTab('brevo')}
         />
       )}
 

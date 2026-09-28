@@ -8,15 +8,16 @@ import {
   GoogleAuthProvider,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { collection, query, where, getDocs, deleteDoc, doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, setDoc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { motion } from 'motion/react';
-import { Mail, Lock, User, School, Trophy, ArrowRight, Loader2, ArrowLeft, KeyRound, CheckCircle } from 'lucide-react';
+import { Mail, Lock, User, School, Trophy, ArrowRight, Loader2, ArrowLeft, KeyRound, CheckCircle, ShieldCheck, CheckSquare, Square } from 'lucide-react';
 import Logo from './Logo';
 import { trackEvent } from '../services/analytics.ts';
 import { toast } from '../services/toast.ts';
 import { sendAutomatedWelcomeEmail } from '../services/emailService.ts';
-import { academicCoachingCloudService } from '../services/academicCoachingCloudService.ts';
+import { academicCoachingCloudService, AcademicCoachingProgram } from '../services/academicCoachingCloudService.ts';
+import { PrivacyNoticeModal } from './privacy/PrivacyNoticeModal.tsx';
 
 interface AuthProps {
   onBack?: () => void;
@@ -37,6 +38,9 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
   const [academySport, setAcademySport] = useState('football');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+  const [privacyModalTab, setPrivacyModalTab] = useState<'privacy' | 'terms'>('privacy');
 
   const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,24 +82,53 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
       
       if (!userSnap.exists()) {
         const nowIso = new Date().toISOString();
+        const cleanEmail = (user.email || '').trim().toLowerCase();
+        const cleanName = user.displayName?.trim() || cleanEmail.split('@')[0] || 'Coach';
+
         if (workspaceType === 'academy') {
-          // Initialize Academy Workspace
-          const progName = academyName.trim() || (user.displayName ? `${user.displayName} Sports Academy` : 'Elite Sports Academy');
-          const program = await academicCoachingCloudService.registerAcademicProgram({
-            programName: progName,
-            programType: 'after_school_academy',
-            sport: academySport,
-            coachName: user.displayName || 'Head Coach',
-            adminEmail: user.email || ''
-          });
+          // Check if coach was invited to an existing academy
+          const qAcad = query(collection(db, 'academic_programs'), where('coachEmails', 'array-contains', cleanEmail));
+          const snapAcad = await getDocs(qAcad);
+          
+          let programId = '';
+          let progName = '';
+
+          if (!snapAcad.empty) {
+            const progDoc = snapAcad.docs[0];
+            const progData = progDoc.data() as AcademicCoachingProgram;
+            programId = progDoc.id;
+            progName = progData.programName;
+
+            if (!progData.coachUids.includes(user.uid)) {
+              try {
+                await updateDoc(progDoc.ref, {
+                  coachUids: arrayUnion(user.uid),
+                  coachNames: arrayUnion(cleanName)
+                });
+                progData.coachUids.push(user.uid);
+                progData.coachNames.push(cleanName);
+              } catch (e) {}
+            }
+            academicCoachingCloudService.setLocalProgram(progData);
+          } else {
+            progName = academyName.trim() || `${cleanName}'s Sports Academy`;
+            const program = await academicCoachingCloudService.registerAcademicProgram({
+              programName: progName,
+              programType: 'after_school_academy',
+              sport: academySport,
+              coachName: cleanName,
+              adminEmail: cleanEmail
+            });
+            programId = program.id;
+          }
 
           await setDoc(userDocRef, {
             uid: user.uid,
-            email: user.email,
-            displayName: user.displayName || 'Coach',
+            email: cleanEmail,
+            displayName: cleanName,
             workspaceType: 'academy',
             activeWorkspace: 'academy',
-            academyId: program.id,
+            academyId: programId,
             academyName: progName,
             role: 'admin',
             createdAt: nowIso,
@@ -132,7 +165,7 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             }
           } else {
             schoolId = `school_${user.uid}`;
-            const initialSchoolName = schoolName.trim() || (user.displayName ? `${user.displayName} School` : 'PE Partner School');
+            const initialSchoolName = schoolName.trim() || `${cleanName}'s Partner School`;
             await setDoc(doc(db, 'schools', schoolId), {
               id: schoolId,
               name: initialSchoolName,
@@ -141,12 +174,12 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             });
           }
 
-          const finalSchoolName = customSchoolName || schoolName.trim() || (user.displayName ? `${user.displayName} School` : 'PE Partner School');
+          const finalSchoolName = customSchoolName || schoolName.trim() || `${cleanName}'s Partner School`;
           
           await setDoc(userDocRef, {
             uid: user.uid,
-            email: user.email,
-            displayName: user.displayName || 'Teacher',
+            email: cleanEmail,
+            displayName: cleanName,
             workspaceType: 'school',
             activeWorkspace: 'school',
             schoolName: finalSchoolName,
@@ -162,8 +195,8 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             uid: user.uid,
             schoolId: schoolId,
             role,
-            displayName: user.displayName || 'Teacher',
-            email: user.email,
+            displayName: cleanName,
+            email: cleanEmail,
             schoolName: finalSchoolName,
             schoolLogo: customSchoolLogo
           });
@@ -176,6 +209,10 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
         const uData = userSnap.data();
         const activeWs = uData.activeWorkspace || (uData.academyId && !uData.schoolId ? 'academy' : 'school');
         localStorage.setItem('smartpe_active_workspace', activeWs);
+        // Pre-fetch program if academy
+        if (activeWs === 'academy' || uData.academyId) {
+          academicCoachingCloudService.getOrFetchProgramForCurrentUser().catch(() => {});
+        }
       }
     } catch (err: any) {
       console.error('Google Auth Error:', err);
@@ -187,6 +224,12 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!isLogin && !agreedToPrivacy) {
+      setError('Please accept the Terms of Service and Privacy Notice to proceed with registration.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -594,10 +637,73 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
               <p className="text-red-500 text-xs font-bold px-2">{error}</p>
             )}
 
+            {!isLogin && (
+              <div className="space-y-3 pt-2">
+                {/* Concise Educational Privacy Notice */}
+                <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-[11px] text-slate-600 leading-relaxed space-y-2">
+                  <div className="font-black uppercase tracking-wider text-slate-900 flex items-center gap-1.5 text-xs">
+                    <ShieldCheck size={16} className="text-indigo-600" />
+                    <span>Privacy & Data Protection Notice</span>
+                  </div>
+                  <p>
+                    SmartPE may process student names/identifiers, class/section, PE assessments, fitness results, sports performance records and progress reports solely to provide PE assessment, curriculum management and reporting services.
+                  </p>
+                  <ul className="list-disc list-inside space-y-0.5 text-slate-500 font-semibold text-[10px]">
+                    <li>Enter only information necessary for the intended educational purpose.</li>
+                    <li>SmartPE does <strong>not</strong> sell student data or use it for targeted advertising.</li>
+                    <li>School data is strictly restricted to authorized users within your organization.</li>
+                  </ul>
+                </div>
+
+                {/* Required Agreement Checkbox */}
+                <label className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-slate-50 cursor-pointer select-none group">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={agreedToPrivacy}
+                    onChange={(e) => {
+                      setAgreedToPrivacy(e.target.checked);
+                      if (error) setError(null);
+                    }}
+                    className="mt-0.5 w-4 h-4 rounded border-2 border-slate-400 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-700 leading-tight">
+                    I have read and agree to the SmartPE{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setPrivacyModalTab('terms');
+                        setIsPrivacyModalOpen(true);
+                      }}
+                      className="text-indigo-600 underline font-black hover:text-indigo-800"
+                    >
+                      Terms of Service
+                    </button>{' '}
+                    and{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setPrivacyModalTab('privacy');
+                        setIsPrivacyModalOpen(true);
+                      }}
+                      className="text-indigo-600 underline font-black hover:text-indigo-800"
+                    >
+                      Privacy Notice
+                    </button>
+                    .
+                  </span>
+                </label>
+              </div>
+            )}
+
             <button 
               type="submit"
-              disabled={loading}
-              className="w-full py-4 bg-primary text-white border-2 border-slate-900 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary-container transition-all shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center justify-center gap-2"
+              disabled={loading || (!isLogin && !agreedToPrivacy)}
+              className="w-full py-4 bg-primary text-white border-2 border-slate-900 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary-container transition-all shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : (
                 <>
@@ -663,6 +769,13 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           </>
         )}
       </motion.div>
+
+      {/* Privacy Notice & Terms Modal */}
+      <PrivacyNoticeModal
+        isOpen={isPrivacyModalOpen}
+        onClose={() => setIsPrivacyModalOpen(false)}
+        defaultTab={privacyModalTab}
+      />
     </div>
   );
 };

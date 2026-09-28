@@ -147,6 +147,7 @@ export interface YearlyPlan {
   board: string;
   academicYear: string;
   duration: string;
+  startDate?: string;
   generatedDate: string;
   terms: {
     termName: string;

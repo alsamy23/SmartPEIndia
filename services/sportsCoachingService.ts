@@ -976,16 +976,23 @@ export const sportsCoachingService = {
   getAllAthletes: (): AthleteProfile[] => {
     try {
       const stored = localStorage.getItem(ATHLETES_STORAGE_KEY);
-      if (stored) {
+      if (stored !== null) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {
       console.error('Failed to load athletes', e);
     }
-    // Seed initial samples if empty
+    // Seed initial samples only if storage has never been initialized
     localStorage.setItem(ATHLETES_STORAGE_KEY, JSON.stringify(SAMPLE_ATHLETES));
     return SAMPLE_ATHLETES;
+  },
+
+  clearDummyAthletes: (): number => {
+    const dummyIds = new Set(SAMPLE_ATHLETES.map(a => a.id));
+    const list = sportsCoachingService.getAllAthletes().filter(a => !dummyIds.has(a.id));
+    localStorage.setItem(ATHLETES_STORAGE_KEY, JSON.stringify(list));
+    return dummyIds.size;
   },
 
   saveAthlete: (athlete: Omit<AthleteProfile, 'id'> & { id?: string }): AthleteProfile => {

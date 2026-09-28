@@ -10,12 +10,15 @@ import {
   FileText, 
   Printer, 
   Sparkles, 
-  ArrowLeft,
-  Activity,
-  Calendar,
-  Zap,
-  School,
-  Database
+  ArrowLeft, 
+  Activity, 
+  Calendar, 
+  Zap, 
+  School, 
+  Database,
+  RefreshCw,
+  UserCheck,
+  Mail
 } from 'lucide-react';
 import { CoachingDashboard } from './CoachingDashboard';
 import { PlayerDirectory } from './PlayerDirectory';
@@ -37,6 +40,8 @@ import {
   academicCoachingCloudService, 
   AcademicCoachingProgram 
 } from '../../services/academicCoachingCloudService';
+import { auth } from '../../services/firebase';
+import { toast } from '../../services/toast';
 
 interface CoachingAcademyHubProps {
   onSwitchToSchoolPe?: () => void;
@@ -63,9 +68,29 @@ export const CoachingAcademyHub: React.FC<CoachingAcademyHubProps> = ({
   const [activeProgram, setActiveProgram] = useState<AcademicCoachingProgram | null>(() => 
     academicCoachingCloudService.getLocalProgram()
   );
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSyncCloud = async (notify = false) => {
+    setSyncing(true);
+    try {
+      const prog = await academicCoachingCloudService.getOrFetchProgramForCurrentUser();
+      setActiveProgram(prog);
+      if (prog?.id) {
+        const { players, assessments } = await academyService.syncFromCloud(prog.id);
+        if (notify) {
+          toast.success(`Synced ${players.length} players & ${assessments.length} assessments from ${prog.programName}!`);
+        }
+      }
+    } catch (err) {
+      console.warn('Sync cloud error:', err);
+      if (notify) toast.error('Cloud synchronization error.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
-    setActiveProgram(academicCoachingCloudService.getLocalProgram());
+    handleSyncCloud(false);
   }, [isDatabaseModalOpen]);
 
   // Active Parent Report Modal state
@@ -155,11 +180,39 @@ export const CoachingAcademyHub: React.FC<CoachingAcademyHubProps> = ({
             </div>
           </div>
 
-          {/* Right Header Actions: Academy Settings & Switch back to School PE */}
+          {/* Right Header Actions: Coach Identity, Sync, Academy Settings & Switch */}
           <div className="flex items-center space-x-2">
+            {/* Coach Profile Indicator */}
+            {auth.currentUser && (
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-800/80 border border-slate-700 rounded-xl text-xs">
+                <div className="w-6 h-6 rounded-lg bg-amber-500 text-slate-950 font-black text-[10px] flex items-center justify-center uppercase">
+                  {(auth.currentUser.displayName || auth.currentUser.email || 'C').charAt(0)}
+                </div>
+                <div className="text-left">
+                  <div className="font-black text-white text-[11px] leading-tight">
+                    {auth.currentUser.displayName || activeProgram?.headCoachName || auth.currentUser.email?.split('@')[0] || 'Coach'}
+                  </div>
+                  <div className="text-[9px] text-slate-400 font-mono leading-none truncate max-w-[140px]">
+                    {auth.currentUser.email || activeProgram?.adminEmail}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Cloud Sync Button */}
+            <button
+              onClick={() => handleSyncCloud(true)}
+              disabled={syncing}
+              title="Sync players & assessments from Firebase Cloud"
+              className="p-2 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+              <span className="hidden lg:inline text-[11px] font-black text-slate-200">Sync Data</span>
+            </button>
+
             <button
               onClick={() => setIsDatabaseModalOpen(true)}
-              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition shadow-sm flex items-center space-x-2 active:scale-95"
+              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition shadow-sm flex items-center space-x-2 active:scale-95 cursor-pointer"
             >
               <Database size={15} />
               <span className="hidden sm:inline font-black">
@@ -172,7 +225,7 @@ export const CoachingAcademyHub: React.FC<CoachingAcademyHubProps> = ({
             {onSwitchToSchoolPe && (
               <button
                 onClick={onSwitchToSchoolPe}
-                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition flex items-center space-x-2"
+                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer"
               >
                 <School size={15} className="text-blue-400" />
                 <span className="hidden sm:inline">Switch to</span>

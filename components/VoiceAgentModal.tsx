@@ -197,7 +197,7 @@ export const VoiceAgentModal: React.FC<VoiceAgentModalProps> = ({
 
     try {
       const { blob, mimeType } = await transcriptionService.stopRecording();
-      if (blob.size < 400) {
+      if (blob.size < 60) {
         showToast('Speech was too short. Please try speaking again.', 'warning');
         setIsProcessing(false);
         return;

@@ -1,4 +1,19 @@
+import { auth } from './firebase';
+
 // Client-side service to trigger corporate transactional emails via the Smart PE backend API
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (auth.currentUser) {
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      headers['Authorization'] = `Bearer ${idToken}`;
+    } catch (e) {
+      console.warn('Could not get idToken for email service:', e);
+    }
+  }
+  return headers;
+}
 
 export interface SendEmailPayload {
   toEmail: string;
@@ -22,9 +37,10 @@ export async function sendAutomatedWelcomeEmail(
   schoolName?: string
 ): Promise<{ success: boolean; message: string; previewUrl?: string }> {
   try {
+    const headers = await getAuthHeaders();
     const res = await fetch('/api/email/welcome', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         toEmail,
         recipientName: recipientName || 'Physical Education Educator',
@@ -47,9 +63,10 @@ export async function sendFeatureAnnouncementEmail(
   actionUrl?: string
 ): Promise<{ success: boolean; sentCount: number; message: string }> {
   try {
+    const headers = await getAuthHeaders();
     const res = await fetch('/api/email/announcement', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         toEmails,
         featureTitle,
@@ -398,9 +415,10 @@ export async function evaluateNurtureSequence(payload: {
   step3SentAt?: string | null;
 }): Promise<NurtureEvaluationResult> {
   try {
+    const headers = await getAuthHeaders();
     const res = await fetch('/api/email/nurture/evaluate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload)
     });
 
@@ -451,7 +469,68 @@ export async function getEmailConfigStatus(): Promise<EmailServiceStatus> {
     return {
       configured: false,
       provider: 'simulated',
-      fromEmail: 'welcome@smartpeindia.app'
+      fromEmail: 'alsamy36@gmail.com'
     };
   }
 }
+
+export interface BrevoLiveStatus {
+  configured: boolean;
+  connected: boolean;
+  apiKeyFound: boolean;
+  account?: {
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    companyName?: string;
+    credits?: number;
+    planType?: string;
+  };
+  senders?: Array<{ id: number; name: string; email: string; active: boolean }>;
+  fromEmail: string;
+  senderVerified: boolean;
+  error?: string;
+}
+
+export async function getBrevoLiveStatus(): Promise<BrevoLiveStatus> {
+  try {
+    const res = await fetch('/api/email/brevo/status');
+    const data = await res.json();
+    return data;
+  } catch (err: any) {
+    return {
+      configured: false,
+      connected: false,
+      apiKeyFound: false,
+      fromEmail: 'alsamy36@gmail.com',
+      senderVerified: false,
+      error: err.message || 'Failed to connect to email status service'
+    };
+  }
+}
+
+export async function sendBrevoTestEmail(toEmail?: string): Promise<{
+  success: boolean;
+  message: string;
+  provider: string;
+  recipient?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/email/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ toEmail: toEmail || 'alsamy36@gmail.com' })
+    });
+    const data = await res.json();
+    return data;
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err.message || 'Network request failed',
+      provider: 'brevo',
+      error: err.message
+    };
+  }
+}
+

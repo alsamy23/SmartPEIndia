@@ -122,6 +122,130 @@ export const academicCoachingCloudService = {
   },
 
   /**
+   * Fetches or resolves the active Academic Coaching Program for the current authenticated user from Firestore
+   */
+  async getOrFetchProgramForCurrentUser(): Promise<AcademicCoachingProgram | null> {
+    const user = auth.currentUser;
+    if (!user) {
+      return this.getLocalProgram();
+    }
+
+    try {
+      const userEmail = (user.email || '').trim().toLowerCase();
+      const userUid = user.uid;
+      const userDisplayName = user.displayName?.trim() || userEmail.split('@')[0] || 'Coach';
+
+      // 1. Check user profile document in 'users' collection
+      const userSnap = await getDoc(doc(db, 'users', userUid));
+      if (userSnap.exists()) {
+        const uData = userSnap.data();
+        if (uData.academyId) {
+          const progSnap = await getDoc(doc(db, 'academic_programs', uData.academyId));
+          if (progSnap.exists()) {
+            const prog = progSnap.data() as AcademicCoachingProgram;
+            // Ensure this user's UID and email/name are linked in the program document
+            let updated = false;
+            const updates: any = {};
+            if (userUid && !prog.coachUids?.includes(userUid)) {
+              updates.coachUids = arrayUnion(userUid);
+              prog.coachUids = [...(prog.coachUids || []), userUid];
+              updated = true;
+            }
+            if (userEmail && !prog.coachEmails?.includes(userEmail)) {
+              updates.coachEmails = arrayUnion(userEmail);
+              prog.coachEmails = [...(prog.coachEmails || []), userEmail];
+              updated = true;
+            }
+            if (userDisplayName && !prog.coachNames?.includes(userDisplayName)) {
+              updates.coachNames = arrayUnion(userDisplayName);
+              prog.coachNames = [...(prog.coachNames || []), userDisplayName];
+              updated = true;
+            }
+            if (updated) {
+              try {
+                await updateDoc(progSnap.ref, updates);
+              } catch (e) {}
+            }
+            this.setLocalProgram(prog);
+            return prog;
+          }
+        }
+      }
+
+      // 2. Query where headCoachId == userUid
+      const qHead = query(collection(db, 'academic_programs'), where('headCoachId', '==', userUid));
+      let snap = await getDocs(qHead);
+      if (!snap.empty) {
+        const prog = snap.docs[0].data() as AcademicCoachingProgram;
+        this.setLocalProgram(prog);
+        return prog;
+      }
+
+      // 3. Query where coachUids array-contains userUid
+      const qUids = query(collection(db, 'academic_programs'), where('coachUids', 'array-contains', userUid));
+      snap = await getDocs(qUids);
+      if (!snap.empty) {
+        const prog = snap.docs[0].data() as AcademicCoachingProgram;
+        this.setLocalProgram(prog);
+        return prog;
+      }
+
+      // 4. Query where coachEmails array-contains userEmail
+      if (userEmail) {
+        const qEmails = query(collection(db, 'academic_programs'), where('coachEmails', 'array-contains', userEmail));
+        snap = await getDocs(qEmails);
+        if (!snap.empty) {
+          const progDoc = snap.docs[0];
+          const prog = progDoc.data() as AcademicCoachingProgram;
+          
+          // Auto-link this user's UID and name to the program
+          if (!prog.coachUids.includes(userUid)) {
+            try {
+              await updateDoc(progDoc.ref, {
+                coachUids: arrayUnion(userUid),
+                coachNames: arrayUnion(userDisplayName)
+              });
+              prog.coachUids.push(userUid);
+              prog.coachNames.push(userDisplayName);
+            } catch (e) {
+              console.warn('Could not auto-link coach UID:', e);
+            }
+          }
+
+          // Also link to users collection profile
+          try {
+            await setDoc(doc(db, 'users', userUid), {
+              academyId: prog.id,
+              academyName: prog.programName,
+              workspaceType: 'academy',
+              activeWorkspace: 'academy',
+              displayName: userDisplayName,
+              email: userEmail,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          } catch (e) {}
+
+          this.setLocalProgram(prog);
+          return prog;
+        }
+
+        // 5. Query where adminEmail == userEmail
+        const qAdmin = query(collection(db, 'academic_programs'), where('adminEmail', '==', userEmail));
+        snap = await getDocs(qAdmin);
+        if (!snap.empty) {
+          const prog = snap.docs[0].data() as AcademicCoachingProgram;
+          this.setLocalProgram(prog);
+          return prog;
+        }
+      }
+    } catch (err) {
+      console.warn('Error querying cloud academic program:', err);
+    }
+
+    return this.getLocalProgram();
+  },
+
+  /**
    * Registers a new Academic Coaching Program in Cloud Firestore with 5-Day Access
    */
   async registerAcademicProgram(params: {
@@ -138,7 +262,8 @@ export const academicCoachingCloudService = {
   }): Promise<AcademicCoachingProgram> {
     const user = auth.currentUser;
     const coachUid = user?.uid || `guest_coach_${Date.now()}`;
-    const coachEmail = params.adminEmail?.trim() || user?.email || 'coach@academic.smartpe.in';
+    const coachEmail = (params.adminEmail?.trim() || user?.email || 'coach@academic.smartpe.in').toLowerCase();
+    const cleanCoachName = params.coachName.trim() || user?.displayName?.trim() || coachEmail.split('@')[0] || 'Head Coach';
     const programId = `acad_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
     
     // Exactly 5 days from registration
@@ -149,7 +274,7 @@ export const academicCoachingCloudService = {
 
     const initialTeachers: AcademyTeacher[] = params.teachersList || [
       {
-        name: params.coachName.trim() || 'Head Coach',
+        name: cleanCoachName,
         email: coachEmail,
         sport: params.sport || 'football',
         role: 'Lead Coach',
@@ -157,18 +282,28 @@ export const academicCoachingCloudService = {
       }
     ];
 
+    const allCoachEmails = Array.from(new Set([
+      coachEmail,
+      ...(params.teachersList?.map(t => t.email.trim().toLowerCase()) || [])
+    ]));
+
+    const allCoachNames = Array.from(new Set([
+      cleanCoachName,
+      ...(params.teachersList?.map(t => t.name.trim()) || [])
+    ]));
+
     const program: AcademicCoachingProgram = {
       id: programId,
-      programName: params.programName.trim(),
+      programName: params.programName.trim() || `${cleanCoachName}'s Sports Academy`,
       programType: params.programType,
       sport: params.sport,
       sportsOffered: params.sportsOffered && params.sportsOffered.length > 0 ? params.sportsOffered : [params.sport],
       logoUrl: params.logoUrl || '',
       headCoachId: coachUid,
-      headCoachName: params.coachName.trim() || 'Head Coach',
+      headCoachName: cleanCoachName,
       adminEmail: coachEmail,
-      coachEmails: [coachEmail, ...(params.teachersList?.map(t => t.email).filter(e => e !== coachEmail) || [])],
-      coachNames: [params.coachName.trim() || 'Head Coach', ...(params.teachersList?.map(t => t.name).filter(n => n !== params.coachName.trim()) || [])],
+      coachEmails: allCoachEmails,
+      coachNames: allCoachNames,
       coachUids: [coachUid],
       teachersList: initialTeachers,
       inviteCode,
@@ -182,7 +317,7 @@ export const academicCoachingCloudService = {
     // Save locally immediately
     this.setLocalProgram(program);
 
-    // Save to Firestore if user is authenticated or guest
+    // Save to Firestore
     try {
       await setDoc(doc(db, 'academic_programs', programId), program);
     } catch (err) {
@@ -342,15 +477,39 @@ export const academicCoachingCloudService = {
         await updateDoc(programDoc.ref, {
           coachUids: arrayUnion(coachUid),
           coachNames: arrayUnion(cleanCoachName),
-          coachEmails: arrayUnion(coachEmail)
+          coachEmails: arrayUnion(coachEmail.toLowerCase())
         });
 
         programData.coachUids.push(coachUid);
         programData.coachNames.push(cleanCoachName);
-        programData.coachEmails.push(coachEmail);
+        programData.coachEmails.push(coachEmail.toLowerCase());
+      }
+
+      // Update user document if authenticated
+      if (user?.uid) {
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            academyId: programData.id,
+            academyName: programData.programName,
+            workspaceType: 'academy',
+            activeWorkspace: 'academy',
+            displayName: cleanCoachName,
+            email: coachEmail,
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        } catch (e) {}
       }
 
       this.setLocalProgram(programData);
+
+      // Preload athletes and assessments for this program
+      try {
+        await Promise.all([
+          this.fetchCloudAthletes(programData.id),
+          this.fetchCloudAssessments(programData.id)
+        ]);
+      } catch (e) {}
+
       return programData;
     } catch (error: any) {
       console.error('Failed to join coaching group:', error);
@@ -493,13 +652,16 @@ export const academicCoachingCloudService = {
    * Fetches all athletes for an Academic Program from Firestore (with local fallback)
    */
   async fetchCloudAthletes(programId: string): Promise<AthleteProfile[]> {
+    const user = auth.currentUser;
+    const athleteMap = new Map<string, AthleteProfile>();
+
     try {
-      const q = query(collection(db, 'academic_athletes'), where('programId', '==', programId));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const athletes = snap.docs.map(d => {
+      if (programId) {
+        const q = query(collection(db, 'academic_athletes'), where('programId', '==', programId));
+        const snap = await getDocs(q);
+        snap.docs.forEach(d => {
           const data = d.data();
-          return {
+          const item = {
             id: data.id || d.id,
             name: data.name,
             age: data.age,
@@ -513,9 +675,38 @@ export const academicCoachingCloudService = {
             notes: data.notes,
             joiningDate: data.joiningDate
           } as AthleteProfile;
+          athleteMap.set(item.id, item);
         });
+      }
 
-        // Update local cache
+      // Also query by coach UID if current user is logged in
+      if (user?.uid) {
+        const qCoach = query(collection(db, 'academic_athletes'), where('createdByCoachId', '==', user.uid));
+        const snapCoach = await getDocs(qCoach);
+        snapCoach.docs.forEach(d => {
+          const data = d.data();
+          const item = {
+            id: data.id || d.id,
+            name: data.name,
+            age: data.age,
+            gender: data.gender,
+            sport: data.sport,
+            programType: data.programType,
+            squadOrBatch: data.squadOrBatch,
+            jerseyNo: data.jerseyNo,
+            guardianName: data.guardianName,
+            guardianContact: data.guardianContact,
+            notes: data.notes,
+            joiningDate: data.joiningDate
+          } as AthleteProfile;
+          if (!athleteMap.has(item.id)) {
+            athleteMap.set(item.id, item);
+          }
+        });
+      }
+
+      if (athleteMap.size > 0) {
+        const athletes = Array.from(athleteMap.values());
         localStorage.setItem(LOCAL_ATHLETES_KEY, JSON.stringify(athletes));
         return athletes;
       }
@@ -535,11 +726,33 @@ export const academicCoachingCloudService = {
    * Fetches all assessments for an Academic Program from Firestore (with local fallback)
    */
   async fetchCloudAssessments(programId: string): Promise<AssessmentRecord[]> {
+    const user = auth.currentUser;
+    const assessmentMap = new Map<string, AssessmentRecord>();
+
     try {
-      const q = query(collection(db, 'academic_assessments'), where('programId', '==', programId));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const assessments = snap.docs.map(d => d.data() as AssessmentRecord);
+      if (programId) {
+        const q = query(collection(db, 'academic_assessments'), where('programId', '==', programId));
+        const snap = await getDocs(q);
+        snap.docs.forEach(d => {
+          const item = d.data() as AssessmentRecord;
+          assessmentMap.set(item.id || d.id, item);
+        });
+      }
+
+      // Also query by examinerUid/coach UID if current user is logged in
+      if (user?.uid) {
+        const qCoach = query(collection(db, 'academic_assessments'), where('examinerUid', '==', user.uid));
+        const snapCoach = await getDocs(qCoach);
+        snapCoach.docs.forEach(d => {
+          const item = d.data() as AssessmentRecord;
+          if (!assessmentMap.has(item.id || d.id)) {
+            assessmentMap.set(item.id || d.id, item);
+          }
+        });
+      }
+
+      if (assessmentMap.size > 0) {
+        const assessments = Array.from(assessmentMap.values());
         localStorage.setItem(LOCAL_ASSESSMENTS_KEY, JSON.stringify(assessments));
         return assessments;
       }

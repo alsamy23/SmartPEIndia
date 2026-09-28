@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   AlertCircle,
   User,
+  Users,
   UploadCloud,
   FileText,
   Sparkles,
@@ -32,7 +33,12 @@ import {
   School,
   Trophy,
   Camera,
-  X
+  X,
+  Building,
+  Award,
+  Calendar,
+  Download,
+  ShieldCheck
 } from 'lucide-react';
 import Logo from './Logo.tsx';
 import { toast } from '../services/toast.ts';
@@ -42,6 +48,7 @@ import { fitnessService, SchoolMember } from '../services/fitnessService.ts';
 import { isBrandSuperAdmin } from '../types';
 import { auth, db } from '../services/firebase.ts';
 import { SEOConfig, DEFAULT_SEO_CONFIG, loadSEOConfig, saveSEOConfig, RouteSEOOverride } from '../services/seoService.ts';
+import { DataPrivacyTab } from './privacy/DataPrivacyTab.tsx';
 
 const SchoolAdmin: React.FC = () => {
   const [members, setMembers] = useState<SchoolMember[]>([]);
@@ -58,12 +65,19 @@ const SchoolAdmin: React.FC = () => {
   const [allSchools, setAllSchools] = useState<any[]>([]);
 
   // Tab & Timetable Doc Ingest States
-  const [activeAdminTab, setActiveAdminTab] = useState<'profile' | 'access' | 'ocr' | 'seo'>('profile');
+  const [activeAdminTab, setActiveAdminTab] = useState<'profile' | 'access' | 'ocr' | 'seo' | 'directory' | 'privacy'>('profile');
   const [currentSchool, setCurrentSchool] = useState<any>(null);
   const [schoolNameInput, setSchoolNameInput] = useState<string>(() => localStorage.getItem('smartpe_school_name') || '');
   const [schoolLogoInput, setSchoolLogoInput] = useState<string>(() => localStorage.getItem('smartpe_school_logo') || '');
   const [schoolAddressInput, setSchoolAddressInput] = useState<string>('');
   const [savingBranding, setSavingBranding] = useState<boolean>(false);
+
+  // Super Admin Directory States
+  const [registeredUsers, setRegisteredUsers] = useState<any[]>([]);
+  const [academicPrograms, setAcademicPrograms] = useState<any[]>([]);
+  const [userSearchQuery, setUserSearchQuery] = useState<string>('');
+  const [userTypeFilter, setUserTypeFilter] = useState<'all' | 'school' | 'academy' | 'personal'>('all');
+  const [loadingDirectory, setLoadingDirectory] = useState<boolean>(false);
 
   // Camera Capture States for School Logo
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -105,8 +119,15 @@ const SchoolAdmin: React.FC = () => {
 
         let currentSchoolId = '';
         if (isSuperAdmin) {
-          const schools = await fitnessService.getAllSchools();
+          const [schools, usersList, progsList] = await Promise.all([
+            fitnessService.getAllSchools(),
+            fitnessService.getAllRegisteredUsers(),
+            fitnessService.getAllAcademicPrograms()
+          ]);
           setAllSchools(schools);
+          setRegisteredUsers(usersList);
+          setAcademicPrograms(progsList);
+
           if (schools.length > 0) {
             currentSchoolId = schools[0].id;
             const schoolMembers = await fitnessService.getSchoolMembers(schools[0].id);
@@ -827,6 +848,30 @@ Friday Period 3: Grade 7B - Fitness`;
           <Globe size={14} />
           <span>SEO Configuration</span>
         </button>
+        <button
+          onClick={() => {
+            setActiveAdminTab('privacy');
+            setError(null);
+            setSuccess(null);
+          }}
+          className={`pb-4 px-8 text-xs font-black uppercase tracking-widest border-b-4 -mb-[4px] transition-all flex items-center gap-2 whitespace-nowrap ${activeAdminTab === 'privacy' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+        >
+          <ShieldCheck size={14} />
+          <span>Data & Privacy</span>
+        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={() => {
+              setActiveAdminTab('directory');
+              setError(null);
+              setSuccess(null);
+            }}
+            className={`pb-4 px-8 text-xs font-black uppercase tracking-widest border-b-4 -mb-[4px] transition-all flex items-center gap-2 whitespace-nowrap ${activeAdminTab === 'directory' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+          >
+            <Users size={14} />
+            <span>User & Club Registry ({registeredUsers.length})</span>
+          </button>
+        )}
       </div>
 
       {success && (
@@ -2089,6 +2134,327 @@ Friday Period 3: Grade 7B - Fitness`;
             </div>
           </div>
         </div>
+      )}
+
+      {isSuperAdmin && activeAdminTab === 'directory' && (
+        /* Super Admin Platform User & Club Registry */
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {/* Header Banner & Stats */}
+          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border-2 border-slate-900 p-8 rounded-[2.5rem] text-white shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] relative overflow-hidden">
+            <div className="relative z-10 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <span className="inline-flex px-3 py-1 border border-emerald-400/40 bg-emerald-950/80 text-emerald-300 rounded-lg text-[9px] font-black uppercase tracking-widest mb-2">
+                    Super Admin Global User & Club Directory
+                  </span>
+                  <h3 className="text-3xl font-black uppercase tracking-tighter">
+                    Registered Users & Sports Academy Overview
+                  </h3>
+                  <p className="text-slate-400 text-xs max-w-2xl mt-1">
+                    Live platform-wide directory of all verified accounts, schools, sports clubs, and independent coaching setups.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={async () => {
+                      setLoadingDirectory(true);
+                      try {
+                        const [usersList, progsList, schoolsList] = await Promise.all([
+                          fitnessService.getAllRegisteredUsers(),
+                          fitnessService.getAllAcademicPrograms(),
+                          fitnessService.getAllSchools()
+                        ]);
+                        setRegisteredUsers(usersList);
+                        setAcademicPrograms(progsList);
+                        setAllSchools(schoolsList);
+                        toast.success("Live registry refreshed from Firestore!");
+                      } catch (e) {
+                        toast.error("Failed to refresh user registry.");
+                      } finally {
+                        setLoadingDirectory(false);
+                      }
+                    }}
+                    disabled={loadingDirectory}
+                    className="px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <RefreshCw size={14} className={loadingDirectory ? 'animate-spin' : ''} />
+                    <span>Refresh</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (registeredUsers.length === 0) return;
+                      const csvHeader = "UID,Name,Email,Role,Workspace,Organization,RegisteredAt\n";
+                      const rows = registeredUsers.map(u => {
+                        const org = u.schoolName || u.academyName || (u.workspaceType === 'academy' ? 'Sports Academy' : 'School');
+                        return `"${u.uid || ''}","${u.displayName || ''}","${u.email || ''}","${u.role || 'teacher'}","${u.workspaceType || 'school'}","${org}","${u.registrationDate || u.createdAt || ''}"`;
+                      }).join('\n');
+                      const blob = new Blob([csvHeader + rows], { type: 'text/csv;charset=utf-8;' });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.setAttribute('href', url);
+                      link.setAttribute('download', `smartpe_registered_users_${new Date().toISOString().split('T')[0]}.csv`);
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      toast.success("User directory exported to CSV!");
+                    }}
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    <Download size={14} />
+                    <span>Export CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Metric Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-white/10">
+                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Users</span>
+                    <Users size={16} className="text-emerald-400" />
+                  </div>
+                  <div className="text-2xl font-black text-white mt-1">{registeredUsers.length}</div>
+                  <span className="text-[10px] text-emerald-400 font-bold">Registered Accounts</span>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Schools</span>
+                    <Building size={16} className="text-indigo-400" />
+                  </div>
+                  <div className="text-2xl font-black text-white mt-1">{allSchools.length}</div>
+                  <span className="text-[10px] text-indigo-400 font-bold">School Networks</span>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Clubs / Academies</span>
+                    <Trophy size={16} className="text-amber-400" />
+                  </div>
+                  <div className="text-2xl font-black text-white mt-1">{academicPrograms.length}</div>
+                  <span className="text-[10px] text-amber-400 font-bold">Coaching Programs</span>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Super Admin</span>
+                    <Shield size={16} className="text-rose-400" />
+                  </div>
+                  <div className="text-sm font-black text-white mt-2 truncate">{auth.currentUser?.email || 'Super Admin'}</div>
+                  <span className="text-[10px] text-rose-400 font-bold">Full Oversight Active</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Filter & Search Bar */}
+          <div className="bg-white border-2 border-slate-900 p-6 rounded-[2rem] shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              {/* Search Bar */}
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search by user name, email, school/club name, or UID..."
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-slate-50 border-2 border-slate-200 focus:border-indigo-600 rounded-xl font-bold text-sm outline-none transition-all"
+                />
+                {userSearchQuery && (
+                  <button
+                    onClick={() => setUserSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+
+              {/* Type Filter Pills */}
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { key: 'all', label: `All Users (${registeredUsers.length})` },
+                  { key: 'school', label: `School (${registeredUsers.filter(u => u.workspaceType !== 'academy').length})` },
+                  { key: 'academy', label: `Academy / Club (${registeredUsers.filter(u => u.workspaceType === 'academy').length})` }
+                ].map(filter => (
+                  <button
+                    key={filter.key}
+                    onClick={() => setUserTypeFilter(filter.key as any)}
+                    className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all border ${
+                      userTypeFilter === filter.key
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Users Directory Table */}
+            <div className="overflow-x-auto rounded-2xl border-2 border-slate-900">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest border-b-2 border-slate-900">
+                    <th className="p-4">User</th>
+                    <th className="p-4">Email</th>
+                    <th className="p-4">Account Type</th>
+                    <th className="p-4">School / Club Name</th>
+                    <th className="p-4">Role</th>
+                    <th className="p-4">Registered Date</th>
+                    <th className="p-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-xs font-bold text-slate-700 bg-white">
+                  {registeredUsers
+                    .filter(u => {
+                      if (userTypeFilter === 'school') return u.workspaceType !== 'academy';
+                      if (userTypeFilter === 'academy') return u.workspaceType === 'academy';
+                      return true;
+                    })
+                    .filter(u => {
+                      if (!userSearchQuery.trim()) return true;
+                      const q = userSearchQuery.toLowerCase();
+                      const name = (u.displayName || '').toLowerCase();
+                      const email = (u.email || '').toLowerCase();
+                      const org = (u.schoolName || u.academyName || '').toLowerCase();
+                      const uid = (u.uid || '').toLowerCase();
+                      return name.includes(q) || email.includes(q) || org.includes(q) || uid.includes(q);
+                    })
+                    .map((user, idx) => {
+                      const isAcademy = user.workspaceType === 'academy';
+                      const orgName = user.schoolName || user.academyName || (isAcademy ? 'Sports Academy Club' : 'Independent PE Teacher');
+                      const regDate = user.registrationDate || user.createdAt;
+                      const formattedDate = regDate ? new Date(regDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Earlier User';
+
+                      return (
+                        <tr key={user.uid || idx} className="hover:bg-indigo-50/50 transition-colors">
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs text-white uppercase shadow-sm ${
+                                isAcademy ? 'bg-amber-600' : 'bg-indigo-600'
+                              }`}>
+                                {(user.displayName || user.email || 'U').charAt(0)}
+                              </div>
+                              <div>
+                                <div className="font-black text-slate-900">{user.displayName || 'Registered User'}</div>
+                                <div className="text-[10px] text-slate-400 font-mono select-all truncate max-w-[140px]">{user.uid}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4 font-mono text-xs select-all text-slate-600">
+                            {user.email || '—'}
+                          </td>
+                          <td className="p-4">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${
+                              isAcademy 
+                                ? 'bg-amber-50 border-amber-300 text-amber-800' 
+                                : 'bg-indigo-50 border-indigo-300 text-indigo-800'
+                            }`}>
+                              {isAcademy ? <Trophy size={10} /> : <School size={10} />}
+                              <span>{isAcademy ? 'Sports Club' : 'School PE'}</span>
+                            </span>
+                          </td>
+                          <td className="p-4 font-black text-slate-800">
+                            {orgName}
+                          </td>
+                          <td className="p-4">
+                            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${
+                              user.role === 'admin' 
+                                ? 'bg-purple-100 text-purple-800' 
+                                : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              {user.role || 'teacher'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-slate-500 text-[11px]">
+                            {formattedDate}
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(user.uid || '');
+                                  toast.success(`Copied UID: ${user.uid}`);
+                                }}
+                                title="Copy User ID"
+                                className="p-1.5 hover:bg-slate-100 text-slate-500 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Copy size={14} />
+                              </button>
+                              {user.email && (
+                                <a
+                                  href={`mailto:${user.email}`}
+                                  title={`Email ${user.displayName || user.email}`}
+                                  className="p-1.5 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors"
+                                >
+                                  <Mail size={14} />
+                                </a>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+
+              {registeredUsers.length === 0 && (
+                <div className="p-12 text-center text-slate-400 space-y-2">
+                  <Users size={36} className="mx-auto text-slate-300" />
+                  <p className="font-bold text-sm">No registered users loaded in the directory yet.</p>
+                  <p className="text-xs">Click the Refresh button above to load live accounts.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Academic Clubs & Programs Section */}
+          {academicPrograms.length > 0 && (
+            <div className="bg-white border-2 border-slate-900 p-6 rounded-[2rem] shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-black text-lg text-slate-900 uppercase tracking-tight">
+                    Registered Sports Clubs & Academic Programs ({academicPrograms.length})
+                  </h4>
+                  <p className="text-xs text-slate-500">All registered athletic academies and club programs platform-wide.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {academicPrograms.map(prog => (
+                  <div key={prog.id} className="p-5 border-2 border-slate-200 hover:border-slate-900 rounded-2xl transition-all bg-slate-50 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                        {prog.sport || 'Multi-Sport'}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">Code: {prog.inviteCode || '—'}</span>
+                    </div>
+                    <div>
+                      <h5 className="font-black text-slate-900 text-base">{prog.programName}</h5>
+                      <p className="text-xs text-slate-500">Head Coach: {prog.headCoachName || prog.adminEmail || 'Coach'}</p>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                      <span>Coaches: {prog.coachNames?.length || prog.coachEmails?.length || 1}</span>
+                      <span>Created: {prog.createdAt ? new Date(prog.createdAt).toLocaleDateString() : '—'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeAdminTab === 'privacy' && (
+        <DataPrivacyTab
+          schoolId={userProfile?.schoolId || (isSuperAdmin && allSchools.length > 0 ? allSchools[0].id : '') || auth.currentUser?.uid || 'default'}
+          schoolName={schoolNameInput || userProfile?.schoolName || 'Partner Educational Institution'}
+          isAdmin={userProfile?.role === 'admin' || isSuperAdmin}
+        />
       )}
 
       {/* Add Member Modal */}

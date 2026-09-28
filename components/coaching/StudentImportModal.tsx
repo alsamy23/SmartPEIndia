@@ -25,10 +25,11 @@ import {
   getAgeCategoryColor,
   AGE_CATEGORY_BENCHMARKS
 } from '../../services/academyService';
-import { fitnessService } from '../../services/fitnessService';
+import { fitnessService, SchoolMember } from '../../services/fitnessService';
 import { offlineCacheService } from '../../services/offlineCacheService';
 import { Student } from '../../types';
 import { showToast } from '../../services/toast';
+import { auth } from '../../services/firebase';
 
 interface StudentImportModalProps {
   isOpen: boolean;
@@ -90,7 +91,13 @@ export const StudentImportModal: React.FC<StudentImportModalProps> = ({
       setIsLoadingStudents(true);
       try {
         const cached = offlineCacheService.getStudentsFromOfflineCache();
-        let list = await fitnessService.getStudents('all_teachers', undefined, true);
+        const currentUid = auth.currentUser?.uid;
+        let member: SchoolMember | null = null;
+        if (currentUid) {
+          member = await fitnessService.getSchoolMember(currentUid);
+        }
+        const effectiveSchoolId = member?.schoolId || (currentUid ? `personal_${currentUid}` : undefined);
+        let list = await fitnessService.getStudents(currentUid || 'teacher', effectiveSchoolId, member?.role === 'admin');
         if ((!list || list.length === 0) && cached && cached.length > 0) {
           list = cached;
         }

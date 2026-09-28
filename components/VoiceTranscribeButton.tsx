@@ -164,8 +164,8 @@ export const VoiceTranscribeButton: React.FC<VoiceTranscribeButtonProps> = ({
 
     try {
       const { blob, mimeType } = await transcriptionService.stopRecording();
-      if (blob.size < 500) {
-        showToast('Recording too short. Please hold mic and speak.', 'warning');
+      if (blob.size < 60) {
+        showToast('Recording too short. Please speak clearly into the microphone.', 'warning');
         setIsTranscribing(false);
         return;
       }

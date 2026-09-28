@@ -1,3 +1,5 @@
+import { auth } from './firebase';
+
 /**
  * Dedicated Voice Audio Transcription Service using model gemini-3.5-transcribe
  */
@@ -166,6 +168,13 @@ export class TranscriptionService {
       };
 
       if (this.mediaRecorder.state !== 'inactive') {
+        try {
+          if (typeof this.mediaRecorder.requestData === 'function') {
+            this.mediaRecorder.requestData();
+          }
+        } catch (e) {
+          // ignore
+        }
         this.mediaRecorder.stop();
       }
     });
@@ -278,11 +287,21 @@ export class TranscriptionService {
       mimeType = audioSource.type || mimeType;
     }
 
+    let headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (auth.currentUser) {
+      try {
+        const idToken = await auth.currentUser.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      } catch (tokenErr) {
+        console.warn('Could not retrieve Firebase ID token for transcription:', tokenErr);
+      }
+    }
+
     const response = await fetch('/api/ai/transcribe', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         audioBase64: base64Audio,
         mimeType: mimeType.split(';')[0], // Extract clean mime type

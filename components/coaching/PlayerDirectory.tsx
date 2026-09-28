@@ -61,6 +61,17 @@ export const PlayerDirectory: React.FC<PlayerDirectoryProps> = ({
   const [batchFilter, setBatchFilter] = useState<string>('all');
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(new Set());
 
+  // In-App Deletion Confirmation Modal State
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    type: 'single' | 'bulk' | 'dummy' | 'sport';
+    playerId?: string;
+    playerName?: string;
+    count?: number;
+    sportId?: CoachingSportId;
+    sportName?: string;
+  }>({ isOpen: false, type: 'single' });
+
   // Add / Edit Modal State
   const [isAddEditOpen, setIsAddEditOpen] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<PlayerProfileData | null>(null);
@@ -259,20 +270,24 @@ export const PlayerDirectory: React.FC<PlayerDirectoryProps> = ({
     showToast(`Player profile for ${newRecord.name} saved successfully! (${finalSkills.length} skills set)`, 'success');
   };
 
+  const hasDummyStudents = useMemo(() => {
+    return players.some(p => 
+      p.id.startsWith('player-fb-') || 
+      p.id.startsWith('player-bb-') || 
+      p.id.startsWith('player-cr-') || 
+      p.id.startsWith('player-ch-') || 
+      p.id.startsWith('player-bd-') ||
+      ['Aarav Sharma', 'Diya Patel', 'Rohan Deshmukh', 'Sameer Verma', 'Ananya Iyer', 'Karan Mehra'].includes(p.name)
+    );
+  }, [players]);
+
   const handleDeletePlayer = (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to remove player ${name}?`)) {
-      academyService.deletePlayer(id);
-      setSelectedPlayerIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-      refreshPlayers();
-      if (profilePlayer?.id === id) {
-        setProfilePlayer(null);
-      }
-      showToast('Player removed', 'success');
-    }
+    setDeleteConfirm({
+      isOpen: true,
+      type: 'single',
+      playerId: id,
+      playerName: name
+    });
   };
 
   const handleToggleSelect = (id: string) => {
@@ -294,24 +309,72 @@ export const PlayerDirectory: React.FC<PlayerDirectoryProps> = ({
 
   const handleBulkDelete = () => {
     if (selectedPlayerIds.size === 0) return;
-    const count = selectedPlayerIds.size;
-    if (window.confirm(`Are you sure you want to delete ${count} selected player(s)?`)) {
-      const deletedCount = academyService.deletePlayersBulk(Array.from(selectedPlayerIds));
-      setSelectedPlayerIds(new Set());
-      refreshPlayers();
-      showToast(`Deleted ${deletedCount} player profiles!`, 'success');
-    }
+    setDeleteConfirm({
+      isOpen: true,
+      type: 'bulk',
+      count: selectedPlayerIds.size
+    });
   };
 
   const handleDeleteSportBatch = (sport: CoachingSportId, sportName: string) => {
     const sportAthletes = players.filter(p => p.sport === sport);
     if (sportAthletes.length === 0) return;
-    if (window.confirm(`Are you sure you want to delete ALL ${sportAthletes.length} players enrolled in ${sportName}?`)) {
-      const count = academyService.deletePlayersBySport(sport);
+    setDeleteConfirm({
+      isOpen: true,
+      type: 'sport',
+      sportId: sport,
+      sportName: sportName,
+      count: sportAthletes.length
+    });
+  };
+
+  const handlePromptClearDummy = () => {
+    const dummyCount = players.filter(p => 
+      p.id.startsWith('player-fb-') || 
+      p.id.startsWith('player-bb-') || 
+      p.id.startsWith('player-cr-') || 
+      p.id.startsWith('player-ch-') || 
+      p.id.startsWith('player-bd-') ||
+      ['Aarav Sharma', 'Diya Patel', 'Rohan Deshmukh', 'Sameer Verma', 'Ananya Iyer', 'Karan Mehra'].includes(p.name)
+    ).length;
+
+    setDeleteConfirm({
+      isOpen: true,
+      type: 'dummy',
+      count: dummyCount || 6
+    });
+  };
+
+  const handleExecuteDelete = () => {
+    if (deleteConfirm.type === 'single' && deleteConfirm.playerId) {
+      academyService.deletePlayer(deleteConfirm.playerId);
+      setSelectedPlayerIds(prev => {
+        const next = new Set(prev);
+        next.delete(deleteConfirm.playerId!);
+        return next;
+      });
+      refreshPlayers();
+      if (profilePlayer?.id === deleteConfirm.playerId) {
+        setProfilePlayer(null);
+      }
+      showToast(`Removed student ${deleteConfirm.playerName || ''}`, 'success');
+    } else if (deleteConfirm.type === 'bulk') {
+      const deletedCount = academyService.deletePlayersBulk(Array.from(selectedPlayerIds));
       setSelectedPlayerIds(new Set());
       refreshPlayers();
-      showToast(`Deleted all ${count} players from ${sportName}`, 'info');
+      showToast(`Deleted ${deletedCount} student profile(s)!`, 'success');
+    } else if (deleteConfirm.type === 'dummy') {
+      const deletedCount = academyService.clearDummyPlayers();
+      setSelectedPlayerIds(new Set());
+      refreshPlayers();
+      showToast(`Cleared ${deletedCount} demo student(s)! Roster is ready for your real students.`, 'success');
+    } else if (deleteConfirm.type === 'sport' && deleteConfirm.sportId) {
+      const count = academyService.deletePlayersBySport(deleteConfirm.sportId);
+      setSelectedPlayerIds(new Set());
+      refreshPlayers();
+      showToast(`Deleted all ${count} student(s) from ${deleteConfirm.sportName || ''}`, 'info');
     }
+    setDeleteConfirm({ isOpen: false, type: 'single' });
   };
 
   // Profile data for active player modal
@@ -484,6 +547,19 @@ export const PlayerDirectory: React.FC<PlayerDirectoryProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* Quick Clear Dummy Students Button */}
+          {hasDummyStudents && (
+            <button
+              type="button"
+              onClick={handlePromptClearDummy}
+              className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border-2 border-rose-300 rounded-xl text-[11px] font-black uppercase tracking-wider transition flex items-center space-x-1.5 shadow-sm active:scale-95"
+              title="Delete all pre-seeded dummy students (Aarav, Diya, Rohan, etc.)"
+            >
+              <Trash2 size={13} className="text-rose-600" />
+              <span>Delete Dummy Students</span>
+            </button>
+          )}
+
           {/* Delete Sport Batch Button if specific sport filter is active */}
           {sportFilter !== 'all' && (
             <button
@@ -1303,6 +1379,56 @@ export const PlayerDirectory: React.FC<PlayerDirectoryProps> = ({
           }}
           title={modalMode === 'form' ? 'Choose Skills for this Student' : `Configure Skills for ${skillConfigAthlete?.name}`}
         />
+      )}
+
+      {/* In-App Deletion Confirmation Modal (Safe for Iframes & Sandboxes) */}
+      {deleteConfirm.isOpen && (
+        <div className="fixed inset-0 z-[400] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white border-4 border-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-start space-x-3 text-rose-600">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 border-2 border-rose-300 flex items-center justify-center shrink-0">
+                <Trash2 size={24} className="text-rose-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-black uppercase tracking-tight text-slate-900">
+                  {deleteConfirm.type === 'dummy' ? 'Delete All Dummy Students?' :
+                   deleteConfirm.type === 'bulk' ? `Delete ${deleteConfirm.count || selectedPlayerIds.size} Selected Students?` :
+                   deleteConfirm.type === 'sport' ? `Delete ${deleteConfirm.sportName} Batch?` :
+                   `Delete ${deleteConfirm.playerName || 'Student'}?`}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">Permanent removal from academy workspace</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed font-medium">
+              {deleteConfirm.type === 'dummy'
+                ? `Are you sure you want to delete all demo dummy students (${deleteConfirm.count || 6} students: Aarav Sharma, Diya Patel, Rohan Deshmukh, Sameer Verma, Ananya Iyer, and Karan Mehra)? This will clean your coaching roster so you can add your own real school students.`
+                : deleteConfirm.type === 'bulk'
+                ? `Are you sure you want to permanently delete ${deleteConfirm.count || selectedPlayerIds.size} selected student profiles?`
+                : deleteConfirm.type === 'sport'
+                ? `Are you sure you want to delete all ${deleteConfirm.count} student(s) enrolled in ${deleteConfirm.sportName}?`
+                : `Are you sure you want to remove ${deleteConfirm.playerName} from the coaching roster?`}
+            </p>
+
+            <div className="flex items-center justify-end space-x-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm({ isOpen: false, type: 'single' })}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteDelete}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-md transition active:scale-95 flex items-center space-x-1.5"
+              >
+                <Trash2 size={14} />
+                <span>Confirm Delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

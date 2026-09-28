@@ -1,5 +1,6 @@
 
 import { BoardType, LessonPlan, YearlyPlan, TheoryContent, Language, FitnessAssessment, BiomechanicsConcept, TestPaper } from "../types.ts";
+import { auth } from "./firebase.ts";
 
 const callAIBase = async (payload: any, retries = 2) => {
   // Check for internet connection first
@@ -29,9 +30,19 @@ const callAIBase = async (payload: any, retries = 2) => {
   const timeoutId = setTimeout(() => controller.abort(), 90000); 
   
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (auth.currentUser) {
+      try {
+        const idToken = await auth.currentUser.getIdToken();
+        headers["Authorization"] = `Bearer ${idToken}`;
+      } catch (tokenErr) {
+        console.warn("Could not retrieve Firebase ID token:", tokenErr);
+      }
+    }
+
     const response = await fetch(`/api/ai/generate?t=${Date.now()}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(payload),
       signal: controller.signal
     });

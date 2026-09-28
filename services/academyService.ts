@@ -1324,7 +1324,8 @@ class AcademyService {
   // --- Players / Athletes ---
   getPlayers(): PlayerProfileData[] {
     const raw = getLocalData<PlayerProfileData[]>(PLAYERS_KEY);
-    if (!raw || raw.length === 0) {
+    // Only seed initial players if storage key has NEVER been set (null)
+    if (raw === null) {
       setLocalData(PLAYERS_KEY, SEED_PLAYERS);
       return SEED_PLAYERS;
     }
@@ -1400,6 +1401,40 @@ class AcademyService {
     const existing = this.getPlayers();
     const toDelete = existing.filter(p => p.sport === sport).map(p => p.id);
     return this.deletePlayersBulk(toDelete);
+  }
+
+  /**
+   * Clears only pre-seeded dummy/demo students (Aarav Sharma, Diya Patel, etc.)
+   */
+  clearDummyPlayers(): number {
+    const dummyIds = new Set(SEED_PLAYERS.map(p => p.id));
+    const existing = this.getPlayers();
+    const remaining = existing.filter(p => 
+      !dummyIds.has(p.id) && 
+      !p.id.startsWith('player-fb-') && 
+      !p.id.startsWith('player-bb-') && 
+      !p.id.startsWith('player-cr-') && 
+      !p.id.startsWith('player-ch-') && 
+      !p.id.startsWith('player-bd-')
+    );
+    const deletedCount = existing.length - remaining.length;
+    setLocalData(PLAYERS_KEY, remaining);
+
+    const activeProgram = academicCoachingCloudService.getLocalProgram();
+    if (activeProgram?.id && dummyIds.size > 0) {
+      academicCoachingCloudService.deleteCloudAthletesBatch(Array.from(dummyIds)).catch(err => console.warn('Cloud batch athlete deletion error:', err));
+    }
+    return deletedCount;
+  }
+
+  /**
+   * Clears all players from local roster
+   */
+  clearAllPlayers(): number {
+    const existing = this.getPlayers();
+    const count = existing.length;
+    setLocalData(PLAYERS_KEY, []);
+    return count;
   }
 
   // --- Bulk Import Students from CSV/Excel or Paste List ---
@@ -1803,6 +1838,130 @@ class AcademyService {
     );
 
     return matched.length > 0 ? matched : template.drills.slice(0, 3);
+  }
+
+  /**
+   * Synchronizes academy players and assessments from Firebase Cloud Firestore
+   */
+  async syncFromCloud(programId?: string): Promise<{ players: PlayerProfileData[]; assessments: PlayerAssessmentRecord[] }> {
+    try {
+      let progId = programId;
+      if (!progId) {
+        const prog = await academicCoachingCloudService.getOrFetchProgramForCurrentUser();
+        progId = prog?.id;
+      }
+
+      if (!progId) {
+        return { players: this.getPlayers(), assessments: this.getAssessments() };
+      }
+
+      const [cloudAthletes, cloudAssessments] = await Promise.all([
+        academicCoachingCloudService.fetchCloudAthletes(progId),
+        academicCoachingCloudService.fetchCloudAssessments(progId)
+      ]);
+
+      if (cloudAthletes && cloudAthletes.length > 0) {
+        const nowIso = new Date().toISOString();
+        const convertedPlayers: PlayerProfileData[] = cloudAthletes.map(a => ({
+          id: a.id,
+          name: a.name,
+          dob: a.joiningDate || nowIso.split('T')[0],
+          age: a.age || 12,
+          gender: (a.gender as 'Male' | 'Female' | 'Other') || 'Male',
+          sport: (a.sport as CoachingSportId) || 'football',
+          position: a.squadOrBatch || 'All-Rounder',
+          batchOrTeam: a.squadOrBatch || 'Academy Squad',
+          coachName: 'Lead Coach',
+          joiningDate: a.joiningDate || nowIso.split('T')[0],
+          parentName: a.guardianName || '',
+          parentContact: a.guardianContact || '',
+          dominantSide: 'Right',
+          previousExperience: 'Grassroots',
+          playerGoals: 'Skill Mastery',
+          medicalNotes: a.notes || '',
+          feeStatus: 'Paid',
+          createdAt: a.joiningDate || nowIso,
+          active: true
+        }));
+
+        // Filter out dummy/mock seed players
+        const localPlayers = this.getPlayers().filter(p => 
+          !SEED_PLAYERS.some(sp => sp.id === p.id) &&
+          !p.id.startsWith('player-fb-') && 
+          !p.id.startsWith('player-bb-') && 
+          !p.id.startsWith('player-cr-') && 
+          !p.id.startsWith('player-ch-') && 
+          !p.id.startsWith('player-bd-')
+        );
+
+        const map = new Map<string, PlayerProfileData>();
+        convertedPlayers.forEach(p => map.set(p.id, p));
+        localPlayers.forEach(p => {
+          if (!map.has(p.id)) map.set(p.id, p);
+        });
+
+        const merged = Array.from(map.values());
+        setLocalData(PLAYERS_KEY, merged);
+      }
+
+      if (cloudAssessments && cloudAssessments.length > 0) {
+        const convertedAssessments: PlayerAssessmentRecord[] = cloudAssessments.map((a: any) => {
+          const overall = typeof a.overallScore === 'number' ? a.overallScore : 75;
+          let level: DevelopmentLevel = 'Proficient';
+          if (overall < 40) level = 'Beginning';
+          else if (overall < 60) level = 'Developing';
+          else if (overall < 75) level = 'Progressing';
+          else if (overall < 90) level = 'Proficient';
+          else level = 'Advanced';
+
+          const assessmentDate = a.testDate || a.assessmentDate || new Date().toISOString().split('T')[0];
+
+          return {
+            id: a.id,
+            playerId: a.athleteId || a.playerId || 'athlete',
+            playerName: a.athleteName || a.playerName || 'Athlete',
+            sport: (a.sportId || a.sport || 'football') as CoachingSportId,
+            position: a.position || 'General',
+            assessmentType: 'Monthly Review',
+            assessmentDate,
+            coachName: a.coachName || a.evaluatorCoach || 'Coach',
+            skillRatings: a.scores || a.skillRatings || {},
+            skillObservations: {},
+            skillTargets: {},
+            includedPositionSkills: [],
+            domainScores: {
+              technical: a.pillarAverages?.technical || overall,
+              tactical: a.pillarAverages?.tactical || overall,
+              physical: a.pillarAverages?.physical || overall,
+              gameBehaviour: a.pillarAverages?.mental || overall
+            },
+            overallScore: overall,
+            developmentLevel: level,
+            strengths: a.strengths || [],
+            developmentPriorities: a.growthAreas || [],
+            coachObservation: a.coachFeedback || a.coachObservation || '',
+            coachRecommendation: '',
+            nextGoals: [],
+            nextAssessmentDate: '',
+            createdAt: a.updatedAt || assessmentDate
+          };
+        });
+
+        const localAssessments = this.getAssessments();
+        const map = new Map<string, PlayerAssessmentRecord>();
+        convertedAssessments.forEach(a => map.set(a.id, a));
+        localAssessments.forEach(a => {
+          if (!map.has(a.id)) map.set(a.id, a);
+        });
+
+        const merged = Array.from(map.values());
+        setLocalData(ASSESSMENTS_KEY, merged);
+      }
+    } catch (err) {
+      console.warn('Error syncing academy data from cloud:', err);
+    }
+
+    return { players: this.getPlayers(), assessments: this.getAssessments() };
   }
 }
 

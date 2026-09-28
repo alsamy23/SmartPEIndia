@@ -24,16 +24,17 @@ service cloud.firestore {
       return isAuthenticated() && (request.auth.uid == userId || isSuperAdmin());
     }
 
+    // Explicit School Membership Verification
+    // Checks direct school admin, schoolMembers mapping, or personal teacher workspace
     function isSchoolMember(schoolId) {
       return isAuthenticated() && (
         isSuperAdmin() ||
         schoolId == null ||
         schoolId == '' ||
-        schoolId == 'master_registry' ||
+        schoolId == 'default' ||
+        schoolId == request.auth.uid ||
         schoolId == 'personal_' + request.auth.uid ||
         schoolId == 'school_' + request.auth.uid ||
-        (schoolId is string && schoolId.matches('^personal_.*')) ||
-        (schoolId is string && schoolId.matches('^school_.*')) ||
         (exists(/databases/$(database)/documents/schools/$(schoolId)) && 
          get(/databases/$(database)/documents/schools/$(schoolId)).data.adminId == request.auth.uid) ||
         (exists(/databases/$(database)/documents/schoolMembers/$(request.auth.uid)) && 
@@ -41,11 +42,15 @@ service cloud.firestore {
       );
     }
 
+    // Explicit School Admin Verification
     function isSchoolAdmin(schoolId) {
       return isAuthenticated() && (
         isSuperAdmin() ||
-        schoolId == 'school_' + request.auth.uid ||
+        schoolId == null ||
+        schoolId == '' ||
+        schoolId == request.auth.uid ||
         schoolId == 'personal_' + request.auth.uid ||
+        schoolId == 'school_' + request.auth.uid ||
         (exists(/databases/$(database)/documents/schools/$(schoolId)) && 
          get(/databases/$(database)/documents/schools/$(schoolId)).data.adminId == request.auth.uid) ||
         (exists(/databases/$(database)/documents/schoolMembers/$(request.auth.uid)) && 
@@ -54,97 +59,324 @@ service cloud.firestore {
       );
     }
 
+    // Explicit Academy / Coaching Program Membership Verification
+    function isAcademyMember(programId) {
+      return isAuthenticated() && (
+        isSuperAdmin() ||
+        programId == null ||
+        programId == '' ||
+        (exists(/databases/$(database)/documents/academic_programs/$(programId)) && (
+          get(/databases/$(database)/documents/academic_programs/$(programId)).data.headCoachId == request.auth.uid ||
+          (request.auth.uid in get(/databases/$(database)/documents/academic_programs/$(programId)).data.coachUids) ||
+          (request.auth.token.email != null && request.auth.token.email in get(/databases/$(database)/documents/academic_programs/$(programId)).data.coachEmails)
+        ))
+      );
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
 
+    // 1. User Profiles: Own user record or Super Admin
     match /users/{uid} {
-      allow read: if true;
+      allow read: if isAuthenticated() && (isOwner(uid) || isSuperAdmin());
       allow create, update: if isAuthenticated() && (isOwner(uid) || isSuperAdmin());
       allow delete: if isAuthenticated() && (isOwner(uid) || isSuperAdmin());
     }
 
+    // 2. Schools: Authorized school members or Super Admin
     match /schools/{schoolId} {
-      allow read: if true;
+      allow read: if isAuthenticated() && (isSchoolMember(schoolId) || isSuperAdmin());
       allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && (isSchoolAdmin(schoolId) || isSuperAdmin() || isSchoolMember(schoolId));
+      allow update, delete: if isAuthenticated() && (isSchoolAdmin(schoolId) || isSuperAdmin());
     }
 
+    // 3. School Members: Authenticated user self, school members of same school, or school admin
     match /schoolMembers/{uid} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated() && (isOwner(uid) || isSuperAdmin() || (resource != null && isSchoolAdmin(resource.data.schoolId)));
+      allow read: if isAuthenticated() && (
+        isOwner(uid) || 
+        isSuperAdmin() || 
+        (resource != null && isSchoolMember(resource.data.schoolId))
+      );
+      allow create: if isAuthenticated() && (
+        isOwner(uid) ||
+        (request.resource.data.schoolId != null && isSchoolAdmin(request.resource.data.schoolId)) ||
+        isSuperAdmin()
+      );
+      allow update: if isAuthenticated() && (
+        isOwner(uid) || 
+        isSuperAdmin() || 
+        (resource != null && isSchoolAdmin(resource.data.schoolId))
+      );
+      allow delete: if isAuthenticated() && (
+        isOwner(uid) || 
+        isSuperAdmin() || 
+        (resource != null && isSchoolAdmin(resource.data.schoolId))
+      );
     }
 
+    // 4. Students: Scoped to teacher/user or school or Super Admin
     match /students/{studentId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow create: if isAuthenticated() && (
+        isSuperAdmin() ||
+        request.resource.data.teacherId == request.auth.uid ||
+        request.resource.data.userId == request.auth.uid ||
+        isSchoolMember(request.resource.data.schoolId)
+      );
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
     }
 
+    // 5. Teams: Scoped to teacher/user or school or Super Admin
     match /teams/{teamId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow create: if isAuthenticated() && (
+        isSuperAdmin() ||
+        request.resource.data.teacherId == request.auth.uid ||
+        request.resource.data.userId == request.auth.uid ||
+        isSchoolMember(request.resource.data.schoolId)
+      );
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
     }
 
+    // 6. Fitness Test Results: Scoped to teacher/user or school or Super Admin
     match /results/{resultId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow create: if isAuthenticated() && (
+        isSuperAdmin() ||
+        request.resource.data.teacherId == request.auth.uid ||
+        request.resource.data.userId == request.auth.uid ||
+        isSchoolMember(request.resource.data.schoolId)
+      );
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
     }
 
+    // 7. Practical Assessments (CBSE Board 30M): Scoped to teacher/examiner or school or Super Admin
     match /practical_assessments/{assessmentId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.examinerUid == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow create: if isAuthenticated() && (
+        isSuperAdmin() ||
+        request.resource.data.teacherId == request.auth.uid ||
+        request.resource.data.examinerUid == request.auth.uid ||
+        isSchoolMember(request.resource.data.schoolId)
+      );
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.examinerUid == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.examinerUid == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
     }
 
+    // 8. Academic Coaching Programs: Head Coach, Cohort Coaches, Invite Code, or Super Admin
     match /academic_programs/{programId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.headCoachId == request.auth.uid ||
+        (request.auth.uid in resource.data.coachUids) ||
+        (request.auth.token.email != null && request.auth.token.email in resource.data.coachEmails) ||
+        (resource != null && resource.data.inviteCode != null) ||
+        isAcademyMember(programId)
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.headCoachId == request.auth.uid ||
+        (request.auth.uid in resource.data.coachUids) ||
+        isAcademyMember(programId) ||
+        request.resource.data.id == programId
+      );
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() || 
+        (resource != null && resource.data.headCoachId == request.auth.uid)
+      );
     }
 
+    // 9. Academic Athletes: Scoped to coach/creator or academy program or Super Admin
     match /academic_athletes/{athleteId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.createdByCoachId == request.auth.uid ||
+        resource.data.coachId == request.auth.uid ||
+        isAcademyMember(resource.data.programId)
+      );
+      allow create: if isAuthenticated() && (
+        isSuperAdmin() ||
+        request.resource.data.createdByCoachId == request.auth.uid ||
+        request.resource.data.coachId == request.auth.uid ||
+        isAcademyMember(request.resource.data.programId)
+      );
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.createdByCoachId == request.auth.uid ||
+        resource.data.coachId == request.auth.uid ||
+        isAcademyMember(resource.data.programId)
+      );
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.createdByCoachId == request.auth.uid ||
+        resource.data.coachId == request.auth.uid ||
+        isAcademyMember(resource.data.programId)
+      );
     }
 
+    // 10. Academic Assessments: Scoped to coach/creator or academy program or Super Admin
     match /academic_assessments/{assessmentId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.createdByCoachId == request.auth.uid ||
+        resource.data.coachId == request.auth.uid ||
+        isAcademyMember(resource.data.programId)
+      );
+      allow create: if isAuthenticated() && (
+        isSuperAdmin() ||
+        request.resource.data.createdByCoachId == request.auth.uid ||
+        request.resource.data.coachId == request.auth.uid ||
+        isAcademyMember(request.resource.data.programId)
+      );
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.createdByCoachId == request.auth.uid ||
+        resource.data.coachId == request.auth.uid ||
+        isAcademyMember(resource.data.programId)
+      );
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.createdByCoachId == request.auth.uid ||
+        resource.data.coachId == request.auth.uid ||
+        isAcademyMember(resource.data.programId)
+      );
     }
 
+    // 11. Workloads: Strictly scoped to caller's school or creator
+    match /workloads/{workloadId} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow create: if isAuthenticated() && (
+        isSuperAdmin() ||
+        request.resource.data.teacherId == request.auth.uid ||
+        isSchoolMember(request.resource.data.schoolId)
+      );
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+    }
+
+    // 12. Sports Days: Scoped to school or Super Admin
+    match /sportsDays/{schoolId} {
+      allow read: if isAuthenticated() && (isSchoolMember(schoolId) || isSuperAdmin());
+      allow create, update, delete: if isAuthenticated() && (isSchoolAdmin(schoolId) || isSuperAdmin());
+    }
+
+    // 13. System Logs: Only authenticated users can write error logs; read only by super admin
     match /system_logs/{logId} {
-      allow create: if true;
-      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow read: if isSuperAdmin();
       allow update, delete: if isSuperAdmin();
     }
 
-    match /workloads/{workloadId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+    // 14. Privacy Audit Logs: Authenticated users write sanitized security logs; read only by user, school admin, or super admin
+    match /privacy_audit_logs/{logId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isSchoolAdmin(resource.data.schoolId) ||
+        isSuperAdmin()
+      );
+      allow update, delete: if isSuperAdmin();
     }
 
+    // 15. School Deletion Requests: Verified school admins can submit; read by requester, school admin, or super admin
+    match /deletion_requests/{reqId} {
+      allow create: if isAuthenticated() && (
+        request.resource.data.requestedByUid == request.auth.uid &&
+        isSchoolAdmin(request.resource.data.schoolId)
+      );
+      allow read: if isAuthenticated() && (
+        resource.data.requestedByUid == request.auth.uid ||
+        isSchoolAdmin(resource.data.schoolId) ||
+        isSuperAdmin()
+      );
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // 16. Mail Logs: Super Admin only
     match /mail_logs/{logId} {
-      allow read: if isAuthenticated();
-      allow write: if isSuperAdmin();
+      allow read, write: if isSuperAdmin();
     }
 
-    match /sportsDays/{schoolId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
-    }
-
-    // Default catch-all
+    // 17. Default catch-all: Deny all by default unless super admin
     match /{document=**} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isSuperAdmin();
+      allow read, write: if isSuperAdmin();
     }
   }
 }

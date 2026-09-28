@@ -39,13 +39,15 @@ interface NurtureSequenceHubProps {
   userName?: string | null;
   schoolName?: string | null;
   registrationDate?: string | null;
+  onNavigateToBrevo?: () => void;
 }
 
 export const NurtureSequenceHub: React.FC<NurtureSequenceHubProps> = ({
   userEmail = 'teacher@school.edu.in',
   userName = 'Physical Education Educator',
   schoolName = 'Smart PE Partner School',
-  registrationDate
+  registrationDate,
+  onNavigateToBrevo
 }) => {
   const [selectedStep, setSelectedStep] = useState<1 | 2 | 3>(1);
   const [recipientEmail, setRecipientEmail] = useState(userEmail || '');
@@ -227,6 +229,14 @@ export const NurtureSequenceHub: React.FC<NurtureSequenceHubProps> = ({
             <p className="text-[11px] text-slate-300">
               {emailConfig?.fromEmail || 'welcome@smartpeindia.app'}
             </p>
+            {onNavigateToBrevo && (
+              <button
+                onClick={onNavigateToBrevo}
+                className="mt-1 text-[11px] font-bold text-[#D4A017] hover:text-white underline block mx-auto cursor-pointer"
+              >
+                ⚙️ Brevo Setup & Test
+              </button>
+            )}
           </div>
         </div>
       </div>

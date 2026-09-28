@@ -815,25 +815,194 @@ export const fitnessService = {
     }
   },
 
+  getAllRegisteredUsers: async (): Promise<any[]> => {
+    try {
+      const userMap = new Map<string, any>();
+
+      // 1. Fetch from 'users' collection
+      try {
+        const usersSnap = await getDocs(collection(db, 'users'));
+        usersSnap.docs.forEach(doc => {
+          const data = doc.data();
+          userMap.set(doc.id, { uid: doc.id, ...data });
+        });
+      } catch (e) {}
+
+      // 2. Fetch from 'schoolMembers' collection to supplement missing users or names
+      try {
+        const membersSnap = await getDocs(collection(db, 'schoolMembers'));
+        membersSnap.docs.forEach(doc => {
+          const data = doc.data();
+          const uid = data.uid || doc.id;
+          const existing = userMap.get(uid);
+          if (existing) {
+            if (!existing.displayName && data.displayName) existing.displayName = data.displayName;
+            if (!existing.email && data.email) existing.email = data.email;
+            if (!existing.schoolName && data.schoolName) existing.schoolName = data.schoolName;
+            if (!existing.role && data.role) existing.role = data.role;
+          } else {
+            userMap.set(uid, {
+              uid,
+              displayName: data.displayName || (data.email ? data.email.split('@')[0] : 'Educator'),
+              email: data.email || '',
+              schoolName: data.schoolName || 'School',
+              role: data.role || 'teacher',
+              workspaceType: 'school',
+              createdAt: data.createdAt || new Date().toISOString()
+            });
+          }
+        });
+      } catch (e) {}
+
+      // 3. Fetch from 'academic_programs' to supplement coaches whose records might not be in 'users'
+      try {
+        const progsSnap = await getDocs(collection(db, 'academic_programs'));
+        progsSnap.docs.forEach(doc => {
+          const prog = doc.data();
+          const progName = prog.programName || 'Sports Academy';
+
+          // Head coach
+          if (prog.headCoachId) {
+            const existing = userMap.get(prog.headCoachId);
+            if (existing) {
+              if (!existing.academyName) existing.academyName = progName;
+              if (existing.workspaceType !== 'school') existing.workspaceType = 'academy';
+            } else {
+              userMap.set(prog.headCoachId, {
+                uid: prog.headCoachId,
+                displayName: prog.headCoachName || (prog.adminEmail ? prog.adminEmail.split('@')[0] : 'Head Coach'),
+                email: prog.adminEmail || '',
+                academyName: progName,
+                role: 'admin',
+                workspaceType: 'academy',
+                createdAt: prog.createdAt || new Date().toISOString()
+              });
+            }
+          }
+
+          // Teachers list in academy
+          if (Array.isArray(prog.teachersList)) {
+            prog.teachersList.forEach((teacher: any, idx: number) => {
+              const email = (teacher.email || '').trim().toLowerCase();
+              if (email) {
+                let foundUid = '';
+                for (const [uid, u] of userMap.entries()) {
+                  if (u.email?.toLowerCase() === email) {
+                    foundUid = uid;
+                    if (!u.displayName || u.displayName === 'Registered User') {
+                      u.displayName = teacher.name || email.split('@')[0];
+                    }
+                    u.academyName = progName;
+                    break;
+                  }
+                }
+                if (!foundUid) {
+                  const syntheticUid = `coach_${prog.id}_${idx}`;
+                  userMap.set(syntheticUid, {
+                    uid: syntheticUid,
+                    displayName: teacher.name || email.split('@')[0],
+                    email,
+                    academyName: progName,
+                    role: teacher.role || 'coach',
+                    workspaceType: 'academy',
+                    createdAt: teacher.addedAt || prog.createdAt || new Date().toISOString()
+                  });
+                }
+              }
+            });
+          }
+
+          // Coach emails array
+          if (Array.isArray(prog.coachEmails)) {
+            prog.coachEmails.forEach((cEmail: string, idx: number) => {
+              const email = (cEmail || '').trim().toLowerCase();
+              if (email) {
+                let found = false;
+                for (const u of userMap.values()) {
+                  if (u.email?.toLowerCase() === email) {
+                    found = true;
+                    const cName = prog.coachNames?.[idx];
+                    if (cName && (!u.displayName || u.displayName === 'Registered User')) {
+                      u.displayName = cName;
+                    }
+                    break;
+                  }
+                }
+                if (!found) {
+                  const cName = prog.coachNames?.[idx] || email.split('@')[0];
+                  const cUid = prog.coachUids?.[idx] || `coach_${prog.id}_c_${idx}`;
+                  userMap.set(cUid, {
+                    uid: cUid,
+                    displayName: cName,
+                    email,
+                    academyName: progName,
+                    role: 'coach',
+                    workspaceType: 'academy',
+                    createdAt: prog.createdAt || new Date().toISOString()
+                  });
+                }
+              }
+            });
+          }
+        });
+      } catch (e) {}
+
+      // Clean up display names: if displayName is missing, infer from email
+      const result = Array.from(userMap.values()).map(u => ({
+        ...u,
+        displayName: u.displayName || (u.email ? u.email.split('@')[0] : 'Registered User')
+      }));
+
+      return result;
+    } catch (err) {
+      logError(err, 'error', { context: 'getAllRegisteredUsers failed' });
+      return [];
+    }
+  },
+
+  getAllAcademicPrograms: async (): Promise<any[]> => {
+    try {
+      const snapshot = await getDocs(collection(db, 'academic_programs'));
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (err) {
+      logError(err, 'error', { context: 'getAllAcademicPrograms failed' });
+      return [];
+    }
+  },
+
   getStudents: async (teacherId: string, schoolId?: string, isAdmin = false): Promise<Student[]> => {
     try {
-      let q;
       if (isBrandSuperAdmin(auth.currentUser?.email)) {
-        q = query(collection(db, 'students'));
-      } else if (schoolId) {
-        q = query(collection(db, 'students'), where('schoolId', '==', schoolId));
-      } else {
-        q = query(collection(db, 'students'), where('teacherId', '==', teacherId));
+        const snapshot = await getDocs(collection(db, 'students'));
+        const data = snapshot.docs.map((doc: any) => doc.data() as Student);
+        offlineCacheService.saveStudentsToOfflineCache(data);
+        return data;
       }
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map((doc: any) => doc.data() as Student);
+
+      let data: Student[] = [];
+      const effectiveSchoolId = schoolId || (teacherId ? `personal_${teacherId}` : undefined);
       
-      // Cache fetched students locally
-      offlineCacheService.saveStudentsToOfflineCache(data);
-      return data;
+      if (effectiveSchoolId) {
+        const qSchool = query(collection(db, 'students'), where('schoolId', '==', effectiveSchoolId));
+        const snapSchool = await getDocs(qSchool);
+        data = snapSchool.docs.map((doc: any) => doc.data() as Student);
+      }
+
+      if (data.length === 0 && teacherId) {
+        const qTeacher = query(collection(db, 'students'), where('teacherId', '==', teacherId));
+        const snapTeacher = await getDocs(qTeacher);
+        data = snapTeacher.docs.map((doc: any) => doc.data() as Student);
+      }
+
+      if (data.length > 0) {
+        offlineCacheService.saveStudentsToOfflineCache(data);
+        return data;
+      }
+
+      const cached = offlineCacheService.getStudentsFromOfflineCache();
+      return cached && cached.length > 0 ? cached : data;
     } catch (err) {
       logError(err, 'error', { context: 'getStudents failed', teacherId, schoolId, isAdmin });
-      // Fallback to offline cached students
       const cached = offlineCacheService.getStudentsFromOfflineCache();
       return cached;
     }
@@ -913,16 +1082,26 @@ export const fitnessService = {
 
   getTeams: async (teacherId: string, schoolId?: string, isAdmin = false): Promise<Team[]> => {
     try {
-      let q;
       if (isBrandSuperAdmin(auth.currentUser?.email)) {
-        q = query(collection(db, 'teams'));
-      } else if (schoolId) {
-        q = query(collection(db, 'teams'), where('schoolId', '==', schoolId));
-      } else {
-        q = query(collection(db, 'teams'), where('teacherId', '==', teacherId));
+        const snapshot = await getDocs(collection(db, 'teams'));
+        return snapshot.docs.map((doc: any) => doc.data() as Team);
       }
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map((doc: any) => doc.data() as Team);
+      
+      let data: Team[] = [];
+      const effectiveSchoolId = schoolId || (teacherId ? `personal_${teacherId}` : undefined);
+      if (effectiveSchoolId) {
+        const qSchool = query(collection(db, 'teams'), where('schoolId', '==', effectiveSchoolId));
+        const snapSchool = await getDocs(qSchool);
+        data = snapSchool.docs.map((doc: any) => doc.data() as Team);
+      }
+
+      if (data.length === 0 && teacherId) {
+        const qTeacher = query(collection(db, 'teams'), where('teacherId', '==', teacherId));
+        const snapTeacher = await getDocs(qTeacher);
+        data = snapTeacher.docs.map((doc: any) => doc.data() as Team);
+      }
+
+      return data;
     } catch (err) {
       logError(err, 'error', { context: 'getTeams failed', teacherId, schoolId, isAdmin });
       return [];
@@ -946,16 +1125,17 @@ export const fitnessService = {
   getRecentResults: async (teacherId: string, schoolId?: string, isAdmin = false, limitCount = 10): Promise<FitnessResult[]> => {
     try {
       let q;
+      const effectiveSchoolId = schoolId || (teacherId ? `personal_${teacherId}` : undefined);
       if (isBrandSuperAdmin(auth.currentUser?.email)) {
         q = query(
           collection(db, 'results'), 
           orderBy('date', 'desc'),
           limit(limitCount)
         );
-      } else if (schoolId) {
+      } else if (effectiveSchoolId) {
         q = query(
           collection(db, 'results'), 
-          where('schoolId', '==', schoolId),
+          where('schoolId', '==', effectiveSchoolId),
           orderBy('date', 'desc'),
           limit(limitCount)
         );

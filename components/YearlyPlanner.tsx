@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { BoardType, YearlyPlan, Language, LessonPlan } from '../types.ts';
 import { generateYearlyPlan, generateLessonPlan } from '../services/geminiService.ts';
-import { exportToPdf, exportToWord } from '../lib/exportUtils.ts';
+import { exportToPdf, exportToWord, exportYearlyPlanToIcs } from '../lib/exportUtils.ts';
 
 declare var html2pdf: any;
 
@@ -491,6 +491,20 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     document.body.removeChild(link);
   };
 
+  const handleExportCalendarIcs = () => {
+    if (!plan || !plan.terms || plan.terms.length === 0) {
+      alert("No curriculum plan available to export.");
+      return;
+    }
+
+    exportYearlyPlanToIcs(plan, {
+      term1Focus,
+      term2Focus,
+      startDate: plan.startDate || startDate,
+      filename: `PE_40Week_Curriculum_Grade${plan.grade || grade}_${plan.board || board}.ics`
+    });
+  };
+
   return (
     <div className="space-y-8 animate-slide-up pb-20">
       <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border-2 border-slate-100 print:shadow-none print:p-0">
@@ -599,9 +613,13 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b pb-6 print:hidden gap-4">
                    <div>
                      <h3 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Grade {plan.grade} Plan</h3>
-                     <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">{plan.academicYear} | ${plan.board}</p>
+                     <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">{plan.academicYear} | {plan.board}</p>
                    </div>
                    <div className="flex flex-wrap gap-2 md:gap-3">
+                     <button onClick={handleExportCalendarIcs} className="flex items-center space-x-2 px-4 md:px-6 py-2.5 md:py-3 bg-purple-50 text-purple-700 rounded-xl font-bold hover:bg-purple-100 border border-purple-200/80 transition-all text-xs md:text-sm shadow-sm active:scale-95" title="Download 40-week mapped curriculum as an .ics file">
+                        <CalendarIcon size={16} className="text-purple-600" />
+                        <span>Calendar (.ics)</span>
+                     </button>
                      <button onClick={handleExportExcel} className="flex items-center space-x-2 px-4 md:px-6 py-2.5 md:py-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold hover:bg-emerald-100 transition-colors text-xs md:text-sm">
                         <FileSpreadsheet size={16} />
                         <span>Excel</span>
@@ -637,15 +655,36 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                               <h4 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">{term.termName}</h4>
                               <span className="text-[10px] font-bold text-slate-400 hidden sm:inline uppercase tracking-[0.2em] border-l pl-4">Indian Academic Cycle</span>
                            </div>
-                           <button 
-                             onClick={() => handleExportTermLessonsExcel(tIdx)}
-                             type="button"
-                             className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl font-bold border border-emerald-500/20 text-xs transition-all active:scale-95 print:hidden shrink-0"
-                             title="Export entire term detailed curriculum with drills, objectives, assessments and safety to CSV"
-                           >
-                             <FileSpreadsheet size={14} className="text-emerald-600 animate-pulse" />
-                             <span>Export Full {term.termName} Lesson Plans (Excel)</span>
-                           </button>
+                           <div className="flex flex-wrap items-center gap-2">
+                             <button 
+                               onClick={() => {
+                                 exportYearlyPlanToIcs({
+                                   ...plan,
+                                   terms: [term]
+                                 }, {
+                                   term1Focus,
+                                   term2Focus,
+                                   startDate: plan.startDate || startDate,
+                                   filename: `PE_${term.termName.replace(/\s+/g, '_')}_Grade${plan.grade || grade}_Curriculum.ics`
+                                 });
+                               }}
+                               type="button"
+                               className="flex items-center space-x-1.5 px-3 py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-xl font-bold border border-purple-200/80 text-xs transition-all active:scale-95 print:hidden shrink-0"
+                               title={`Download ${term.termName} schedule as .ics calendar`}
+                             >
+                               <CalendarIcon size={13} className="text-purple-600" />
+                               <span>{term.termName} .ics</span>
+                             </button>
+                             <button 
+                               onClick={() => handleExportTermLessonsExcel(tIdx)}
+                               type="button"
+                               className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl font-bold border border-emerald-500/20 text-xs transition-all active:scale-95 print:hidden shrink-0"
+                               title="Export entire term detailed curriculum with drills, objectives, assessments and safety to CSV"
+                             >
+                               <FileSpreadsheet size={14} className="text-emerald-600 animate-pulse" />
+                               <span>Export Full {term.termName} Lesson Plans (Excel)</span>
+                             </button>
+                           </div>
                         </div>
                         
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

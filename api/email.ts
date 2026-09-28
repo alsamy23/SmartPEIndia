@@ -1,4 +1,32 @@
 import nodemailer from "nodemailer";
+import dotenv from "dotenv";
+
+export function reloadEmailEnv() {
+  try {
+    dotenv.config({ override: true });
+  } catch (e) {
+    // Ignore reload error
+  }
+}
+
+export function parseSender(fromEmailString?: string): { name: string; email: string } {
+  const fallbackEmail = "alsamy36@gmail.com";
+  const fallbackName = "Smart PE India";
+  if (!fromEmailString || !fromEmailString.trim()) {
+    return { name: fallbackName, email: fallbackEmail };
+  }
+  const str = fromEmailString.trim().replace(/^["']|["']$/g, "");
+  const match = str.match(/^(.*?)\s*<([^>]+)>$/);
+  if (match) {
+    const name = match[1].trim() || fallbackName;
+    const email = match[2].trim();
+    return { name, email };
+  }
+  if (str.includes("@")) {
+    return { name: fallbackName, email: str };
+  }
+  return { name: fallbackName, email: fallbackEmail };
+}
 
 export interface EmailSenderConfig {
   configured: boolean;
@@ -6,19 +34,40 @@ export interface EmailSenderConfig {
   fromEmail: string;
 }
 
+export interface BrevoStatusResponse {
+  configured: boolean;
+  connected: boolean;
+  apiKeyFound: boolean;
+  account?: {
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    companyName?: string;
+    credits?: number;
+    planType?: string;
+  };
+  senders?: Array<{ id: number; name: string; email: string; active: boolean }>;
+  fromEmail: string;
+  senderVerified: boolean;
+  error?: string;
+}
+
 export function getEmailConfig(): EmailSenderConfig {
+  reloadEmailEnv();
+
+  // Brevo takes priority if BREVO_API_KEY is present or explicitly chosen
+  if (process.env.BREVO_API_KEY || process.env.EMAIL_PROVIDER === "brevo") {
+    return {
+      configured: Boolean(process.env.BREVO_API_KEY),
+      provider: "brevo",
+      fromEmail: process.env.FROM_EMAIL || "Smart PE India <alsamy36@gmail.com>"
+    };
+  }
+
   if (process.env.RESEND_API_KEY) {
     return {
       configured: true,
       provider: "resend",
-      fromEmail: process.env.FROM_EMAIL || "Smart PE India <welcome@smartpeindia.app>"
-    };
-  }
-
-  if (process.env.BREVO_API_KEY) {
-    return {
-      configured: true,
-      provider: "brevo",
       fromEmail: process.env.FROM_EMAIL || "Smart PE India <welcome@smartpeindia.app>"
     };
   }
@@ -42,8 +91,114 @@ export function getEmailConfig(): EmailSenderConfig {
   return {
     configured: false,
     provider: "simulated",
-    fromEmail: process.env.FROM_EMAIL || "Smart PE India <welcome@smartpeindia.app>"
+    fromEmail: process.env.FROM_EMAIL || "Smart PE India <alsamy36@gmail.com>"
   };
+}
+
+export async function checkBrevoStatus(): Promise<BrevoStatusResponse> {
+  reloadEmailEnv();
+  const apiKey = process.env.BREVO_API_KEY?.trim();
+  const fromEmail = process.env.FROM_EMAIL || "Smart PE India <alsamy36@gmail.com>";
+  const sender = parseSender(fromEmail);
+
+  if (!apiKey) {
+    return {
+      configured: false,
+      connected: false,
+      apiKeyFound: false,
+      fromEmail,
+      senderVerified: false,
+      error: "BREVO_API_KEY is not defined in your environment (.env file)."
+    };
+  }
+
+  try {
+    // 1. Fetch account info
+    const accRes = await fetch("https://api.brevo.com/v3/account", {
+      method: "GET",
+      headers: {
+        "api-key": apiKey,
+        "accept": "application/json"
+      }
+    });
+
+    if (!accRes.ok) {
+      const errBody: any = await accRes.json().catch(() => null);
+      const errMsg = errBody?.message || errBody?.code || `HTTP ${accRes.status} ${accRes.statusText}`;
+      return {
+        configured: true,
+        connected: false,
+        apiKeyFound: true,
+        fromEmail,
+        senderVerified: false,
+        error: `Brevo authentication failed (${accRes.status}): ${errMsg}. Verify your BREVO_API_KEY in .env.`
+      };
+    }
+
+    const accData: any = await accRes.json();
+
+    // 2. Fetch verified senders
+    let sendersList: Array<{ id: number; name: string; email: string; active: boolean }> = [];
+    let senderVerified = false;
+
+    try {
+      const sendersRes = await fetch("https://api.brevo.com/v3/senders", {
+        headers: {
+          "api-key": apiKey,
+          "accept": "application/json"
+        }
+      });
+      if (sendersRes.ok) {
+        const sendersData: any = await sendersRes.json();
+        if (Array.isArray(sendersData.senders)) {
+          sendersList = sendersData.senders.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            email: s.email,
+            active: s.active
+          }));
+          senderVerified = sendersList.some(
+            s => s.email.toLowerCase() === sender.email.toLowerCase() && s.active
+          );
+        }
+      }
+    } catch (sErr) {
+      console.warn("Failed to check Brevo senders list:", sErr);
+    }
+
+    // If account email matches the sender email, it is automatically authorized by Brevo
+    if (!senderVerified && accData.email && accData.email.toLowerCase() === sender.email.toLowerCase()) {
+      senderVerified = true;
+    }
+
+    const plan = Array.isArray(accData.plan) ? accData.plan[0] : null;
+
+    return {
+      configured: true,
+      connected: true,
+      apiKeyFound: true,
+      account: {
+        email: accData.email,
+        firstName: accData.firstName,
+        lastName: accData.lastName,
+        companyName: accData.companyName,
+        credits: plan?.credits,
+        planType: plan?.type || "free"
+      },
+      senders: sendersList,
+      fromEmail,
+      senderVerified
+    };
+  } catch (err: any) {
+    return {
+      configured: true,
+      connected: false,
+      apiKeyFound: true,
+      fromEmail,
+      senderVerified: false,
+      error: `Network error connecting to Brevo: ${err.message}`
+    };
+  }
 }
 
 export function createTransporter() {
@@ -647,27 +802,57 @@ export async function dispatchEmail(toEmail: string, subject: string, html: stri
   }
 
   // If Brevo API key is available via HTTP API
-  if (config.provider === "brevo" && process.env.BREVO_API_KEY) {
+  if ((config.provider === "brevo" || process.env.BREVO_API_KEY) && process.env.BREVO_API_KEY) {
+    const sender = parseSender(config.fromEmail);
     try {
       const res = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "api-key": process.env.BREVO_API_KEY
+          "accept": "application/json",
+          "api-key": process.env.BREVO_API_KEY.trim()
         },
         body: JSON.stringify({
-          sender: { name: "Smart PE India", email: process.env.FROM_EMAIL || "contact@smartpeindia.app" },
-          to: [{ email: toEmail }],
+          sender: { 
+            name: sender.name, 
+            email: sender.email 
+          },
+          to: [{ email: toEmail.trim() }],
+          replyTo: {
+            name: sender.name,
+            email: sender.email
+          },
           subject,
           htmlContent: html,
           textContent: text
         })
       });
+
+      const data: any = await res.json().catch(() => null);
+
       if (res.ok) {
-        return { success: true, message: "Welcome email dispatched via Brevo", provider: "brevo" };
+        console.log(`[Brevo] Email delivered to ${toEmail}. Message ID: ${data?.messageId || "OK"}`);
+        return { 
+          success: true, 
+          message: `Email dispatched to ${toEmail} via Brevo API (Message ID: ${data?.messageId || "OK"})`, 
+          provider: "brevo" 
+        };
+      } else {
+        const errorDetail = data?.message || data?.code || `HTTP ${res.status} ${res.statusText}`;
+        console.error("[Brevo] Dispatch error:", data);
+        return { 
+          success: false, 
+          message: `Brevo API error (${res.status}): ${errorDetail}`, 
+          provider: "brevo" 
+        };
       }
     } catch (e: any) {
-      console.error("Brevo dispatch error:", e);
+      console.error("[Brevo] Network dispatch error:", e);
+      return { 
+        success: false, 
+        message: `Brevo connection failed: ${e.message}`, 
+        provider: "brevo" 
+      };
     }
   }
 
