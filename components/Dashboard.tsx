@@ -346,18 +346,22 @@ const Dashboard: React.FC<{
               <span className="text-[#D4A017]">for Indian Schools</span>
             </h1>
             
-            {/* First-Screen WHAT / WHO / WHAT IT DOES Definition */}
+            {/* First-Screen Audience and Functionality Definition */}
             <div className="flex flex-wrap gap-2 py-1">
               <span className="px-2.5 py-0.5 rounded-md bg-[#0D2B52]/10 border border-[#0D2B52]/20 text-[10px] font-black uppercase text-[#0D2B52]">
-                <strong>WHO:</strong> Indian Schools, PE Teachers & HODs
+                Built for Indian Schools • PE Teachers • PE HODs
               </span>
               <span className="px-2.5 py-0.5 rounded-md bg-[#D4A017]/20 border border-[#D4A017]/40 text-[10px] font-black uppercase text-slate-900">
-                <strong>WHAT IT DOES:</strong> Plan • Assess • Track • Report
+                Plan • Assess • Track • Report
               </span>
             </div>
 
             <p className="text-xs sm:text-sm text-[#333333] max-w-xl leading-relaxed font-medium">
-              SmartPE helps Indian schools plan PE lessons, track student fitness, conduct Khelo India fitness assessments, assess sports skills, and manage physical education records in one school-ready platform.
+              SmartPE helps schools plan PE lessons, assess students, track fitness, manage PE records, and generate organized reports — all in one platform built for physical education.
+            </p>
+
+            <p className="text-xs text-slate-600 max-w-xl leading-relaxed font-semibold">
+              Designed for CBSE schools, PE teachers and PE departments in India.
             </p>
           </div>
 
@@ -388,9 +392,9 @@ const Dashboard: React.FC<{
           {/* Underneath columns representing three keys */}
           <div className="grid grid-cols-3 gap-3 pt-3.5 border-t border-slate-200">
             {[
-              { num: '01', title: 'Plan PE Lessons', desc: 'CBSE & sports plans in 60s' },
-              { num: '02', title: 'Student Fitness', desc: 'Khelo India & motor tests' },
-              { num: '03', title: 'School PE Reports', desc: 'Print-ready student records' }
+              { num: '01', title: 'Plan PE Lessons', desc: 'AI-assisted PE lesson planning' },
+              { num: '02', title: 'Student Fitness', desc: 'Student fitness & Khelo India assessments' },
+              { num: '03', title: 'School PE Reports', desc: 'Organized student and PE department reports' }
             ].map((col, idx) => (
               <div key={idx} className="space-y-0.5">
                 <span className="text-[9px] font-black text-[#D4A017] block">{col.num}</span>
@@ -423,7 +427,7 @@ const Dashboard: React.FC<{
                 </span>
                 <div className="space-y-0.5">
                   <h4 className="text-[10px] font-black uppercase text-slate-900 leading-none">Lesson generated</h4>
-                  <p className="text-[8.5px] text-slate-500 font-semibold leading-tight">Grade 8 &bull; Athletics &bull; 47s</p>
+                  <p className="text-[8.5px] text-slate-500 font-semibold leading-tight">Grade 8 &bull; Athletics &bull; Structured Plan</p>
                 </div>
               </div>
               {/* Progress bar simulation */}
