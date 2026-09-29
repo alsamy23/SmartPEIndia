@@ -10,8 +10,8 @@ export function reloadEmailEnv() {
 }
 
 export function parseSender(fromEmailString?: string): { name: string; email: string } {
-  const fallbackEmail = "alsamy36@gmail.com";
-  const fallbackName = "Smart PE India";
+  const fallbackEmail = "admin@smartpeindia.com";
+  const fallbackName = "SmartPE India";
   if (!fromEmailString || !fromEmailString.trim()) {
     return { name: fallbackName, email: fallbackEmail };
   }
@@ -60,7 +60,7 @@ export function getEmailConfig(): EmailSenderConfig {
     return {
       configured: Boolean(process.env.BREVO_API_KEY),
       provider: "brevo",
-      fromEmail: process.env.FROM_EMAIL || "Smart PE India <alsamy36@gmail.com>"
+      fromEmail: process.env.FROM_EMAIL || "SmartPE India <admin@smartpeindia.com>"
     };
   }
 
@@ -68,7 +68,7 @@ export function getEmailConfig(): EmailSenderConfig {
     return {
       configured: true,
       provider: "resend",
-      fromEmail: process.env.FROM_EMAIL || "Smart PE India <welcome@smartpeindia.app>"
+      fromEmail: process.env.FROM_EMAIL || "SmartPE India <admin@smartpeindia.com>"
     };
   }
 
@@ -76,7 +76,7 @@ export function getEmailConfig(): EmailSenderConfig {
     return {
       configured: true,
       provider: "gmail",
-      fromEmail: `Smart PE India <${process.env.GMAIL_USER}>`
+      fromEmail: `SmartPE India <${process.env.GMAIL_USER}>`
     };
   }
 
@@ -84,21 +84,21 @@ export function getEmailConfig(): EmailSenderConfig {
     return {
       configured: true,
       provider: "smtp",
-      fromEmail: process.env.FROM_EMAIL || `Smart PE India <${process.env.SMTP_USER}>`
+      fromEmail: process.env.FROM_EMAIL || `SmartPE India <${process.env.SMTP_USER}>`
     };
   }
 
   return {
     configured: false,
     provider: "simulated",
-    fromEmail: process.env.FROM_EMAIL || "Smart PE India <alsamy36@gmail.com>"
+    fromEmail: process.env.FROM_EMAIL || "SmartPE India <admin@smartpeindia.com>"
   };
 }
 
 export async function checkBrevoStatus(): Promise<BrevoStatusResponse> {
   reloadEmailEnv();
   const apiKey = process.env.BREVO_API_KEY?.trim();
-  const fromEmail = process.env.FROM_EMAIL || "Smart PE India <alsamy36@gmail.com>";
+  const fromEmail = process.env.FROM_EMAIL || "SmartPE India <admin@smartpeindia.com>";
   const sender = parseSender(fromEmail);
 
   if (!apiKey) {

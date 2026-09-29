@@ -78,24 +78,23 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
             <button
               onClick={() => {
                 onClose();
-                onNavigateTab('brand-welcome');
+                onNavigateTab('planner');
               }}
-              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center justify-center space-x-2"
+              className="w-full py-4 bg-[#0D2B52] text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#153e75] transition-all shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center justify-center space-x-2 cursor-pointer"
             >
-              <Mail size={16} />
-              <span>Open Welcome Hub & Send Email</span>
+              <Sparkles size={16} className="text-[#D4A017]" />
+              <span>Start Generating PE Lessons Now</span>
               <ArrowRight size={16} />
             </button>
 
             <button
               onClick={() => {
                 onClose();
-                onNavigateTab('planner');
+                onNavigateTab('dashboard');
               }}
-              className="w-full py-3.5 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary-container transition-all flex items-center justify-center space-x-2"
+              className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border-2 border-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center space-x-2 cursor-pointer"
             >
-              <Sparkles size={16} />
-              <span>Start Generating PE Lessons Now</span>
+              <span>Go to Main Dashboard</span>
             </button>
           </div>
         </div>

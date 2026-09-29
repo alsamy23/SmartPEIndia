@@ -85,7 +85,8 @@ export const BrevoSetupHub: React.FC<BrevoSetupHubProps> = ({
   const envSnippet = `# Brevo (Sendinblue) Transactional Email Configuration
 # 300 Free Emails / Day • No Credit Card Required
 BREVO_API_KEY=your_brevo_v3_api_key_here
-FROM_EMAIL="Smart PE India <alsamy36@gmail.com>"`;
+FROM_EMAIL="SmartPE India <admin@smartpeindia.com>"
+EMAIL_PROVIDER=brevo`;
 
   const handleCopyEnv = () => {
     navigator.clipboard.writeText(envSnippet);

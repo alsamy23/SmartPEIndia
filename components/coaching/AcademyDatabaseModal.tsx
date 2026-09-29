@@ -28,6 +28,7 @@ import {
 } from '../../services/academicCoachingCloudService';
 import { academyService, SPORT_TEMPLATES, CoachingSportId } from '../../services/academyService';
 import { auth } from '../../services/firebase';
+import { sendAutomatedWelcomeEmail } from '../../services/emailService';
 import { 
   signInWithPopup, 
   GoogleAuthProvider, 
@@ -260,6 +261,15 @@ export const AcademyDatabaseModal: React.FC<AcademyDatabaseModalProps> = ({
         });
         setProgram(created);
         showToast('Academy Database created & registered in Firebase cloud!', 'success');
+
+        // Automatically trigger Brevo welcome email in background
+        if (adminEmail.trim() && adminEmail.includes('@')) {
+          sendAutomatedWelcomeEmail(
+            adminEmail.trim(),
+            headCoachName.trim() || 'Head Coach',
+            academyName.trim() || 'Smart PE Coaching Academy'
+          ).catch(e => console.debug('[Email] Academy auto welcome note:', e));
+        }
       }
 
       onDatabaseUpdated?.();
@@ -307,6 +317,16 @@ export const AcademyDatabaseModal: React.FC<AcademyDatabaseModalProps> = ({
           teachersList: updatedTeachers
         });
         showToast(`Teacher/Coach ${name} added successfully!`, 'success');
+
+        // Automatically trigger Brevo welcome email for newly invited coach
+        if (email.includes('@')) {
+          sendAutomatedWelcomeEmail(
+            email,
+            name,
+            program.programName || 'Smart PE Coaching Academy'
+          ).catch(e => console.debug('[Email] Coach invite email note:', e));
+        }
+
         onDatabaseUpdated?.();
       } catch (err: any) {
         console.warn('Teacher cloud sync warning:', err);

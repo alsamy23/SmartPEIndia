@@ -2,49 +2,86 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 
 // Initialize Firebase Admin SDK
-admin.initializeApp();
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 /**
  * Configuration interface for Transactional Email Providers
  */
 interface EmailConfig {
-  resendApiKey?: string;
   brevoApiKey?: string;
+  resendApiKey?: string;
   fromEmail: string;
   appName: string;
   appUrl: string;
-  webhookUrl?: string;
+  supportEmail: string;
 }
 
 /**
- * Retrieve active email configuration from environment or secrets
+ * Retrieve active email configuration from environment
  */
 function getEmailConfig(): EmailConfig {
   return {
+    brevoApiKey: process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY,
     resendApiKey: process.env.RESEND_API_KEY,
-    brevoApiKey: process.env.BREVO_API_KEY,
-    fromEmail: process.env.FROM_EMAIL || "Smart PE India <welcome@smartpeindia.app>",
-    appName: process.env.APP_NAME || "Smart PE India",
+    fromEmail: process.env.FROM_EMAIL || "SmartPE India <admin@smartpeindia.com>",
+    appName: process.env.APP_NAME || "SmartPE India",
     appUrl: process.env.APP_URL || "https://smartpeindia.app",
-    webhookUrl: process.env.WELCOME_API_WEBHOOK_URL
+    supportEmail: process.env.SUPPORT_EMAIL || "admin@smartpeindia.com"
   };
 }
 
 /**
- * Generate high-converting, responsive HTML email template for newly registered educators
+ * Parse sender name and email from "Name <email@domain.com>" or plain email string
+ */
+function parseSender(fromEmailString?: string): { name: string; email: string } {
+  const fallbackEmail = "admin@smartpeindia.com";
+  const fallbackName = "SmartPE India";
+  if (!fromEmailString || !fromEmailString.trim()) {
+    return { name: fallbackName, email: fallbackEmail };
+  }
+  const str = fromEmailString.trim().replace(/^["']|["']$/g, "");
+  const match = str.match(/^(.*?)\s*<([^>]+)>$/);
+  if (match) {
+    const name = match[1].trim() || fallbackName;
+    const email = match[2].trim();
+    return { name, email };
+  }
+  if (str.includes("@")) {
+    return { name: fallbackName, email: str };
+  }
+  return { name: fallbackName, email: fallbackEmail };
+}
+
+/**
+ * Generate high-converting, responsive HTML email template for newly registered educators and coaches
  */
 function buildPersonalizedWelcomeEmail(
   name: string,
   email: string,
   appName: string,
-  appUrl: string
+  appUrl: string,
+  schoolOrAcademyName?: string,
+  role?: string
 ): { subject: string; html: string; text: string } {
-  const safeName = name && name.trim() ? name.trim() : (email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || "Physical Education Educator");
-  const subject = `Welcome to Smart PE India, ${safeName} — Your 1-Year Free Founding Educator Pass is Active! 🏆`;
+  const safeName =
+    name && name.trim()
+      ? name.trim()
+      : email
+          .split("@")[0]
+          .replace(/[._-]/g, " ")
+          .replace(/\b\w/g, (l) => l.toUpperCase()) || "Physical Educator";
 
-  const html = `
-<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:o="urn:schemas-microsoft-com:office:office">
+  const institutionContext = schoolOrAcademyName ? ` for ${schoolOrAcademyName}` : "";
+  const isCoach = role?.toLowerCase().includes("coach") || role?.toLowerCase().includes("academy");
+
+  const subject = isCoach
+    ? `Welcome to ${appName}, Coach ${safeName} — Your Sports Academy Workspace is Ready! 🏆`
+    : `Welcome to ${appName}, ${safeName} — Your 1-Year Free Founding Pass is Active! 🏆`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -103,9 +140,9 @@ function buildPersonalizedWelcomeEmail(
             <!-- Header Banner -->
             <div class="header">
               <div class="badge">1-Year Free Founding Pass Active</div>
-              <h1 class="brand-title">Smart PE India</h1>
+              <h1 class="brand-title">${appName}</h1>
               <p class="brand-slogan">Plan Smarter. Teach Better.</p>
-              <p class="brand-subtitle">India's #1 AI Platform for Physical Education Teachers & Sports Departments</p>
+              <p class="brand-subtitle">India's Dedicated Digital Platform for Physical Education & Sports Departments</p>
             </div>
 
             <!-- Main Content Area -->
@@ -114,19 +151,19 @@ function buildPersonalizedWelcomeEmail(
               <p class="greeting">Dear ${safeName},</p>
               
               <p class="intro-p">
-                Welcome to <strong>Smart PE India</strong>! We are thrilled to partner with you in modernizing physical education across India.
+                Welcome to <strong>${appName}</strong>${institutionContext}! Your account has been registered successfully. We are excited to support you with modern tools built specifically for Physical Education teachers, HODs, and sports coaches across India.
               </p>
 
               <!-- Highlight Pass Activation Card -->
               <div class="hero-banner">
-                <div class="hero-banner-title">🌟 Your 1-Year Free Founding Educator Pass is Activated!</div>
+                <div class="hero-banner-title">🌟 Your 1-Year Free Founding Educator Pass is Active!</div>
                 <p class="hero-banner-desc">
-                  You have unlocked complete, unrestricted access to India's premier AI curriculum generator, assessment engine, and sports management suite.
+                  You have full access to our AI curriculum generator, Khelo India assessment battery, CBSE theory maker, and organized reporting tools.
                 </p>
               </div>
 
               <!-- Key Benefits Section -->
-              <div class="section-heading">⚡ Key Benefits of Your Smart PE India Portal:</div>
+              <div class="section-heading">⚡ Key Tools in Your SmartPE Workspace:</div>
 
               <!-- Benefit 1: AI Lesson Planner -->
               <div class="benefit-card">
@@ -137,7 +174,7 @@ function buildPersonalizedWelcomeEmail(
                     </td>
                     <td class="benefit-content-td">
                       <div class="benefit-name">AI PE Lesson Planner & Drill Generator</div>
-                      <p class="benefit-desc">Generate structured 40-minute lesson plans aligned with CBSE, ICSE & State boards in under 60 seconds with age-appropriate warm-ups and safety protocols.</p>
+                      <p class="benefit-desc">Generate structured 40-minute lesson plans aligned with CBSE, ICSE & State boards with age-appropriate warm-ups and safety protocols.</p>
                     </td>
                   </tr>
                 </table>
@@ -151,8 +188,8 @@ function buildPersonalizedWelcomeEmail(
                       <div style="background-color: #fefce8; color: #854d0e; width: 32px; height: 32px; border-radius: 8px; text-align: center; line-height: 32px; font-size: 16px;">🏆</div>
                     </td>
                     <td class="benefit-content-td">
-                      <div class="benefit-name">Official Khelo India & SAI Assessment Battery</div>
-                      <p class="benefit-desc">Record fitness tests, calculate instant SAI percentile scores, track BMI ratings, and print inspection-ready student health report cards with 1 click.</p>
+                      <div class="benefit-name">Student Fitness & Khelo India Assessments</div>
+                      <p class="benefit-desc">Record fitness tests, calculate SAI percentile scores, track BMI ratings, and generate organized student health report cards.</p>
                     </td>
                   </tr>
                 </table>
@@ -166,14 +203,14 @@ function buildPersonalizedWelcomeEmail(
                       <div style="background-color: #f0fdf4; color: #166534; width: 32px; height: 32px; border-radius: 8px; text-align: center; line-height: 32px; font-size: 16px;">📝</div>
                     </td>
                     <td class="benefit-content-td">
-                      <div class="benefit-name">CBSE Theory Master & Exam Question Paper Maker</div>
-                      <p class="benefit-desc">Generate complete board-pattern PE question papers for Classes 9–12 with comprehensive answer keys, marking schemes, and blueprint alignment.</p>
+                      <div class="benefit-name">CBSE Theory Master & Question Paper Maker</div>
+                      <p class="benefit-desc">Generate board-pattern PE question papers for Classes 9–12 with comprehensive answer keys, blueprints, and marking schemes.</p>
                     </td>
                   </tr>
                 </table>
               </div>
 
-              <!-- Benefit 4: Principal & Department Dashboard -->
+              <!-- Benefit 4: Practical 30-Mark Hub -->
               <div class="benefit-card">
                 <table width="100%" border="0" cellspacing="0" cellpadding="0">
                   <tr>
@@ -181,38 +218,8 @@ function buildPersonalizedWelcomeEmail(
                       <div style="background-color: #faf5ff; color: #6b21a8; width: 32px; height: 32px; border-radius: 8px; text-align: center; line-height: 32px; font-size: 16px;">📊</div>
                     </td>
                     <td class="benefit-content-td">
-                      <div class="benefit-name">Principal & Management Inspection Dashboard</div>
-                      <p class="benefit-desc">Generate executive summary reports, school-wide physical literacy metrics, and teacher workload schedules to demonstrate program excellence.</p>
-                    </td>
-                  </tr>
-                </table>
-              </div>
-
-              <!-- Benefit 5: Tournament & Fixtures Maker -->
-              <div class="benefit-card">
-                <table width="100%" border="0" cellspacing="0" cellpadding="0">
-                  <tr>
-                    <td class="benefit-icon-td">
-                      <div style="background-color: #fff1f2; color: #9f1239; width: 32px; height: 32px; border-radius: 8px; text-align: center; line-height: 32px; font-size: 16px;">🏅</div>
-                    </td>
-                    <td class="benefit-content-td">
-                      <div class="benefit-name">Tournament Fixture & Sports Day Manager</div>
-                      <p class="benefit-desc">Build knockout brackets (with official bye calculations), round-robin leagues, and Sports Day point tables with exportable PDF & image sheets.</p>
-                    </td>
-                  </tr>
-                </table>
-              </div>
-
-              <!-- Benefit 6: AI Biomechanics Lab -->
-              <div class="benefit-card">
-                <table width="100%" border="0" cellspacing="0" cellpadding="0">
-                  <tr>
-                    <td class="benefit-icon-td">
-                      <div style="background-color: #f0f9ff; color: #075985; width: 32px; height: 32px; border-radius: 8px; text-align: center; line-height: 32px; font-size: 16px;">🏃</div>
-                    </td>
-                    <td class="benefit-content-td">
-                      <div class="benefit-name">AI Sports Biomechanics & Skill Lab</div>
-                      <p class="benefit-desc">Analyze athlete technique cues, common faults, and corrective drills across athletics, football, cricket, basketball, and badminton.</p>
+                      <div class="benefit-name">CBSE Class 11–12 Practical Assessment Hub (048)</div>
+                      <p class="benefit-desc">Record and compile 30-mark practical exams across fitness, yoga, game proficiency, record file, and viva voce with ready-to-print sheets.</p>
                     </td>
                   </tr>
                 </table>
@@ -221,26 +228,26 @@ function buildPersonalizedWelcomeEmail(
               <!-- Quick Start Steps -->
               <div class="checklist-box">
                 <div class="checklist-title">🚀 3 Quick Steps to Get Started:</div>
-                <div class="checklist-item"><strong>1.</strong> Click the button below to launch your digital PE portal.</div>
-                <div class="checklist-item"><strong>2.</strong> Generate your first AI Lesson Plan or calculate a student's Khelo India test score.</div>
-                <div class="checklist-item"><strong>3.</strong> Bookmark <a href="${appUrl}" style="color: #15803d; font-weight: bold;">${appUrl.replace(/^https?:\/\//, "")}</a> on your phone or laptop for daily PE class planning.</div>
+                <div class="checklist-item"><strong>1.</strong> Click the button below to launch your SmartPE workspace.</div>
+                <div class="checklist-item"><strong>2.</strong> Create your first AI lesson plan or record a student fitness assessment.</div>
+                <div class="checklist-item"><strong>3.</strong> Bookmark <a href="${appUrl}" style="color: #15803d; font-weight: bold;">${appUrl.replace(/^https?:\/\//, "")}</a> on your phone or computer for instant daily access.</div>
               </div>
 
               <!-- Primary CTA -->
               <div class="cta-container">
-                <a href="${appUrl}" class="cta-btn">Launch Your PE Portal Now →</a>
+                <a href="${appUrl}" class="cta-btn">Launch Your SmartPE Workspace →</a>
               </div>
 
               <!-- Founder Signature Note -->
               <div class="founder-card">
                 <p style="margin: 0 0 6px 0; font-size: 14px; color: #475569;">
-                  <strong>Need assistance or custom school onboarding?</strong>
+                  <strong>Need assistance or have questions?</strong>
                 </p>
                 <p style="margin: 0 0 16px 0; font-size: 13px; color: #64748b;">
-                  Feel free to reply directly to this email or reach out to us at <a href="mailto:contact@smartpeindia.app" style="color: #0D2B52; font-weight: bold;">contact@smartpeindia.app</a>. We are dedicated to supporting every Physical Education teacher across India.
+                  Reach out directly to us at <a href="mailto:admin@smartpeindia.com" style="color: #0D2B52; font-weight: bold;">admin@smartpeindia.com</a>. We are here to help make your physical education program run smoothly and efficiently.
                 </p>
-                <p class="founder-name">Lurtha Samy (L. Samy)</p>
-                <p class="founder-title">Founder & Physical Education Educator • ${appName}</p>
+                <p class="founder-name">SmartPE India Team</p>
+                <p class="founder-title">Physical Education Software for Indian Schools • ${appUrl.replace(/^https?:\/\//, "")}</p>
               </div>
             </div>
 
@@ -248,17 +255,17 @@ function buildPersonalizedWelcomeEmail(
             <div class="footer">
               <p style="margin: 0 0 6px 0; font-weight: 800; color: #ffffff; font-size: 14px;">${appName}</p>
               <p style="margin: 0 0 10px 0; color: #94a3b8;">
-                Empowering Physical Educators across India with AI Curriculum, Khelo India Assessments & Sports Analytics.
+                Built for Indian Schools, Physical Education Teachers, and Sports Departments.
               </p>
               <div class="footer-links">
                 <a href="${appUrl}">Portal Home</a> •
-                <a href="${appUrl}/#curriculum">Curriculum</a> •
-                <a href="${appUrl}/#khelo-india">Khelo India</a> •
-                <a href="${appUrl}/#privacy">Privacy Policy</a> •
-                <a href="mailto:contact@smartpeindia.app">Contact Support</a>
+                <a href="${appUrl}/cbse-physical-education">CBSE PE</a> •
+                <a href="${appUrl}/khelo-india-fitness-assessment">Khelo India</a> •
+                <a href="${appUrl}/ai-pe-lesson-planner">AI Lesson Planner</a> •
+                <a href="mailto:admin@smartpeindia.com">Contact Support</a>
               </div>
               <p style="margin: 0; font-size: 11px; color: #64748b;">
-                © 2026 ${appName}. All rights reserved. You are receiving this because your account was registered on ${appUrl.replace(/^https?:\/\//, "")}.
+                © ${new Date().getFullYear()} ${appName}. All rights reserved. You received this email because your account was registered on ${appUrl.replace(/^https?:\/\//, "")}.
               </p>
             </div>
           </div>
@@ -267,96 +274,54 @@ function buildPersonalizedWelcomeEmail(
     </table>
   </div>
 </body>
-</html>
-  `;
+</html>`;
 
-  const text = `
-Dear ${safeName},
+  const text = `Dear ${safeName},
 
-Welcome to ${appName}! Your 1-Year Free Founding Educator Pass has been activated for ${email}.
+Welcome to ${appName}${institutionContext}! Your 1-Year Free Founding Educator Pass has been activated for ${email}.
 
-🌟 Key Benefits of Your Smart PE India Portal:
-1. ⚡ AI PE Lesson Planner & Drill Generator — Generate CBSE/ICSE/State aligned lesson plans in under 60 seconds with diagrams and safety cues.
-2. 🏆 Official Khelo India & SAI Assessment Battery — Instant SAI fitness scores, BMI percentiles, and printable student health report cards.
-3. 📝 CBSE Theory Master & Exam Question Paper Maker — Board-pattern PE question papers with ready-to-use answer keys for Classes 9–12.
-4. 📊 Principal & Management Inspection Dashboard — Inspection-ready physical literacy reports and workload schedules.
-5. 🏅 Tournament & Sports Day Manager — Knockout brackets with bye calculations and round-robin league schedules.
-6. 🏃 AI Sports Biomechanics Lab — Movement analysis and coaching cues for athletics, football, and cricket.
+⚡ Key Tools in Your SmartPE Workspace:
+1. AI PE Lesson Planner & Drill Generator — Structured 40-min lesson plans aligned with CBSE, ICSE & State boards.
+2. Student Fitness & Khelo India Assessments — SAI percentile scores, BMI tracking, and printable student health report cards.
+3. CBSE Theory Master & Question Paper Maker — Board-pattern PE question papers with answer keys for Classes 9–12.
+4. CBSE Practical 30-Mark Hub (Subject 048) — Inspection-ready practical score compiling and evaluation sheets.
+5. Tournament & Sports Day Manager — Knockout brackets and round-robin league schedules.
 
-Launch your PE portal anytime at: ${appUrl}
+Launch your workspace anytime at: ${appUrl}
 
-Need help or custom school onboarding? Contact Founder L. Samy directly at contact@smartpeindia.app.
+Need assistance? Contact us directly at admin@smartpeindia.com.
 
 Best regards,
-Lurtha Samy (L. Samy)
-Founder & PE Educator
-${appName} (${appUrl})
-  `;
+SmartPE India Team
+${appName} (${appUrl})`;
 
   return { subject, html, text };
 }
 
 /**
- * Dispatch email via Resend REST API (https://api.resend.com/emails)
- */
-async function sendViaResend(
-  apiKey: string,
-  fromEmail: string,
-  toEmail: string,
-  subject: string,
-  html: string,
-  text: string
-): Promise<{ success: boolean; data?: any; error?: string }> {
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: [toEmail],
-        subject,
-        html,
-        text
-      })
-    });
-
-    const result = await response.json();
-    if (response.ok) {
-      return { success: true, data: result };
-    }
-    return { success: false, error: result?.message || JSON.stringify(result) };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to reach Resend API" };
-  }
-}
-
-/**
- * Dispatch email via Brevo REST API (https://api.brevo.com/v3/smtp/email)
+ * Dispatch transactional email via Brevo REST API (https://api.brevo.com/v3/smtp/email)
  */
 async function sendViaBrevo(
   apiKey: string,
   fromEmail: string,
   toEmail: string,
+  recipientName: string,
   subject: string,
   html: string,
   text: string
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
-    const senderEmail = fromEmail.match(/<([^>]+)>/)?.[1] || fromEmail;
-    const senderName = fromEmail.replace(/<[^>]+>/, "").trim() || "Smart PE India";
+    const sender = parseSender(fromEmail);
 
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "api-key": apiKey
+        "api-key": apiKey.trim()
       },
       body: JSON.stringify({
-        sender: { name: senderName, email: senderEmail },
-        to: [{ email: toEmail }],
+        sender: { name: sender.name, email: sender.email },
+        to: [{ email: toEmail.trim(), name: recipientName }],
         subject,
         htmlContent: html,
         textContent: text
@@ -374,23 +339,29 @@ async function sendViaBrevo(
 }
 
 /**
- * Dispatch email via Custom App Webhook REST API
+ * Dispatch transactional email via Resend REST API (https://api.resend.com/emails)
  */
-async function sendViaWebhook(
-  webhookUrl: string,
+async function sendViaResend(
+  apiKey: string,
+  fromEmail: string,
   toEmail: string,
-  recipientName: string,
-  uid: string
+  subject: string,
+  html: string,
+  text: string
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
-    const response = await fetch(webhookUrl, {
+    const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey.trim()}`
+      },
       body: JSON.stringify({
-        toEmail,
-        recipientName,
-        uid,
-        source: "firebase-cloud-function-auth-trigger"
+        from: fromEmail,
+        to: [toEmail.trim()],
+        subject,
+        html,
+        text
       })
     });
 
@@ -398,120 +369,221 @@ async function sendViaWebhook(
     if (response.ok) {
       return { success: true, data: result };
     }
-    return { success: false, error: result?.error || "Webhook failed" };
+    return { success: false, error: result?.message || JSON.stringify(result) };
   } catch (err: any) {
-    return { success: false, error: err.message || "Failed to reach Webhook URL" };
+    return { success: false, error: err.message || "Failed to reach Resend API" };
   }
 }
 
 /**
- * AUTOMATED TRIGGER FUNCTION: sendPersonalizedWelcomeEmail
- * Listens to the Firebase Auth User Creation event (auth.user().onCreate)
- * and invokes Resend / Brevo / Webhook REST API to deliver the welcome message.
+ * Common welcome email dispatcher with deduplication and Firestore audit logging
  */
-export const sendPersonalizedWelcomeEmail = functions.auth
+async function dispatchWelcomeEmail(params: {
+  userId: string;
+  email: string;
+  displayName?: string;
+  schoolName?: string;
+  role?: string;
+  sourceTrigger: string;
+}): Promise<{ success: boolean; provider: string; error?: string }> {
+  const { userId, email, displayName, schoolName, role, sourceTrigger } = params;
+
+  if (!email || !email.includes("@")) {
+    functions.logger.warn(`[Welcome Email] Invalid email '${email}' for user ${userId}. Skipping.`);
+    return { success: false, provider: "none", error: "Invalid email" };
+  }
+
+  const db = admin.firestore();
+  const mailLogRef = db.collection("mail_logs").doc(`welcome_${userId}`);
+
+  // Deduplication check: verify if welcome email was already dispatched
+  try {
+    const existingLog = await mailLogRef.get();
+    if (existingLog.exists && existingLog.data()?.status === "sent") {
+      functions.logger.info(`[Welcome Email] Welcome email already dispatched for ${email} (UID: ${userId}). Skipping duplicate send.`);
+      return { success: true, provider: "already_sent" };
+    }
+  } catch (checkErr) {
+    functions.logger.warn("[Welcome Email] Failed to check existing mail_logs:", checkErr);
+  }
+
+  const config = getEmailConfig();
+  const recipientName = displayName || email.split("@")[0];
+  const { subject, html, text } = buildPersonalizedWelcomeEmail(
+    recipientName,
+    email,
+    config.appName,
+    config.appUrl,
+    schoolName,
+    role
+  );
+
+  let dispatchResult: { success: boolean; provider: string; data?: any; error?: string };
+
+  // 1. Primary Provider: Brevo REST API
+  if (config.brevoApiKey) {
+    functions.logger.info(`[Welcome Email] Dispatching via Brevo REST API to ${email}...`);
+    const brevoRes = await sendViaBrevo(
+      config.brevoApiKey,
+      config.fromEmail,
+      email,
+      recipientName,
+      subject,
+      html,
+      text
+    );
+    dispatchResult = { ...brevoRes, provider: "brevo" };
+  }
+  // 2. Secondary Provider: Resend REST API
+  else if (config.resendApiKey) {
+    functions.logger.info(`[Welcome Email] Dispatching via Resend REST API to ${email}...`);
+    const resendRes = await sendViaResend(
+      config.resendApiKey,
+      config.fromEmail,
+      email,
+      subject,
+      html,
+      text
+    );
+    dispatchResult = { ...resendRes, provider: "resend" };
+  }
+  // 3. Fallback when keys are not configured in environment
+  else {
+    functions.logger.warn(
+      `[Welcome Email] No BREVO_API_KEY or RESEND_API_KEY found in functions environment. Welcome email simulated for ${email}.`
+    );
+    dispatchResult = {
+      success: true,
+      provider: "simulated",
+      data: { message: "Simulated dispatch - set BREVO_API_KEY in Cloud Functions config" }
+    };
+  }
+
+  // Audit Logging to Firestore
+  try {
+    await mailLogRef.set({
+      uid: userId,
+      email,
+      recipientName,
+      subject,
+      provider: dispatchResult.provider,
+      status: dispatchResult.success ? "sent" : "failed",
+      error: dispatchResult.error || null,
+      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      triggeredBy: sourceTrigger
+    });
+
+    // Update user document nurtureStep1 timestamp if user doc exists
+    if (dispatchResult.success) {
+      const userRef = db.collection("users").doc(userId);
+      await userRef.set(
+        {
+          nurtureStep1SentAt: new Date().toISOString(),
+          welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+    }
+
+    functions.logger.info(`[Welcome Email] Mail log recorded in 'mail_logs/welcome_${userId}' (Status: ${dispatchResult.success ? "sent" : "failed"})`);
+  } catch (logErr) {
+    functions.logger.error("[Welcome Email] Failed to record mail log in Firestore:", logErr);
+  }
+
+  return dispatchResult;
+}
+
+// =========================================================================
+// CLOUD FUNCTION TRIGGERS
+// =========================================================================
+
+/**
+ * 1. FIRESTORE TRIGGER: onUserDocumentCreated
+ * Triggers automatically whenever a new teacher/educator profile is created in Firestore (/users/{userId}).
+ * Uses the existing Brevo API configuration to deliver a professional welcome email.
+ */
+export const onUserDocumentCreated = functions.firestore
+  .document("users/{userId}")
+  .onCreate(async (snap: functions.firestore.DocumentSnapshot, context: functions.EventContext) => {
+    const userId = context.params.userId;
+    const data = (snap.data() as Record<string, any>) || {};
+    const email = data.email;
+    const displayName = data.displayName || data.name;
+    const schoolName = data.schoolName;
+    const role = data.role;
+
+    if (!email) {
+      functions.logger.warn(`[Firestore Trigger] Document users/${userId} has no email field. Skipping.`);
+      return;
+    }
+
+    functions.logger.info(`[Firestore Trigger] New user registration detected in Firestore: users/${userId} (${email})`);
+
+    await dispatchWelcomeEmail({
+      userId,
+      email,
+      displayName,
+      schoolName,
+      role,
+      sourceTrigger: "firestore.users.onCreate"
+    });
+  });
+
+/**
+ * 2. FIRESTORE TRIGGER: onAcademicProgramCreated
+ * Triggers automatically when a sports academy or coaching program is registered in Firestore (/academic_programs/{programId}).
+ * Sends welcome email to the head coach / academy admin via Brevo.
+ */
+export const onAcademicProgramCreated = functions.firestore
+  .document("academic_programs/{programId}")
+  .onCreate(async (snap: functions.firestore.DocumentSnapshot, context: functions.EventContext) => {
+    const programId = context.params.programId;
+    const data = (snap.data() as Record<string, any>) || {};
+    const adminEmail = data.adminEmail;
+    const headCoachName = data.headCoachName;
+    const programName = data.programName;
+    const headCoachId = data.headCoachId || `academy_${programId}`;
+
+    if (!adminEmail) {
+      functions.logger.info(`[Firestore Trigger] Academic program ${programId} has no adminEmail. Skipping.`);
+      return;
+    }
+
+    functions.logger.info(`[Firestore Trigger] New sports academy registration in Firestore: academic_programs/${programId} (${adminEmail})`);
+
+    await dispatchWelcomeEmail({
+      userId: headCoachId,
+      email: adminEmail,
+      displayName: headCoachName,
+      schoolName: programName,
+      role: "coach",
+      sourceTrigger: "firestore.academic_programs.onCreate"
+    });
+  });
+
+/**
+ * 3. AUTH TRIGGER: onAuthUserCreated (also exported as sendPersonalizedWelcomeEmail)
+ * Triggers automatically upon Firebase Authentication user creation.
+ */
+export const onAuthUserCreated = functions.auth
   .user()
   .onCreate(async (user: admin.auth.UserRecord) => {
     const { uid, email, displayName } = user;
 
     if (!email) {
-      functions.logger.warn(`[Auth Trigger] User ${uid} has no email address. Skipping welcome email.`);
+      functions.logger.warn(`[Auth Trigger] User ${uid} has no email address. Skipping.`);
       return;
     }
 
-    functions.logger.info(`[Auth Trigger] Processing new user registration for ${email} (UID: ${uid})`);
+    functions.logger.info(`[Auth Trigger] New Firebase Auth user created: ${email} (UID: ${uid})`);
 
-    const config = getEmailConfig();
-    const recipientName = displayName || email.split("@")[0];
-    const { subject, html, text } = buildPersonalizedWelcomeEmail(
-      recipientName,
+    await dispatchWelcomeEmail({
+      userId: uid,
       email,
-      config.appName,
-      config.appUrl
-    );
-
-    const db = admin.firestore();
-    const mailLogRef = db.collection("mail_logs").doc(`welcome_${uid}`);
-
-    // Check if welcome email was already dispatched to prevent duplicate sends
-    const existingLog = await mailLogRef.get();
-    if (existingLog.exists && existingLog.data()?.status === "sent") {
-      functions.logger.info(`[Auth Trigger] Welcome email already sent to ${email}. Skipping.`);
-      return;
-    }
-
-    let dispatchResult: { success: boolean; provider: string; data?: any; error?: string };
-
-    // 1. Try Resend REST API if configured
-    if (config.resendApiKey) {
-      functions.logger.info(`[Auth Trigger] Dispatching via Resend REST API for ${email}...`);
-      const resendRes = await sendViaResend(
-        config.resendApiKey,
-        config.fromEmail,
-        email,
-        subject,
-        html,
-        text
-      );
-      dispatchResult = { ...resendRes, provider: "resend" };
-    }
-    // 2. Try Brevo REST API if configured
-    else if (config.brevoApiKey) {
-      functions.logger.info(`[Auth Trigger] Dispatching via Brevo REST API for ${email}...`);
-      const brevoRes = await sendViaBrevo(
-        config.brevoApiKey,
-        config.fromEmail,
-        email,
-        subject,
-        html,
-        text
-      );
-      dispatchResult = { ...brevoRes, provider: "brevo" };
-    }
-    // 3. Try App REST Webhook URL if configured
-    else if (config.webhookUrl) {
-      functions.logger.info(`[Auth Trigger] Dispatching via App Webhook REST API for ${email}...`);
-      const webhookRes = await sendViaWebhook(
-        config.webhookUrl,
-        email,
-        recipientName,
-        uid
-      );
-      dispatchResult = { ...webhookRes, provider: "webhook" };
-    }
-    // 4. Simulated Fallback (Logs payload for development environment)
-    else {
-      functions.logger.warn(
-        `[Auth Trigger] No RESEND_API_KEY, BREVO_API_KEY, or WELCOME_API_WEBHOOK_URL found in environment. Email simulated for ${email}.`
-      );
-      dispatchResult = {
-        success: true,
-        provider: "simulated",
-        data: { message: "Simulated dispatch - configure RESEND_API_KEY or BREVO_API_KEY in functions config" }
-      };
-    }
-
-    // Save audit log to Firestore for traceability
-    try {
-      await mailLogRef.set({
-        uid,
-        email,
-        recipientName,
-        subject,
-        provider: dispatchResult.provider,
-        status: dispatchResult.success ? "sent" : "failed",
-        error: dispatchResult.error || null,
-        sentAt: admin.firestore.FieldValue.serverTimestamp(),
-        triggeredBy: "auth.user().onCreate"
-      });
-      functions.logger.info(`[Auth Trigger] Audit log recorded for UID ${uid} in collection 'mail_logs'.`);
-    } catch (logErr) {
-      functions.logger.error("[Auth Trigger] Failed to write Firestore mail log:", logErr);
-    }
-
-    if (dispatchResult.success) {
-      functions.logger.info(`[Auth Trigger] Welcome email successfully sent to ${email} via ${dispatchResult.provider}`);
-    } else {
-      functions.logger.error(`[Auth Trigger] Failed to send welcome email to ${email}:`, dispatchResult.error);
-    }
+      displayName: displayName || undefined,
+      sourceTrigger: "auth.user.onCreate"
+    });
   });
+
+// Backward compatibility export
+export const sendPersonalizedWelcomeEmail = onAuthUserCreated;

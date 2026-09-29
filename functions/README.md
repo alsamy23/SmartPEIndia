@@ -1,75 +1,71 @@
-# Firebase Cloud Functions: Automated Auth User Welcome Email
+# Firebase Cloud Functions: Automated User & Academy Registration Welcome Email
 
-This Firebase Cloud Functions package contains an automated trigger function `sendPersonalizedWelcomeEmail` that listens to Firebase Authentication user creation events (`auth.user().onCreate`) and invokes the configured transactional email REST API (Resend or Brevo) or an external webhook to deliver a personalized welcome email.
+This Firebase Cloud Functions package automatically triggers when a new user registers in **Firestore** (`users/{userId}`) or an academy is registered (`academic_programs/{programId}`), as well as on Firebase Authentication (`auth.user().onCreate`).
 
----
-
-## 🚀 How It Works
-
-1. **User Sign Up**: When a new teacher/educator registers or signs in with Google Auth or Email in your application, Firebase Auth emits an `onCreate` user event.
-2. **Cloud Function Trigger**: The `sendPersonalizedWelcomeEmail` function is automatically executed by Google Cloud infrastructure.
-3. **Personalization**: The function parses the user's name, email, and metadata, and formats a responsive HTML welcome email containing their 1-Year Free Founding Pass confirmation and curriculum quick-links.
-4. **REST API Dispatch**:
-   - If `RESEND_API_KEY` is configured: calls `POST https://api.resend.com/emails` with Bearer authentication.
-   - If `BREVO_API_KEY` is configured: calls `POST https://api.brevo.com/v3/smtp/email` with `api-key` header.
-   - If `WELCOME_API_WEBHOOK_URL` is set: forwards the event to your custom backend endpoint.
-5. **Audit Logging & Deduplication**: Records the delivery record in the Firestore `mail_logs` collection to prevent duplicate sends and track delivery status.
+It uses the **Brevo (Sendinblue)** API configuration to send a professional, branded welcome email to the newly registered user without any front-end redirection or client-side email app interaction.
 
 ---
 
-## 🛠️ Deployment Instructions
+## 🚀 Triggers Included
 
-### 1. Prerequisites
-Ensure you have the Firebase CLI installed and logged in:
+1. **`onUserDocumentCreated`** (`functions.firestore.document("users/{userId}").onCreate`):
+   - Triggers immediately when a teacher or educator profile document is created in Firestore.
+   - Dispatches a personalized welcome email via Brevo REST API.
+   - Records delivery in `mail_logs` and marks `welcomeEmailSentAt` on the user document.
+   - Built-in deduplication ensures no duplicate emails are sent if multiple triggers fire.
+
+2. **`onAcademicProgramCreated`** (`functions.firestore.document("academic_programs/{programId}").onCreate`):
+   - Triggers when a new sports academy or coaching program is registered.
+   - Sends the academy welcome email to the head coach / administrator.
+
+3. **`onAuthUserCreated` / `sendPersonalizedWelcomeEmail`** (`functions.auth.user().onCreate`):
+   - Listens to Firebase Auth user creation.
+
+---
+
+## 🛠️ Setup & Deployment Instructions
+
+### 1. Configure Brevo API Key in Firebase Functions
+
+Set your Brevo API key and sender email using Firebase Cloud Functions configuration or `.env`:
+
 ```bash
-npm install -g firebase-tools
-firebase login
-```
-
-### 2. Configure Secrets / Environment Variables
-Set your chosen provider's API key in Firebase Cloud Functions:
-
-#### Option A: Using Firebase Secrets (Recommended)
-```bash
-# Set Resend API Key:
-firebase functions:secrets:set RESEND_API_KEY
-
-# OR set Brevo API Key:
+# Set Brevo API Key secret
 firebase functions:secrets:set BREVO_API_KEY
 ```
 
-#### Option B: Using Functions `.env` file
-Create a `functions/.env` file with:
+Or configure in `functions/.env`:
 ```env
-RESEND_API_KEY=re_123456789...
-FROM_EMAIL="Smart PE India <welcome@smartpeindia.app>"
-APP_NAME="Smart PE India"
+BREVO_API_KEY=your_brevo_v3_api_key_here
+FROM_EMAIL="SmartPE India <admin@smartpeindia.com>"
+APP_NAME="SmartPE India"
 APP_URL="https://smartpeindia.app"
+SUPPORT_EMAIL="admin@smartpeindia.com"
 ```
 
-### 3. Build and Deploy
-From the project root:
-```bash
-# Install functions dependencies
-cd functions && npm install
+### 2. Verify Sender in Brevo
+1. Log in to [Brevo](https://app.brevo.com/).
+2. Go to **Senders, Domains & Dedicated IPs** > **Senders**.
+3. Add and verify `admin@smartpeindia.com`.
 
+### 3. Deploy Functions to Firebase
+```bash
 # Build TypeScript
-npm run build
+cd functions && npm run build
 
-# Deploy Cloud Functions to Firebase
-cd .. && firebase deploy --only functions
+# Deploy Cloud Functions
+firebase deploy --only functions
 ```
 
-Or deploy only the specific trigger function:
+Or deploy specific triggers:
 ```bash
-firebase deploy --only functions:sendPersonalizedWelcomeEmail
+firebase deploy --only functions:onUserDocumentCreated,functions:onAcademicProgramCreated
 ```
 
 ---
 
 ## 📊 Viewing Logs
-To stream live execution logs in your terminal:
+To stream execution logs in real time:
 ```bash
-firebase functions:log --only sendPersonalizedWelcomeEmail
+firebase functions:log
 ```
-You can also view function executions in the **Google Cloud Console** or **Firebase Console > Functions > Logs**.

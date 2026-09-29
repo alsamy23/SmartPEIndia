@@ -267,6 +267,31 @@
         "coachFeedback": { "type": "string" }
       },
       "required": ["id", "programId", "athleteId", "sportId", "cycleType", "overallScore", "overallTier"]
+    },
+    "Intervention": {
+      "title": "Intervention",
+      "description": "Targeted physical development intervention and reassessment tracking records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "area": { "type": "string" },
+        "goal": { "type": "string" },
+        "strategy": { "type": "string" },
+        "frequency": { "type": "string" },
+        "duration": { "type": "string" },
+        "responsibleTeacher": { "type": "string" },
+        "startDate": { "type": "string" },
+        "reviewDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Under Review", "Completed", "Dismissed"] },
+        "reassessmentOutcome": { "type": "string" },
+        "reassessmentNotes": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "schoolId", "goal", "status"]
     }
   },
   "firestore": {
@@ -280,6 +305,7 @@
     "/academic_programs/{programId}": { "schema": "AcademicProgram", "description": "Academic sports coaching programs" },
     "/academic_athletes/{athleteId}": { "schema": "AcademicAthlete", "description": "Athletes in academic coaching programs" },
     "/academic_assessments/{assessmentId}": { "schema": "AcademicAssessment", "description": "Skill and physical evaluations in academic coaching programs" },
+    "/interventions/{interventionId}": { "schema": "Intervention", "description": "Physical development interventions and reassessments" },
     "/system_logs/{logId}": { "schema": "AppErrorLog", "description": "Remote application logs" },
     "/mail_logs/{logId}": { "schema": "MailLog", "description": "Transactional email logs" },
     "/workloads/{workloadId}": { "schema": "DepartmentWorkload", "description": "Teacher workload schedules and curriculum setups" },

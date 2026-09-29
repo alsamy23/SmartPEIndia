@@ -215,8 +215,18 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
         }
       }
     } catch (err: any) {
+      if (
+        err?.code === 'auth/popup-closed-by-user' ||
+        err?.code === 'auth/cancelled-popup-request' ||
+        err?.message?.includes('popup-closed-by-user') ||
+        err?.message?.includes('cancelled-popup-request')
+      ) {
+        // User closed the popup - silently clean up state
+        console.info('Google Sign-In popup closed by user.');
+        return;
+      }
       console.error('Google Auth Error:', err);
-      setError(err.message);
+      setError(err.message || 'Google Sign-In failed. Please try again.');
     } finally {
       setLoading(false);
     }

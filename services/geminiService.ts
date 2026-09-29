@@ -2,7 +2,7 @@
 import { BoardType, LessonPlan, YearlyPlan, TheoryContent, Language, FitnessAssessment, BiomechanicsConcept, TestPaper } from "../types.ts";
 import { auth } from "./firebase.ts";
 
-const callAIBase = async (payload: any, retries = 2) => {
+export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
   // Check for internet connection first
   if (!navigator.onLine) {
     throw new Error("No Internet Connection: Please check your network settings and try again.");

@@ -364,6 +364,160 @@ export interface VivaQuestionPrompt {
   marksWeight: number;
 }
 
+// =========================================================================
+// UNIFIED PHYSICAL DEVELOPMENT PROFILE & 6 CORE DOMAINS
+// =========================================================================
+
+export type DevelopmentDomainId = 
+  | 'fitness' 
+  | 'movement_skills' 
+  | 'sport_skills' 
+  | 'participation' 
+  | 'teamwork' 
+  | 'personal_dev';
+
+export type DevelopmentLevel = 
+  | 'Beginning' 
+  | 'Developing' 
+  | 'Progressing' 
+  | 'Proficient' 
+  | 'Advanced';
+
+export type TestDirection = 'higher_is_better' | 'lower_is_better' | 'rubric';
+
+export interface TestDefinition {
+  id: string;
+  name: string;
+  domain: DevelopmentDomainId;
+  component: string;
+  classGrades: string[];      // e.g. ['1', '2', '3'] or ['4', '5', '6', '7', '8'] or ['ALL']
+  unit: string;               // e.g. 'seconds', 'cm', 'count', 'kg/m²', 'rubric 1-4'
+  measurementType: 'numeric' | 'time_mm_ss' | 'composite_bmi' | 'rubric';
+  direction: TestDirection;
+  scoringMethod: 'percentile' | 'benchmark' | 'rubric_level' | 'bmi_standard';
+  rubricLevels?: { level: number; label: string; description: string }[];
+  benchmarks?: {
+    [gender in 'Male' | 'Female']?: {
+      [age: number]: {
+        beginning: number;
+        developing: number;
+        progressing: number;
+        proficient: number;
+        advanced: number;
+      };
+    };
+  };
+  description: string;
+  equipment?: string[];
+  protocol?: string;
+}
+
+export interface CalculatedTestResult {
+  testId: string;
+  testName: string;
+  domain: DevelopmentDomainId;
+  component: string;
+  rawValue: string;
+  parsedNumeric: number;
+  unit: string;
+  direction: TestDirection;
+  term: string;
+  date: string;
+  level: DevelopmentLevel;
+  scorePercent: number;          // 0 - 100 deterministic scale
+  previousValue?: string;
+  previousNumeric?: number;
+  changeDelta?: number;          // Direction-aware (+ means improvement)
+  formattedChange?: string;      // e.g. "+0.5 sec" or "+4 reps" or "+1 level"
+  trend: 'Improving' | 'Steady' | 'Needs Support' | 'Baseline established';
+  percentile?: number;
+  rating?: string;
+}
+
+export interface DomainScore {
+  domainId: DevelopmentDomainId;
+  domainName: string;
+  level: DevelopmentLevel;
+  scorePercent: number;
+  testsCount: number;
+  latestTrend: 'Improving' | 'Steady' | 'Needs Support' | 'Baseline established';
+  growthFromBaseline: number;    // Delta score %
+  evidenceSummary: string;
+  results: CalculatedTestResult[];
+}
+
+export interface BMIDevelopmentPoint {
+  date: string;
+  term: string;
+  bmi: number;
+  heightCm?: number;
+  weightKg?: number;
+  statusLabel: string;           // Neutral status e.g. "Healthy Range", "Higher Range", "Lower Range"
+}
+
+export interface DevelopmentFocusSuggestion {
+  domainId: DevelopmentDomainId;
+  domainName: string;
+  component: string;
+  currentLevel: DevelopmentLevel;
+  evidence: string;
+  suggestedGoal: string;
+  suggestedStrategy: string;
+  suggestedFrequency: string;    // e.g. "2 times per week"
+  suggestedDuration: string;     // e.g. "4 weeks"
+}
+
+export interface InterventionRecord {
+  id: string;
+  studentId: string;
+  studentName?: string;
+  schoolId: string;
+  teacherId: string;
+  area: string;                  // Domain / Component
+  goal: string;
+  strategy: string;
+  frequency: string;
+  duration: string;
+  responsibleTeacher: string;
+  startDate: string;
+  reviewDate: string;
+  status: 'Active' | 'Under Review' | 'Completed' | 'Dismissed';
+  reassessmentOutcome?: 'Improvement observed' | 'Partially improved' | 'No significant change' | 'Further support recommended';
+  reassessmentNotes?: string;
+  updatedAt: string;
+}
+
+export interface PhysicalDevelopmentProfile {
+  studentId: string;
+  studentName: string;
+  grade: string;
+  section: string;
+  gender: 'Male' | 'Female';
+  age: number;
+  schoolId: string;
+  teacherId: string;
+  academicYear: string;
+  currentTerm: string;
+  overallLevel: DevelopmentLevel;
+  overallGrowthScore: number;    // Net growth %
+  domains: Record<DevelopmentDomainId, DomainScore>;
+  bmiHistory: BMIDevelopmentPoint[];
+  currentBMI?: BMIDevelopmentPoint;
+  developmentFocus?: DevelopmentFocusSuggestion;
+  activeInterventions: InterventionRecord[];
+  allRecordedTerms: string[];
+  lastAssessedDate: string;
+}
+
+export interface ParentReportSummary {
+  whatIsGoingWell: string[];
+  progressThisTerm: string[];
+  developmentFocus: string;
+  currentGoal: string;
+  howFamilyCanSupport: string[];
+  teacherNotes?: string;
+}
+
 // Brand communication and super-administrator emails
 export const BRAND_EMAILS = {
   admin: 'admin@smartpeindia.app',
@@ -375,6 +529,8 @@ export const BRAND_EMAILS = {
 } as const;
 
 export const SUPER_ADMIN_EMAILS = [
+  'alsamy36@gmail.com',
+  'admin@smartpeindia.com',
   'admin@smartpeindia.app',
   'contact@smartpeindia.app',
   'info@smartpeindia.app'

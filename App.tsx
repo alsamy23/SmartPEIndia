@@ -71,13 +71,13 @@ import PrincipalDashboard from './components/PrincipalDashboard.tsx';
 import DepartmentOffice from './components/DepartmentOffice.tsx';
 import BrandWelcomeHub from './components/BrandWelcomeHub.tsx';
 import PricingAndPlans from './components/PricingAndPlans.tsx';
-import WelcomeOnboardingModal from './components/WelcomeOnboardingModal.tsx';
 import PracticalAssessmentHub from './components/PracticalAssessmentHub.tsx';
 import CbsePhysicalEducationPage from './components/seo/CbsePhysicalEducationPage.tsx';
 import KheloIndiaFitnessPage from './components/seo/KheloIndiaFitnessPage.tsx';
 import AiLessonPlannerPage from './components/seo/AiLessonPlannerPage.tsx';
 import PeAssessmentPage from './components/seo/PeAssessmentPage.tsx';
 import { CoachingAcademyHub } from './components/coaching/CoachingAcademyHub.tsx';
+import { UnifiedPhysicalDevelopmentHub } from './components/fitness/UnifiedPhysicalDevelopmentHub.tsx';
 import { GlobalSearch } from './components/GlobalSearch.tsx';
 import { VoiceAgentModal } from './components/VoiceAgentModal.tsx';
 import { SpotlightBanner, SpotlightData } from './components/SpotlightBanner.tsx';
@@ -89,7 +89,7 @@ import { onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth
 import { trackEvent } from './services/analytics.ts';
 import { toast, SHOW_TOAST_EVENT, SHOW_CONFIRM_EVENT, ToastConfig, ConfirmConfig } from './services/toast.ts';
 
-type Tab = 'dashboard' | 'cbse-physical-education' | 'khelo-india-fitness-assessment' | 'ai-pe-lesson-planner' | 'physical-education-assessment' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'coaching-assessment' | 'coaching-academy' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
+type Tab = 'dashboard' | 'cbse-physical-education' | 'khelo-india-fitness-assessment' | 'ai-pe-lesson-planner' | 'physical-education-assessment' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'physical-development' | 'coaching-assessment' | 'coaching-academy' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
 
 // Helper to determine initial tab from URL pathname, query, or hash
 const getInitialTab = (): Tab => {
@@ -109,6 +109,8 @@ const getInitialTab = (): Tab => {
   if (seoPathMap[hash]) return seoPathMap[hash];
 
   const hashToTab: Record<string, Tab> = {
+    'physical-development': 'physical-development',
+    'development-profile': 'physical-development',
     'lesson-planner': 'planner',
     'yearly-planner': 'yearly',
     'weekly-planner': 'weekly-planner',
@@ -172,6 +174,7 @@ const navigation = [
   { 
     section: 'Assess',
     items: [
+      { id: 'physical-development', name: 'Physical Development Profile', icon: Activity, isNew: true, subtitle: 'Unified 6-domain profile, automated calculations & parent reports.' },
       { id: 'cbse-practical', name: 'CBSE Practical (30M)', icon: ClipboardCheck, subtitle: 'Class 11 & 12 30-mark practical scoring & award sheet.' },
       { id: 'fitness', name: 'Student Fitness Assessment', icon: Activity, subtitle: 'All Khelo India & standard fitness tests pre-loaded.' },
       { id: 'khelo', name: 'Khelo India Battery', icon: Trophy, subtitle: 'Official battery tests and student profiles.' },
@@ -493,6 +496,7 @@ interface StickyHeaderProps {
   activeWorkspace: 'school' | 'academy';
   setActiveWorkspace: (ws: 'school' | 'academy') => void;
   onOpenVoiceAgent?: () => void;
+  user?: FirebaseUser | null;
 }
 const StickyHeader: React.FC<StickyHeaderProps> = React.memo(({
   activeTab,
@@ -502,7 +506,8 @@ const StickyHeader: React.FC<StickyHeaderProps> = React.memo(({
   schoolLogo,
   activeWorkspace,
   setActiveWorkspace,
-  onOpenVoiceAgent
+  onOpenVoiceAgent,
+  user
 }) => {
   return (
     <div className="relative md:sticky md:top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 md:px-8 md:py-3.5 print:hidden shadow-sm flex items-center justify-between gap-4">
@@ -511,6 +516,14 @@ const StickyHeader: React.FC<StickyHeaderProps> = React.memo(({
         <div className="cursor-pointer" onClick={() => handleTabChange('dashboard')}>
           <Logo variant="color" size="lg" customLogoUrl={schoolLogo} customSchoolName={schoolName} />
         </div>
+
+        {/* User Welcome Headline (Compact, non-intrusive) */}
+        {user && (
+          <div className="hidden 2xl:flex items-center gap-2 px-3 py-1 bg-slate-100 border border-slate-200 rounded-full text-xs font-bold text-slate-700">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Welcome, <strong className="text-slate-900">{user.displayName || user.email?.split('@')[0] || 'Educator'}</strong></span>
+          </div>
+        )}
 
         {/* Quick Workspace Switch Pill in Header */}
         <button
@@ -634,7 +647,6 @@ const App: React.FC = () => {
   });
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isAuthView, setIsAuthView] = useState(false);
-  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [selectedReportStudentId, setSelectedReportStudentId] = useState<string | null>(null);
   const [coachingReportId, setCoachingReportId] = useState<string | null>(null);
   const [highlightStudentId, setHighlightStudentId] = useState<string | null>(null);
@@ -736,10 +748,11 @@ const App: React.FC = () => {
       setIsAuthReady(true);
       if (currentUser) {
         setIsAuthView(false); // Reset auth view when user logs in
-        // Show welcome onboarding modal for logged-in session if first time
-        if (!sessionStorage.getItem('welcome_modal_shown')) {
-          setShowWelcomeModal(true);
-          sessionStorage.setItem('welcome_modal_shown', 'true');
+        // Show lightweight welcome toast instead of blocking pop-up modal
+        if (!sessionStorage.getItem('welcome_notified')) {
+          const name = currentUser.displayName || currentUser.email?.split('@')[0] || 'Educator';
+          toast.success(`Welcome back, ${name}!`);
+          sessionStorage.setItem('welcome_notified', 'true');
         }
       }
     }, (error) => {
@@ -1063,6 +1076,7 @@ const App: React.FC = () => {
       case 'compliance': return <ComplianceAdvisor />;
       case 'khelo': return <KheloIndia />;
       case 'rules': return <RulesBot />;
+      case 'physical-development': return <UnifiedPhysicalDevelopmentHub onNavigate={handleTabChange} initialStudentId={selectedReportStudentId || undefined} />;
       case 'fitness': return <FitnessTests />;
       case 'cbse-practical': return <PracticalAssessmentHub />;
       case 'coaching-assessment':
@@ -1286,6 +1300,7 @@ const App: React.FC = () => {
             activeWorkspace={activeWorkspace}
             setActiveWorkspace={setActiveWorkspace}
             onOpenVoiceAgent={() => setIsVoiceAgentOpen(true)}
+            user={user}
           />
 
           {/* Voice Guide Spotlight Beacon on Screen */}
@@ -1337,15 +1352,6 @@ const App: React.FC = () => {
                 setSpotlightInfo({ ...spotlight, tabId });
               }
             }}
-          />
-
-          {/* Welcome Onboarding Modal for New / Signed-In Users */}
-          <WelcomeOnboardingModal
-            isOpen={showWelcomeModal}
-            onClose={() => setShowWelcomeModal(false)}
-            userName={user?.displayName || user?.email?.split('@')[0] || 'Educator'}
-            schoolName="Smart PE Partner School"
-            onNavigateTab={handleTabChange}
           />
 
           {/* Mobile Bottom Navigation - Displayed exclusively for School PE, hidden in Coaching & Academy to avoid layout collision */}

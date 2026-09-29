@@ -620,16 +620,7 @@ export const BrandWelcomeHub: React.FC<BrandWelcomeHubProps> = ({
               className="px-8 py-4 bg-[#0D2B52] text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-[#153e75] disabled:opacity-50 transition-all flex items-center space-x-2 shadow-lg cursor-pointer"
             >
               <Zap size={16} className="text-amber-400" />
-              <span>{isSending ? 'Dispatching Personalized HTML Email...' : '⚡ Send Test Welcome Email Directly'}</span>
-            </button>
-
-            <button
-              onClick={handleSendMailto}
-              disabled={!recipientEmail}
-              className="px-8 py-4 bg-slate-900 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-slate-800 disabled:opacity-50 transition-all flex items-center space-x-2 shadow-lg"
-            >
-              <Send size={16} />
-              <span>Open in Default Mail Client</span>
+              <span>{isSending ? 'Dispatching Personalized HTML Email...' : '⚡ Send Test Welcome Email via Brevo'}</span>
             </button>
           </div>
 
