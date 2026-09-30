@@ -640,11 +640,48 @@ export const fitnessService = {
     }
   },
 
-  deleteSchoolMember: async (uid: string) => {
+  deleteSchoolMember: async (uid: string, email?: string, schoolId?: string) => {
     const path = `schoolMembers/${uid}`;
     try {
+      // 1. Delete the primary schoolMembers doc
       await deleteDoc(doc(db, 'schoolMembers', uid));
       delete schoolMemberCache[uid];
+
+      // 2. If email & schoolId provided, delete any duplicate or pending invite docs for this email
+      if (email && schoolId) {
+        try {
+          const q = query(
+            collection(db, 'schoolMembers'), 
+            where('schoolId', '==', schoolId), 
+            where('email', '==', email.trim().toLowerCase())
+          );
+          const snap = await getDocs(q);
+          const deletePromises = snap.docs.map(d => deleteDoc(d.ref));
+          await Promise.all(deletePromises);
+        } catch (e) {
+          console.warn("Notice cleaning up pending member docs:", e);
+        }
+      }
+
+      // 3. If this was a registered user (not a pending_ id), unlink their user profile so they revert to an individual teacher workspace
+      if (!uid.startsWith('pending_')) {
+        try {
+          const userDocRef = doc(db, 'users', uid);
+          const userSnap = await getDoc(userDocRef);
+          if (userSnap.exists()) {
+            const uData = userSnap.data();
+            if (!schoolId || uData.schoolId === schoolId) {
+              await setDoc(userDocRef, {
+                schoolId: `personal_${uid}`,
+                schoolName: '',
+                role: 'teacher'
+              }, { merge: true });
+            }
+          }
+        } catch (e) {
+          console.warn("Notice updating unlinked user doc:", e);
+        }
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, path);
     }
@@ -665,7 +702,7 @@ export const fitnessService = {
       // Check if there is an invited record with matching email
       const userEmail = auth.currentUser?.email;
       if (userEmail) {
-        const q = query(collection(db, 'schoolMembers'), where('email', '==', userEmail));
+        const q = query(collection(db, 'schoolMembers'), where('email', '==', userEmail.toLowerCase().trim()));
         const snap = await getDocs(q);
         if (!snap.empty) {
           const matchDoc = snap.docs.find(d => d.id !== uid) || snap.docs[0];
@@ -708,19 +745,25 @@ export const fitnessService = {
       const userSnap = await getDoc(doc(db, 'users', uid));
       if (userSnap.exists()) {
         const uData = userSnap.data();
-        if (uData.schoolId) {
-          const memberRecord: SchoolMember = {
-            uid: uid,
-            schoolId: uData.schoolId,
-            role: uData.role || 'teacher',
-            displayName: uData.displayName || auth.currentUser?.displayName || 'Teacher',
-            email: uData.email || auth.currentUser?.email || '',
-            schoolName: uData.schoolName || '',
-            schoolLogo: uData.schoolLogo || ''
-          };
-          await setDoc(doc(db, 'schoolMembers', uid), memberRecord, { merge: true });
-          schoolMemberCache[uid] = memberRecord;
-          return memberRecord;
+        if (uData.schoolId && !uData.schoolId.startsWith('personal_')) {
+          // Verify user is still owner of school or school exists before re-creating
+          const schoolSnap = await getDoc(doc(db, 'schools', uData.schoolId));
+          const isSchoolAdmin = schoolSnap.exists() && schoolSnap.data()?.adminId === uid;
+          
+          if (isSchoolAdmin) {
+            const memberRecord: SchoolMember = {
+              uid: uid,
+              schoolId: uData.schoolId,
+              role: 'admin',
+              displayName: uData.displayName || auth.currentUser?.displayName || 'School Admin',
+              email: uData.email || auth.currentUser?.email || '',
+              schoolName: uData.schoolName || '',
+              schoolLogo: uData.schoolLogo || ''
+            };
+            await setDoc(doc(db, 'schoolMembers', uid), memberRecord, { merge: true });
+            schoolMemberCache[uid] = memberRecord;
+            return memberRecord;
+          }
         }
       }
 

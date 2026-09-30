@@ -85,7 +85,11 @@ service cloud.firestore {
         (resource != null && resource.data.schoolId != null && isSchoolMember(resource.data.schoolId)) ||
         (resource != null && resource.data.academyId != null && isAcademyMember(resource.data.academyId))
       );
-      allow create, update: if isAuthenticated() && (isOwner(uid) || isSuperAdmin());
+      allow create, update: if isAuthenticated() && (
+        isOwner(uid) || 
+        isSuperAdmin() ||
+        (resource != null && resource.data.schoolId != null && isSchoolAdmin(resource.data.schoolId))
+      );
       allow delete: if isAuthenticated() && (isOwner(uid) || isSuperAdmin());
     }
 

@@ -205,7 +205,7 @@ const navigation = [
       { id: 'widgets', name: 'PE Classroom Widgets', icon: Zap, subtitle: 'Interactive timers and tools.' },
       { id: 'compliance', name: 'State Compliance', icon: ShieldCheck, subtitle: 'CBSE and NEP 2020 alignment.' },
       { id: 'tools', name: 'AI Tool Center', icon: Wrench, subtitle: 'AI tools that save you time daily.' },
-      { id: 'school-admin', name: 'School Settings', icon: Shield, protected: true },
+      { id: 'school-admin', name: 'School Settings', icon: Shield, protected: true, subtitle: 'Manage school profile, logo branding, and add/remove teachers.' },
       { id: 'logs', name: 'System Logs', icon: Terminal, protected: true, subtitle: 'Monitor real-time error reports.' },
     ]
   },

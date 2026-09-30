@@ -63,6 +63,7 @@ const SchoolAdmin: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<SchoolMember | null>(null);
   const [allSchools, setAllSchools] = useState<any[]>([]);
+  const [teacherSearchQuery, setTeacherSearchQuery] = useState<string>('');
 
   // Tab & Timetable Doc Ingest States
   const [activeAdminTab, setActiveAdminTab] = useState<'profile' | 'access' | 'ocr' | 'seo' | 'directory' | 'privacy'>('profile');
@@ -672,19 +673,23 @@ Thursday Period 4: Grade 7B - Functional Training
 Friday Period 3: Grade 7B - Fitness`;
   };
 
-  const handleDeleteMember = async (uid: string) => {
+  const handleDeleteMember = async (member: SchoolMember) => {
     if (!userProfile) return;
-    toast.confirm("Remove this team member? They will lose access to school data.", async () => {
+    const memberName = member.displayName || member.email || 'this teacher';
+    toast.confirm(`Remove ${memberName} from this school? Their access to school students, assessments, and classes will be revoked immediately.`, async () => {
       setLoading(true);
+      setError(null);
       try {
-        await fitnessService.deleteSchoolMember(uid);
-        setSuccess("Member removed successfully.");
+        await fitnessService.deleteSchoolMember(member.uid, member.email, userProfile.schoolId);
+        setSuccess(`Teacher ${memberName} was successfully removed from the school.`);
+        toast.success(`Removed ${memberName} from school.`);
         
         // Refresh list
         const schoolMembers = await fitnessService.getSchoolMembers(userProfile.schoolId);
         setMembers(schoolMembers);
       } catch (err: any) {
-        setError(err.message);
+        setError(err.message || 'Failed to remove member.');
+        toast.error(err.message || 'Failed to remove member.');
       } finally {
         setLoading(false);
       }
@@ -695,18 +700,37 @@ Friday Period 3: Grade 7B - Fitness`;
     e.preventDefault();
     if (!userProfile) return;
 
+    const cleanEmail = newMember.email.trim().toLowerCase();
+    const cleanName = newMember.displayName.trim() || cleanEmail.split('@')[0] || 'Teacher';
+
+    if (!cleanEmail) {
+      setError('Please provide a valid teacher email address.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
+      // Check if this teacher is already in the school
+      const existingInList = members.find(m => m.email.toLowerCase() === cleanEmail);
+      if (existingInList) {
+        setError(`A teacher with email "${cleanEmail}" is already added to this school.`);
+        setLoading(false);
+        return;
+      }
+
       await fitnessService.addTeamMember({
         uid: `pending_${Math.random().toString(36).substr(2, 9)}`,
         schoolId: userProfile.schoolId,
         schoolName: currentSchool?.name || userProfile.schoolName || 'SmartPE Partner School',
         schoolLogo: currentSchool?.logoUrl || userProfile.schoolLogo || '',
-        ...newMember
+        displayName: cleanName,
+        email: cleanEmail,
+        role: newMember.role || 'teacher'
       });
       
-      setSuccess(`Member ${newMember.displayName} added successfully.`);
+      setSuccess(`Teacher ${cleanName} (${cleanEmail}) added to school. They will have access upon sign-in.`);
+      toast.success(`Teacher added!`);
       setIsAdding(false);
       setNewMember({ email: '', displayName: '', role: 'teacher' });
       
@@ -714,7 +738,8 @@ Friday Period 3: Grade 7B - Fitness`;
       const schoolMembers = await fitnessService.getSchoolMembers(userProfile.schoolId);
       setMembers(schoolMembers);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Failed to add teacher.');
+      toast.error(err.message || 'Failed to add teacher.');
     } finally {
       setLoading(false);
     }
@@ -824,7 +849,7 @@ Friday Period 3: Grade 7B - Fitness`;
           className={`pb-4 px-8 text-xs font-black uppercase tracking-widest border-b-4 -mb-[4px] transition-all flex items-center gap-2 whitespace-nowrap ${activeAdminTab === 'access' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
         >
           <User size={14} />
-          <span>Team Access Control</span>
+          <span>Team & Teachers ({members.length})</span>
         </button>
         <button
           onClick={() => {
@@ -1106,52 +1131,171 @@ Friday Period 3: Grade 7B - Fitness`;
           </div>
         </div>
       ) : activeAdminTab === 'access' ? (
-        /* Members List */
-        <div className="bg-white rounded-[2.5rem] border-2 border-slate-900 overflow-hidden shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b-2 border-slate-900">
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Member Name</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Role</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {members.map(member => (
-                <tr key={member.uid} className="hover:bg-slate-50 transition-colors group">
-                  <td className="p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-indigo-50 border-2 border-slate-900 rounded-xl flex items-center justify-center text-indigo-650 font-black text-xs shadow-sm">
-                        {member.displayName.substring(0, 2).toUpperCase()}
-                      </div>
-                      <span className="font-black text-slate-900 uppercase tracking-tight">{member.displayName}</span>
-                    </div>
-                  </td>
-                  <td className="p-6">
-                    <span className="font-bold text-slate-500">{member.email}</span>
-                  </td>
-                  <td className="p-6">
-                    <span className={`inline-flex px-3 py-1 border border-slate-900 rounded-lg text-[10px] font-black uppercase tracking-widest ${
-                      member.role === 'admin' ? 'bg-indigo-600 text-white' : 'bg-slate-105 text-slate-600'
-                    }`}>
-                      {member.role}
-                    </span>
-                  </td>
-                  <td className="p-6 text-right">
-                    {member.uid !== auth.currentUser?.uid && (
-                      <button 
-                        onClick={() => handleDeleteMember(member.uid)}
-                        className="p-2 hover:bg-red-50 text-red-600 border border-transparent hover:border-slate-900 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
-                  </td>
+        /* Teaching Staff & Member Access Panel */
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 border-2 border-slate-900 p-8 rounded-[2.5rem] text-white shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2 z-10">
+              <span className="inline-flex px-3 py-1 border border-indigo-400 bg-indigo-800/80 text-indigo-100 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                School Staff & Teaching Team
+              </span>
+              <h3 className="text-3xl font-black uppercase tracking-tighter">Teaching Staff & Member Access</h3>
+              <p className="text-indigo-200 text-sm font-medium max-w-2xl leading-relaxed">
+                Add teachers by their email address to grant access to your school. If a teacher leaves or was added by mistake, click <strong className="text-white">"Remove Teacher"</strong> below to revoke their access instantly.
+              </p>
+            </div>
+            <div className="z-10 flex-shrink-0">
+              <button 
+                onClick={() => {
+                  setError(null);
+                  setIsAdding(true);
+                }}
+                className="px-6 py-3.5 bg-white text-slate-900 border-2 border-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-50 hover:shadow-lg transition-all shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center gap-2 cursor-pointer"
+              >
+                <UserPlus size={16} className="text-indigo-600" />
+                <span>Add Teacher / Invite Staff</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Search bar & count */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border-2 border-slate-900 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input
+                type="text"
+                value={teacherSearchQuery}
+                onChange={(e) => setTeacherSearchQuery(e.target.value)}
+                placeholder="Search teachers by name, email, or role..."
+                className="w-full pl-10 pr-12 py-2.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+              />
+              {teacherSearchQuery && (
+                <button
+                  onClick={() => setTeacherSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="text-xs font-bold text-slate-600">
+              Showing <span className="text-slate-900 font-black">{members.filter(m => !teacherSearchQuery.trim() || (m.displayName?.toLowerCase().includes(teacherSearchQuery.toLowerCase())) || (m.email?.toLowerCase().includes(teacherSearchQuery.toLowerCase())) || (m.role?.toLowerCase().includes(teacherSearchQuery.toLowerCase()))).length}</span> of {members.length} staff member{members.length !== 1 ? 's' : ''}
+            </div>
+          </div>
+
+          {/* Members Table */}
+          <div className="bg-white rounded-[2.5rem] border-2 border-slate-900 overflow-hidden shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b-2 border-slate-900">
+                  <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Teacher / Member</th>
+                  <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</th>
+                  <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Role</th>
+                  <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                  <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {members
+                  .filter(m => {
+                    if (!teacherSearchQuery.trim()) return true;
+                    const q = teacherSearchQuery.toLowerCase().trim();
+                    return (
+                      (m.displayName && m.displayName.toLowerCase().includes(q)) ||
+                      (m.email && m.email.toLowerCase().includes(q)) ||
+                      (m.role && m.role.toLowerCase().includes(q))
+                    );
+                  })
+                  .map(member => {
+                    const isPending = member.uid.startsWith('pending_');
+                    const isCurrentUser = member.uid === auth.currentUser?.uid;
+
+                    return (
+                      <tr key={member.uid} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-6">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 border-2 border-slate-900 rounded-xl flex items-center justify-center font-black text-xs shadow-sm ${
+                              member.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              {(member.displayName || member.email || 'PE').substring(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="font-black text-slate-900 uppercase tracking-tight">
+                                {member.displayName || 'Teaching Staff'}
+                              </div>
+                              {isPending && (
+                                <span className="text-[10px] font-bold text-amber-600 block mt-0.5">
+                                  Invitation dispatched
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-6">
+                          <span className="font-bold text-slate-600 text-xs">{member.email}</span>
+                        </td>
+                        <td className="p-6">
+                          <span className={`inline-flex px-3 py-1 border border-slate-900 rounded-lg text-[10px] font-black uppercase tracking-widest ${
+                            member.role === 'admin' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {member.role}
+                          </span>
+                        </td>
+                        <td className="p-6">
+                          {isPending ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-300 text-amber-800 rounded-lg text-[10px] font-bold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                              <span>Pending Sign-In</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-lg text-[10px] font-bold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              <span>Active Member</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-6 text-right">
+                          {isCurrentUser ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold">
+                              <ShieldCheck size={14} className="text-indigo-600" />
+                              <span>You (School Admin)</span>
+                            </span>
+                          ) : (
+                            <button 
+                              onClick={() => handleDeleteMember(member)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border-2 border-rose-300 hover:border-rose-600 rounded-xl text-xs font-black transition-all shadow-sm hover:shadow active:scale-95 cursor-pointer"
+                              title={isPending ? "Cancel invitation" : "Remove this teacher from the school"}
+                            >
+                              <Trash2 size={14} />
+                              <span>{isPending ? 'Cancel Invite' : 'Remove Teacher'}</span>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+
+            {members.length === 0 && (
+              <div className="p-12 text-center space-y-4">
+                <div className="w-16 h-16 bg-indigo-50 border-2 border-slate-900 rounded-2xl flex items-center justify-center mx-auto text-indigo-600">
+                  <Users size={28} />
+                </div>
+                <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">No Teachers Added Yet</h4>
+                <p className="text-slate-500 text-xs max-w-sm mx-auto font-medium">
+                  Add PE teachers by entering their email. They will automatically be linked to your school once they register or sign in.
+                </p>
+                <button
+                  onClick={() => setIsAdding(true)}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest border-2 border-slate-900 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] hover:bg-indigo-700 transition-all inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <UserPlus size={16} />
+                  <span>Add First Teacher</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         /* Timetable OCR Ingestion Hub */
