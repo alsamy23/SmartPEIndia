@@ -647,8 +647,8 @@ apiRouter.get("/ai/test", async (req, res) => {
       const groq = new Groq({ apiKey: groqKey });
       const testModels = [
         "openai/gpt-oss-120b",
-        "qwen/qwen3-32b",
-        "meta-llama/llama-4-scout-17b-16e-instruct"
+        "openai/gpt-oss-20b",
+        "qwen/qwen3.8-27b"
       ];
       
       let lastTestErr: any = null;
@@ -718,9 +718,9 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
       const keysToTry = [...geminiKeys];
       const modelsToTry = [
         resolvedModel,
-        "gemini-3.8-flash",
         "gemini-3.1-flash-lite",
-        "gemini-2.5-flash"
+        "gemini-2.5-flash",
+        "gemini-3.8-flash"
       ];
       const uniqueModels = [...new Set(modelsToTry)];
 
@@ -786,19 +786,23 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
 
         const groqModels = [
           "openai/gpt-oss-120b",
-          "qwen/qwen3-32b",
-          "meta-llama/llama-4-scout-17b-16e-instruct"
+          "openai/gpt-oss-20b",
+          "qwen/qwen3.8-27b"
         ];
+
+        const isJson = config?.responseMimeType === "application/json";
+        const systemPrompt = (config?.systemInstruction || "You are an expert AI physical education assistant.") + 
+          (isJson ? " You must respond with valid JSON." : "");
 
         for (const gModel of groqModels) {
           try {
             const completion = await groq.chat.completions.create({
               messages: [
-                { role: "system", content: config?.systemInstruction || "You are an expert AI physical education assistant." },
+                { role: "system", content: systemPrompt },
                 { role: "user", content: promptText }
               ],
               model: gModel,
-              response_format: config?.responseMimeType === "application/json" ? { type: "json_object" } : undefined
+              response_format: isJson ? { type: "json_object" } : undefined
             });
 
             return res.json({ 
@@ -826,8 +830,15 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
     if (errorStr.includes("quota") || errorStr.includes("429") || errorStr.includes("resource_exhausted")) {
       statusCode = 429;
       errorMessage = "AI generation quota is temporarily saturated. Please try again in a few moments.";
+    } else if (errorStr.includes("503") || errorStr.includes("high demand") || errorStr.includes("unavailable")) {
+      statusCode = 503;
+      errorMessage = "AI servers are experiencing temporary high demand. Please try again in a moment.";
     } else if (lastError?.message) {
-      errorMessage = lastError.message;
+      if (lastError.message.includes("does not exist") || lastError.message.includes("model_not_found")) {
+        errorMessage = "AI model is currently updating. Please try again in a moment.";
+      } else {
+        errorMessage = lastError.message;
+      }
     }
 
     res.status(statusCode).json({ 
