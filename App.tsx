@@ -637,7 +637,6 @@ const App: React.FC = () => {
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
-  const [isKeyDialogOpen, setIsKeyDialogOpen] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [schoolBranding, setSchoolBranding] = useState<{ schoolName: string | null; schoolLogo: string | null }>(() => {
     return {
@@ -858,9 +857,6 @@ const App: React.FC = () => {
         setAiProviders({ gemini: data.hasGemini, groq: data.hasGroq });
         setApiSource(data.hasGemini ? 'Gemini' : 'Groq');
         setDebugInfo(data);
-        if (isKeyDialogOpen && (data.hasGemini || data.hasGroq)) {
-          setIsKeyDialogOpen(false);
-        }
       } else if (data.status === 'error' && (data.message?.toLowerCase().includes('429') || data.message?.toLowerCase().includes('quota'))) {
         setApiStatus('quota');
         setAiProviders({ gemini: false, groq: false });
@@ -879,7 +875,7 @@ const App: React.FC = () => {
         setApiStatus('missing');
       }
     }
-  }, [isKeyDialogOpen]);
+  }, []);
 
   useEffect(() => {
     const handleRejection = (e: PromiseRejectionEvent) => {
@@ -905,52 +901,15 @@ const App: React.FC = () => {
 
   useEffect(() => {
     checkApiStatus().catch(() => {});
-
-    
-    // Check if key was selected if we're still missing it, but less frequently
-    const interval = setInterval(() => {
-      // Small optimization: only check if we are in missing state and the api key might have been set
-      if (apiStatus === 'missing' && window.aistudio) {
-        const checkKey = async () => {
-          try {
-            const hasKey = await window.aistudio!.hasSelectedApiKey();
-            if (hasKey) {
-              await checkApiStatus();
-            }
-          } catch (e) {
-            // Silently catch background errors to avoid annoying the user
-            console.debug("Background check silenced:", e);
-          }
-        };
-        checkKey().catch(() => {});
-      }
-    }, 45000); // 45 seconds is sufficient for background checks
-    
-    return () => clearInterval(interval);
-  }, [apiStatus, checkApiStatus]); // Re-run when apiStatus changes to missing
+  }, [checkApiStatus]);
 
   const handleSelectKey = useCallback(async () => {
     try {
-      if (window.aistudio) {
-        await window.aistudio.openSelectKey();
-        // Assume success as per guidelines
-        setApiStatus('ok');
-        setIsKeyDialogOpen(false);
-        // Re-check health after a short delay to be sure
-        setTimeout(() => checkApiStatus().catch(console.error), 3000);
-      }
+      await checkApiStatus();
     } catch (err) {
       console.error(err);
     }
   }, [checkApiStatus]);
-
-  const triggerKeySelector = useCallback(async () => {
-    try {
-      await handleSelectKey();
-    } catch (err) {
-      console.error(err);
-    }
-  }, [handleSelectKey]);
 
   const handleTestConnection = useCallback(async () => {
     setIsTesting(true);
@@ -968,30 +927,18 @@ const App: React.FC = () => {
       
       const data = JSON.parse(text);
       if (data.message) {
-        alert("Success: " + data.message);
+        toast.success("AI Connected: " + data.message);
         checkApiStatus().catch(console.error);
       } else {
         const err = data.error || "Unknown error";
         setGlobalError(err);
-        alert("Error: " + err);
+        toast.error("AI Diagnostic: " + err);
       }
     } catch (error: any) {
       setGlobalError(error.message);
-      alert("Test failed: " + error.message);
+      toast.error("Test failed: " + error.message);
     } finally {
       setIsTesting(false);
-    }
-  }, [checkApiStatus]);
-
-  const handleResetKey = useCallback(async () => {
-    try {
-      if (window.aistudio) {
-        // There isn't a direct 'clear' but we can re-open or just refresh
-        await window.aistudio.openSelectKey();
-        checkApiStatus().catch(console.error);
-      }
-    } catch (err) {
-      console.error(err);
     }
   }, [checkApiStatus]);
 
@@ -1178,80 +1125,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* API Key Selection Modal - Enhanced with instructions */}
-      {isKeyDialogOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl">
-          <div className="bg-white rounded-[2.5rem] p-10 max-w-lg w-full shadow-2xl border border-slate-100 animate-slide-up">
-            <div className="flex justify-between items-start mb-8">
-              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
-                <ShieldCheck size={32} />
-              </div>
-              <button onClick={() => setIsKeyDialogOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl text-slate-400">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight font-display uppercase">AI Setup Guide</h2>
-            
-            <div className="space-y-6 mb-8">
-              <div className="p-5 bg-primary/5 rounded-3xl border-2 border-primary/10 shadow-sm">
-                <p className="text-sm font-black text-primary mb-3 flex items-center uppercase tracking-widest">
-                  <span className="w-8 h-8 bg-primary text-white rounded-xl flex items-center justify-center text-xs mr-3 shadow-lg shadow-primary/20">1</span>
-                  Option A: Paid Gemini Key
-                </p>
-                <p className="text-xs text-primary/70 mb-5 leading-relaxed font-medium">
-                  The standard AI engine. If you see "Expired Key" or "Quota" errors, click below to renew, select, or upgrade to a key from a paid project.
-                </p>
-                <button 
-                  onClick={triggerKeySelector}
-                  className="w-full py-4 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary/90 hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-primary/20 flex items-center justify-center space-x-3"
-                >
-                  <Sparkles size={18} />
-                  <span>Renew / Upgrade Key</span>
-                </button>
-              </div>
-
-              <div className="p-5 bg-[#D4A017]/10 rounded-3xl border-2 border-[#D4A017]/30 shadow-sm">
-                <p className="text-sm font-black text-[#0D2B52] mb-3 flex items-center uppercase tracking-widest">
-                  <span className="w-8 h-8 bg-[#0D2B52] text-[#D4A017] rounded-xl flex items-center justify-center text-xs mr-3 shadow-lg shadow-[#0D2B52]/20">2</span>
-                  Option B: Groq Key
-                </p>
-                <div className="mb-4 p-3 bg-white/80 rounded-2xl border border-[#D4A017]/40">
-                  <p className="text-[11px] text-[#0D2B52] font-black flex items-center mb-1 uppercase tracking-widest">
-                    <AlertCircle size={14} className="mr-2 text-[#D4A017]" />
-                    GETTING A "NO PAID PROJECT" ERROR?
-                  </p>
-                  <p className="text-[10px] text-slate-700 leading-tight">
-                    If Gemini shows a "No Paid Project" error, skip it! Use Groq instead—it's free, 10x faster, and doesn't require a paid Google account.
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={handleTestConnection}
-                    disabled={isTesting}
-                    className="py-3 bg-white border-2 border-[#0D2B52]/20 text-[#0D2B52] rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center justify-center space-x-2"
-                  >
-                    {isTesting ? <Loader2 className="animate-spin" size={14} /> : <RotateCcw size={14} />}
-                    <span>{isTesting ? 'Verifying...' : 'Verify'}</span>
-                  </button>
-                  <button 
-                    onClick={() => window.location.reload()}
-                    className="py-3 bg-[#0D2B52] text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-[#164077] transition-all flex items-center justify-center space-x-2"
-                  >
-                    <RotateCcw size={14} />
-                    <span>Force Refresh</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <p className="text-center text-[11px] text-slate-400 font-medium">
-              Need a key? Get one at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-primary underline">aistudio.google.com</a>
-            </p>
-          </div>
-        </div>
-      )}
-
         {/* Outdoor Offline Status Banner */}
         <OfflineBanner />
 
@@ -1319,7 +1192,7 @@ const App: React.FC = () => {
                     onClick={handleSelectKey}
                     className="px-4 py-1.5 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-red-700 transition-colors shadow-sm"
                   >
-                    Setup AI / Fix Connection
+                    Retry Connection
                   </button>
                 </div>
                 <button 

@@ -119,7 +119,7 @@ const AIPlanner: React.FC = () => {
 
       if (message.includes("Internet") || message.includes("network")) type = 'network';
       else if (message.includes("Quota") || message.includes("RESOURCE_EXHAUSTED")) type = 'quota';
-      else if (message.includes("Key") || message.includes("invalid") || message.includes("API")) type = 'key';
+      else if (message.includes("API_KEY_INVALID") || message.includes("api key not valid")) type = 'key';
       else if (message.includes("blocked") || message.includes("safety")) type = 'blocked';
 
       setError({ message, type });
@@ -391,7 +391,7 @@ const AIPlanner: React.FC = () => {
                 <div className="flex gap-2">
                   <button 
                     onClick={handleGenerate}
-                    className={`flex-1 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all ${
+                    className={`w-full py-2.5 rounded-lg font-black text-xs uppercase tracking-widest transition-all ${
                       error.type === 'quota' ? 'bg-amber-900 text-white hover:bg-black' :
                       error.type === 'key' ? 'bg-indigo-900 text-white hover:bg-indigo-800' :
                       'bg-red-900 text-white hover:bg-black'
@@ -399,14 +399,6 @@ const AIPlanner: React.FC = () => {
                   >
                     Try Again
                   </button>
-                  {error.type === 'key' && (
-                    <button 
-                      onClick={() => window.aistudio?.openSelectKey().catch(e => console.error("Key selection cancelled:", e))}
-                      className="flex-1 py-1.5 bg-white border border-indigo-200 text-indigo-900 rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-indigo-50 transition-all font-mono"
-                    >
-                      Update Key
-                    </button>
-                  )}
                 </div>
               </motion.div>
             )}

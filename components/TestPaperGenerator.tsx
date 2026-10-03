@@ -400,18 +400,12 @@ const TestPaperGenerator: React.FC = () => {
                       <AlertTriangle size={20} className="text-amber-600" />
                       <p className="text-xs font-black uppercase tracking-tight">{error}</p>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="pt-2">
                       <button 
                         onClick={handleGenerate}
-                        className="py-3 bg-[#0D2B52] text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-[#164077] transition-all shadow-md"
+                        className="w-full py-3 bg-[#0D2B52] text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#164077] transition-all shadow-md"
                       >
                         Retry
-                      </button>
-                      <button 
-                        onClick={() => window.aistudio?.openSelectKey().catch(e => console.error("Key selection cancelled:", e))}
-                        className="py-3 bg-white border border-slate-300 text-slate-800 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
-                      >
-                        Setup AI
                       </button>
                     </div>
                   </div>

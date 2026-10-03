@@ -125,13 +125,18 @@ export async function checkBrevoStatus(): Promise<BrevoStatusResponse> {
     if (!accRes.ok) {
       const errBody: any = await accRes.json().catch(() => null);
       const errMsg = errBody?.message || errBody?.code || `HTTP ${accRes.status} ${accRes.statusText}`;
+      const isIpRestricted = errMsg.toLowerCase().includes("ip address") || errMsg.toLowerCase().includes("authorised_ips");
+      const friendlyError = isIpRestricted
+        ? "Brevo API key active, but IP authorization is required: Please authorize this server IP in Brevo Dashboard > Security > Authorized IPs (https://app.brevo.com/security/authorised_ips). Automated emails continue via background processing."
+        : `Brevo authentication failed (${accRes.status}): ${errMsg}. Verify your BREVO_API_KEY in .env.`;
+      
       return {
         configured: true,
         connected: false,
         apiKeyFound: true,
         fromEmail,
         senderVerified: false,
-        error: `Brevo authentication failed (${accRes.status}): ${errMsg}. Verify your BREVO_API_KEY in .env.`
+        error: friendlyError
       };
     }
 

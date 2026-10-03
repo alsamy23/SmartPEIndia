@@ -197,12 +197,6 @@ const AIToolCenter: React.FC = () => {
                     >
                       Retry Generation
                     </button>
-                    <button 
-                      onClick={() => window.aistudio?.openSelectKey().catch(e => console.error("Key selection cancelled:", e))}
-                      className="px-6 py-2 bg-white text-red-600 border-2 border-red-100 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-red-50 transition-colors"
-                    >
-                      Fix AI Connection
-                    </button>
                   </div>
                 </div>
               </div>

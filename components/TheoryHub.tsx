@@ -319,13 +319,6 @@ const TheoryHub: React.FC = () => {
                     <Zap size={16} />
                     <span>Try Again</span>
                   </button>
-                  <button 
-                    onClick={() => (window as any).aistudio?.openSelectKey().catch((e: any) => console.error("Key select cancelled:", e))}
-                    className="px-8 py-4 bg-rose-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-600 transition-all flex items-center space-x-2"
-                  >
-                    <ShieldCheck size={16} />
-                    <span>Connect AI</span>
-                  </button>
                 </div>
               </div>
             ) : mindMapData && (
@@ -457,13 +450,6 @@ const TheoryHub: React.FC = () => {
                     className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all"
                   >
                     Back to Mind Map
-                  </button>
-                  <button 
-                    onClick={() => (window as any).aistudio?.openSelectKey().catch((e: any) => console.error("Key select cancelled:", e))}
-                    className="px-8 py-4 bg-rose-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-600 transition-all flex items-center space-x-2"
-                  >
-                    <ShieldCheck size={16} />
-                    <span>Connect AI</span>
                   </button>
                 </div>
               </div>

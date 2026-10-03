@@ -10,10 +10,12 @@ export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
 
   // Map deprecated/legacy names to current best supported model
   const m = (payload.model || "").toLowerCase();
-  if (m.includes("3.1-pro") || m.includes("pro-preview")) {
+  if (m.includes("3.1-pro") || m.includes("pro-preview") || m.includes("pro")) {
     payload.model = "gemini-3.1-pro-preview";
+  } else if (m.includes("flash-lite") || m.includes("lite")) {
+    payload.model = "gemini-3.1-flash-lite";
   } else {
-    payload.model = "gemini-3.7-flash";
+    payload.model = "gemini-3.8-flash";
   }
   
   // Add ThinkingLevel.LOW to config to minimize latency for speed (ONLY for Gemini 3 models that support it)
@@ -69,13 +71,11 @@ export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
         throw new Error("AI Quota Exceeded: You've reached the daily limit for the free version of Gemini. Please try again in a few hours or use a different API key with a paid project.");
       }
 
-      const isInvalidKeyError = response.status === 401 || 
+      const isInvalidKeyError = (response.status === 401 && (errorMessage.includes("API_KEY") || errorMessage.includes("key"))) || 
                                errorMessage.includes("API_KEY_INVALID") || 
-                               errorMessage.includes("api key not valid") ||
-                               errorMessage.toLowerCase().includes("invalid_argument") ||
-                               errorMessage.toLowerCase().includes("expired");
+                               errorMessage.includes("api key not valid");
       if (isInvalidKeyError) {
-        throw new Error("Gemini API key is invalid or not configured. Please ensure your GEMINI_API_KEY is configured in Settings > Secrets.");
+        throw new Error("AI service authentication error. Please try again or refresh the page.");
       }
 
       const error: any = new Error(errorMessage);

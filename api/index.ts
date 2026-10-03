@@ -118,6 +118,24 @@ interface AuthenticatedRequest extends express.Request {
   user?: VerifiedTokenPayload;
 }
 
+const optionalAuth = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split("Bearer ")[1]?.trim();
+    if (token) {
+      try {
+        const verified = await verifyFirebaseIdToken(token);
+        if (verified) {
+          req.user = verified;
+        }
+      } catch (err) {
+        // Non-blocking for AI generation proxy
+      }
+    }
+  }
+  next();
+};
+
 const requireAuth = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -601,8 +619,8 @@ apiRouter.post("/email/announcement", requireAdmin, async (req: AuthenticatedReq
   }
 });
 
-// AI Diagnostic / Test Route (Admin Only)
-apiRouter.get("/ai/test", requireAdmin, async (req, res) => {
+// AI Diagnostic / Test Route
+apiRouter.get("/ai/test", async (req, res) => {
   try {
     const geminiKeys = getGeminiKeys();
     if (geminiKeys.length > 0) {
@@ -610,7 +628,7 @@ apiRouter.get("/ai/test", requireAdmin, async (req, res) => {
         apiKey: geminiKeys[0],
         httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
       });
-      const testModels = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest", "gemini-3.7-flash"];
+      const testModels = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
       for (const tModel of testModels) {
         try {
           const response = await ai.models.generateContent({
@@ -630,9 +648,7 @@ apiRouter.get("/ai/test", requireAdmin, async (req, res) => {
       const testModels = [
         "openai/gpt-oss-120b",
         "qwen/qwen3-32b",
-        "meta-llama/llama-4-scout-17b-16e-instruct",
-        "llama-3.1-8b-instant",
-        "gemma2-9b-it"
+        "meta-llama/llama-4-scout-17b-16e-instruct"
       ];
       
       let lastTestErr: any = null;
@@ -651,19 +667,19 @@ apiRouter.get("/ai/test", requireAdmin, async (req, res) => {
       if (lastTestErr) throw lastTestErr;
     }
 
-    res.status(401).json({ error: "No AI API keys configured" });
+    res.status(500).json({ error: "No AI API keys configured" });
   } catch (error: any) {
     console.error("AI test error:", error);
-    res.status(500).json({ error: "AI test diagnostics failed" });
+    res.status(500).json({ error: error.message || "AI test diagnostics failed" });
   }
 });
 
-// AI Generation Endpoint (Protected by Firebase Auth & User Rate Limiting)
-apiRouter.post("/ai/generate", requireAuth, async (req: AuthenticatedRequest, res) => {
+// AI Generation Endpoint (Protected by User Rate Limiting & Optional Firebase Auth)
+apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const userKey = req.user?.uid || req.ip || "anon";
-    // Limit to 30 generations per minute per user/IP
-    const rl = checkRateLimit(`ai_generate_${userKey}`, 30, 60 * 1000);
+    // Limit to 60 generations per minute per user/IP
+    const rl = checkRateLimit(`ai_generate_${userKey}`, 60, 60 * 1000);
     if (!rl.allowed) {
       return res.status(429).json({ 
         error: "Rate limit exceeded. Please wait a moment before sending another AI request.",
@@ -675,10 +691,13 @@ apiRouter.post("/ai/generate", requireAuth, async (req: AuthenticatedRequest, re
     
     const resolveModel = (modelName: string): string => {
       const m = (modelName || "").toLowerCase();
-      if (m.includes("3.1-pro") || m.includes("pro-preview")) {
+      if (m.includes("3.1-pro") || m.includes("pro-preview") || m.includes("pro")) {
         return "gemini-3.1-pro-preview";
       }
-      return "gemini-3.7-flash";
+      if (m.includes("flash-lite") || m.includes("lite")) {
+        return "gemini-3.1-flash-lite";
+      }
+      return "gemini-3.8-flash";
     };
 
     const resolvedModel = resolveModel(model);
@@ -694,13 +713,12 @@ apiRouter.post("/ai/generate", requireAuth, async (req: AuthenticatedRequest, re
 
     let lastError: any = null;
 
-    // 1. Try Gemini first (with key rotation and fallback)
+    // 1. Try Gemini first (with key rotation and multi-model fallback)
     if (geminiKeys.length > 0) {
       const keysToTry = [...geminiKeys];
       const modelsToTry = [
         resolvedModel,
-        "gemini-3.7-flash",
-        "gemini-flash-latest",
+        "gemini-3.8-flash",
         "gemini-3.1-flash-lite",
         "gemini-2.5-flash"
       ];
@@ -769,9 +787,7 @@ apiRouter.post("/ai/generate", requireAuth, async (req: AuthenticatedRequest, re
         const groqModels = [
           "openai/gpt-oss-120b",
           "qwen/qwen3-32b",
-          "meta-llama/llama-4-scout-17b-16e-instruct",
-          "llama-3.3-70b-versatile",
-          "llama-3.1-8b-instant"
+          "meta-llama/llama-4-scout-17b-16e-instruct"
         ];
 
         for (const gModel of groqModels) {
@@ -807,12 +823,11 @@ apiRouter.post("/ai/generate", requireAuth, async (req: AuthenticatedRequest, re
     let errorMessage = "AI generation could not be completed at this time.";
     const errorStr = (lastError?.message || "").toLowerCase();
 
-    if (errorStr.includes("expired") || errorStr.includes("invalid") || lastError?.status === 401) {
-      statusCode = 401;
-      errorMessage = "AI service authentication error. Please verify GEMINI_API_KEY configuration.";
-    } else if (errorStr.includes("quota") || errorStr.includes("429") || errorStr.includes("resource_exhausted")) {
+    if (errorStr.includes("quota") || errorStr.includes("429") || errorStr.includes("resource_exhausted")) {
       statusCode = 429;
       errorMessage = "AI generation quota is temporarily saturated. Please try again in a few moments.";
+    } else if (lastError?.message) {
+      errorMessage = lastError.message;
     }
 
     res.status(statusCode).json({ 
@@ -825,8 +840,8 @@ apiRouter.post("/ai/generate", requireAuth, async (req: AuthenticatedRequest, re
   }
 });
 
-// Dedicated Audio Transcription Endpoint (Protected by Firebase Auth & User Rate Limiting)
-apiRouter.post("/ai/transcribe", express.json({ limit: "15mb" }), requireAuth, async (req: AuthenticatedRequest, res) => {
+// Dedicated Audio Transcription Endpoint (Protected by User Rate Limiting & Optional Auth)
+apiRouter.post("/ai/transcribe", express.json({ limit: "15mb" }), optionalAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const userKey = req.user?.uid || req.ip || "anon";
     // Limit to 20 voice transcriptions per minute per user/IP
@@ -863,7 +878,7 @@ apiRouter.post("/ai/transcribe", express.json({ limit: "15mb" }), requireAuth, a
     }
 
     let lastError: any = null;
-    const modelsToTry = ["gemini-2.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.7-flash"];
+    const modelsToTry = ["gemini-3.5-transcribe", "gemini-3.8-flash", "gemini-3.1-flash-lite"];
 
     for (const key of geminiKeys) {
       try {
