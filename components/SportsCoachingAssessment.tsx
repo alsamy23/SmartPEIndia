@@ -42,7 +42,8 @@ import {
   Key,
   UserCheck,
   AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  FileSpreadsheet
 } from 'lucide-react';
 import { 
   sportsCoachingService, 
@@ -60,6 +61,8 @@ import {
   academicCoachingCloudService, 
   AcademicCoachingProgram 
 } from '../services/academicCoachingCloudService';
+import { coachingExcelReportService } from '../services/coachingExcelReportService';
+import { PlayerProfileData, PlayerAssessmentRecord } from '../services/academyService';
 import { toast } from '../services/toast';
 
 export const SportsCoachingAssessment: React.FC = () => {
@@ -374,6 +377,92 @@ export const SportsCoachingAssessment: React.FC = () => {
 
   const handlePrintPassport = () => {
     window.print();
+  };
+
+  const handleExportManagementExcel = () => {
+    try {
+      const allAssess = sportsCoachingService.getAllAssessments();
+      const success = coachingExcelReportService.exportUniversalCoachingExcelReport(
+        athletes,
+        allAssess,
+        coachProfile.programName || 'Sports Coaching Academy',
+        coachProfile.coachName || 'Head Coach'
+      );
+      if (success) {
+        toast.success('School Management Excel Report generated for entire student squad!');
+      } else {
+        toast.error('Failed to generate Excel report.');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Error generating Excel report.');
+    }
+  };
+
+  const handleExportAthleteExcel = () => {
+    if (!currentAthlete || !latestAssessment) {
+      toast.error('No assessment available to export.');
+      return;
+    }
+    try {
+      const playerProfile: PlayerProfileData = {
+        id: currentAthlete.id,
+        name: currentAthlete.name,
+        dob: currentAthlete.joiningDate,
+        age: currentAthlete.age,
+        gender: currentAthlete.gender,
+        sport: (currentAthlete.sport as any) || 'football',
+        position: currentAthlete.squadOrBatch || 'Athlete',
+        batchOrTeam: currentAthlete.squadOrBatch,
+        coachName: coachProfile.coachName,
+        joiningDate: currentAthlete.joiningDate,
+        parentName: currentAthlete.guardianName || '',
+        parentContact: currentAthlete.guardianContact || '',
+        dominantSide: 'Right',
+        previousExperience: 'Grassroots',
+        playerGoals: 'Skill Development',
+        createdAt: currentAthlete.joiningDate,
+        active: true
+      };
+
+      const playerAssess: PlayerAssessmentRecord = {
+        id: latestAssessment.id,
+        playerId: currentAthlete.id,
+        playerName: currentAthlete.name,
+        sport: (currentAthlete.sport as any) || 'football',
+        position: currentAthlete.squadOrBatch || 'Athlete',
+        assessmentType: latestAssessment.cycleType === 'baseline' ? 'Baseline Assessment' : 'Monthly Review',
+        assessmentDate: latestAssessment.testDate,
+        coachName: latestAssessment.coachName,
+        skillRatings: latestAssessment.scores,
+        skillObservations: {},
+        skillTargets: {},
+        includedPositionSkills: [],
+        domainScores: {
+          technical: latestAssessment.pillarAverages.technical,
+          tactical: latestAssessment.pillarAverages.tactical,
+          physical: latestAssessment.pillarAverages.physical,
+          gameBehaviour: latestAssessment.pillarAverages.mental
+        },
+        overallScore: latestAssessment.overallScore,
+        developmentLevel: latestAssessment.overallTier === 'Elite' || latestAssessment.overallTier === 'Advanced' ? 'Advanced' : latestAssessment.overallTier === 'Proficient' ? 'Proficient' : 'Developing',
+        strengths: latestAssessment.strengths,
+        developmentPriorities: latestAssessment.growthAreas,
+        coachObservation: latestAssessment.coachFeedback,
+        coachRecommendation: latestAssessment.prescribedDrills.map(d => `${d.drillName}: ${d.description} (${d.frequency})`).join('\n'),
+        nextGoals: [],
+        nextAssessmentDate: '',
+        createdAt: latestAssessment.testDate
+      };
+
+      const success = coachingExcelReportService.exportIndividualStudentExcelReport(playerProfile, playerAssess);
+      if (success) {
+        toast.success(`Excel report downloaded for ${currentAthlete.name}!`);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Error exporting athlete Excel report.');
+    }
   };
 
   // Calculate Progress Delta between Baseline and Latest
@@ -1032,13 +1121,34 @@ export const SportsCoachingAssessment: React.FC = () => {
                 Print-ready comprehensive assessment card for parents, coaches, and school inspection.
               </p>
             </div>
-            <button
-              onClick={handlePrintPassport}
-              className="px-5 py-2.5 bg-[#0D2B52] hover:bg-[#164077] text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-md cursor-pointer transition-all active:scale-95"
-            >
-              <Printer size={15} className="text-[#D4A017]" />
-              <span>Print / Download PDF</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={handlePrintPassport}
+                className="px-4 py-2.5 bg-[#0D2B52] hover:bg-[#164077] text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-md cursor-pointer transition-all active:scale-95"
+                title="Print or save as PDF"
+              >
+                <Printer size={15} className="text-[#D4A017]" />
+                <span>Print / Download PDF</span>
+              </button>
+
+              <button
+                onClick={handleExportAthleteExcel}
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-md cursor-pointer transition-all active:scale-95"
+                title="Export this student's individual Excel report card"
+              >
+                <FileSpreadsheet size={15} />
+                <span>Export Student Excel</span>
+              </button>
+
+              <button
+                onClick={handleExportManagementExcel}
+                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-[#D4A017] border-2 border-[#D4A017] rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-md cursor-pointer transition-all active:scale-95"
+                title="Export complete school management Excel report for all students in squad"
+              >
+                <FileSpreadsheet size={15} />
+                <span>School Management Excel (Entire Squad)</span>
+              </button>
+            </div>
           </div>
 
           {latestAssessment ? (
@@ -1229,13 +1339,24 @@ export const SportsCoachingAssessment: React.FC = () => {
                 Manage players across school teams, after-school academy batches, and private coaching slots.
               </p>
             </div>
-            <button
-              onClick={() => setIsAddAthleteOpen(true)}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
-            >
-              <UserPlus size={14} />
-              <span>+ Register New Athlete</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleExportManagementExcel}
+                className="px-4 py-2 bg-[#0D2B52] hover:bg-[#164077] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                title="Export complete school management Excel report for all registered athletes"
+              >
+                <FileSpreadsheet size={14} className="text-[#D4A017]" />
+                <span>Export Management Excel (Entire Squad)</span>
+              </button>
+
+              <button
+                onClick={() => setIsAddAthleteOpen(true)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+              >
+                <UserPlus size={14} />
+                <span>+ Register New Athlete</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

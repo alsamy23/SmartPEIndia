@@ -22,7 +22,8 @@ import {
   Medal,
   Activity,
   Calendar,
-  Send
+  Send,
+  FileSpreadsheet
 } from 'lucide-react';
 import { 
   PlayerAssessmentRecord, 
@@ -38,6 +39,7 @@ import {
   AGE_CATEGORY_BENCHMARKS
 } from '../../services/academyService';
 import { academicCoachingCloudService } from '../../services/academicCoachingCloudService';
+import { coachingExcelReportService } from '../../services/coachingExcelReportService';
 import { showToast } from '../../services/toast';
 
 interface ParentReportModalProps {
@@ -549,6 +551,22 @@ ${assessment.nextGoals?.length ? `🚀 *Next 90-Day Goals:*\n${assessment.nextGo
                   <span>PDF</span>
                 </>
               )}
+            </button>
+
+            {/* Export Student Excel Report Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const success = coachingExcelReportService.exportIndividualStudentExcelReport(player, assessment, history);
+                if (success) {
+                  showToast(`Student Excel report downloaded for ${player.name}!`, 'success');
+                }
+              }}
+              className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white font-black rounded-xl text-xs uppercase tracking-wider transition shadow-sm flex items-center space-x-1.5 active:scale-95 cursor-pointer border border-emerald-500"
+              title="Download official Student Excel Report Card (.xlsx)"
+            >
+              <FileSpreadsheet size={15} />
+              <span>Excel</span>
             </button>
 
             {/* Print Button */}

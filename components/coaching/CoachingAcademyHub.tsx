@@ -18,7 +18,8 @@ import {
   Database,
   RefreshCw,
   UserCheck,
-  Mail
+  Mail,
+  FileSpreadsheet
 } from 'lucide-react';
 import { CoachingDashboard } from './CoachingDashboard';
 import { PlayerDirectory } from './PlayerDirectory';
@@ -30,6 +31,7 @@ import { SkillProgressView } from './SkillProgressView';
 import { CoachingReportsView } from './CoachingReportsView';
 import { ParentReportModal } from './ParentReportModal';
 import { AcademyDatabaseModal } from './AcademyDatabaseModal';
+import { SchoolManagementExcelModal } from './SchoolManagementExcelModal';
 import { 
   academyService, 
   PlayerProfileData, 
@@ -65,6 +67,7 @@ export const CoachingAcademyHub: React.FC<CoachingAcademyHubProps> = ({
   const [activeTab, setActiveTab] = useState<CoachingSubTab>('dashboard');
   const [targetPlayerIdForAssessment, setTargetPlayerIdForAssessment] = useState<string | undefined>(undefined);
   const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
+  const [isManagementExcelModalOpen, setIsManagementExcelModalOpen] = useState(false);
   const [activeProgram, setActiveProgram] = useState<AcademicCoachingProgram | null>(() => 
     academicCoachingCloudService.getLocalProgram()
   );
@@ -210,6 +213,17 @@ export const CoachingAcademyHub: React.FC<CoachingAcademyHubProps> = ({
               <span className="hidden lg:inline text-[11px] font-black text-slate-200">Sync Data</span>
             </button>
 
+            {/* School Management Excel Report Quick Button */}
+            <button
+              onClick={() => setIsManagementExcelModalOpen(true)}
+              title="Download official School Management Excel Report (.xlsx) for entire student cohort"
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs uppercase tracking-wider transition shadow-sm flex items-center space-x-1.5 active:scale-95 cursor-pointer"
+            >
+              <FileSpreadsheet size={15} />
+              <span className="hidden md:inline">Management Excel</span>
+              <span className="md:hidden">Excel</span>
+            </button>
+
             <button
               onClick={() => setIsDatabaseModalOpen(true)}
               className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition shadow-sm flex items-center space-x-2 active:scale-95 cursor-pointer"
@@ -345,6 +359,12 @@ export const CoachingAcademyHub: React.FC<CoachingAcademyHubProps> = ({
         onDatabaseUpdated={() => {
           setActiveProgram(academicCoachingCloudService.getLocalProgram());
         }}
+      />
+
+      {/* School Management Excel Report Modal */}
+      <SchoolManagementExcelModal
+        isOpen={isManagementExcelModalOpen}
+        onClose={() => setIsManagementExcelModalOpen(false)}
       />
 
     </div>

@@ -26,7 +26,8 @@ import {
   CheckSquare,
   Square,
   Sliders,
-  Check
+  Check,
+  FileSpreadsheet
 } from 'lucide-react';
 import { 
   academyService, 
@@ -42,6 +43,8 @@ import {
   getPresetSkillIdsForSport, 
   SKILL_PRESETS_META 
 } from '../../services/coachingSkillsDatabase';
+import { coachingExcelReportService } from '../../services/coachingExcelReportService';
+import { SchoolManagementExcelModal } from './SchoolManagementExcelModal';
 import { StudentImportModal } from './StudentImportModal';
 import { SkillSelectionModal } from './SkillSelectionModal';
 import { showToast } from '../../services/toast';
@@ -78,6 +81,9 @@ export const PlayerDirectory: React.FC<PlayerDirectoryProps> = ({
 
   // Student Import Modal State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  // School Management Excel Report Modal State
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 
   // Player Profile Modal State (with 6 tabs)
   const [profilePlayer, setProfilePlayer] = useState<PlayerProfileData | null>(null);
@@ -418,6 +424,15 @@ export const PlayerDirectory: React.FC<PlayerDirectoryProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           <button
+            onClick={() => setIsExcelModalOpen(true)}
+            className="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs uppercase tracking-wider transition shadow-md flex items-center justify-center space-x-2 active:scale-95 cursor-pointer"
+            title="Export complete school management Excel workbook for all enrolled students"
+          >
+            <FileSpreadsheet size={16} className="text-white" />
+            <span>Export Management Excel (Entire Roster)</span>
+          </button>
+
+          <button
             onClick={() => setIsImportModalOpen(true)}
             className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-2xl text-xs uppercase tracking-wider transition shadow-md flex items-center justify-center space-x-2 active:scale-95"
           >
@@ -572,16 +587,35 @@ export const PlayerDirectory: React.FC<PlayerDirectoryProps> = ({
             </button>
           )}
 
-          {/* Bulk Delete Button when items are selected */}
+          {/* Bulk Action Buttons when items are selected */}
           {selectedPlayerIds.size > 0 && (
-            <button
-              type="button"
-              onClick={handleBulkDelete}
-              className="px-4 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition flex items-center space-x-1.5 shadow-sm animate-pulse"
-            >
-              <Trash2 size={14} />
-              <span>Delete Selected ({selectedPlayerIds.size})</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const selected = players.filter(p => selectedPlayerIds.has(p.id));
+                  coachingExcelReportService.exportSchoolManagementExcelReport(selected, undefined, {
+                    sportFilter: sportFilter !== 'all' ? sportFilter : undefined,
+                    termTitle: `Selected Cohort Report (${selected.length} Students)`
+                  });
+                  showToast(`Exported ${selected.length} selected students to Excel!`, 'success');
+                }}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition flex items-center space-x-1.5 shadow-sm cursor-pointer"
+                title="Download Excel report for selected students"
+              >
+                <FileSpreadsheet size={14} />
+                <span>Export Selected ({selectedPlayerIds.size}) to Excel</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                className="px-4 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition flex items-center space-x-1.5 shadow-sm animate-pulse"
+              >
+                <Trash2 size={14} />
+                <span>Delete Selected ({selectedPlayerIds.size})</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -1430,6 +1464,14 @@ export const PlayerDirectory: React.FC<PlayerDirectoryProps> = ({
           </div>
         </div>
       )}
+
+      {/* School Management Excel Report Modal */}
+      <SchoolManagementExcelModal
+        isOpen={isExcelModalOpen}
+        onClose={() => setIsExcelModalOpen(false)}
+        players={players}
+        initialSportFilter={sportFilter}
+      />
 
     </div>
   );
