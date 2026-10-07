@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Loader2, Download, Printer, RotateCcw, Image as ImageIcon, Clock, GraduationCap, AlertCircle, PlayCircle, Layers, ClipboardList, Target, User, CalendarDays, BookOpen, PenTool, Languages, FileText, Save, CheckCircle2, ShieldCheck, WifiOff, ZapOff, KeyRound, X, ChevronRight } from 'lucide-react';
 import { LessonPlan, Language, BoardType } from '../types.ts';
-import { generateLessonPlan, generateLessonDiagram } from '../services/geminiService.ts';
+import { generateLessonPlan, generateLessonDiagram, normalizeLessonPlan } from '../services/geminiService.ts';
 import { storageService } from '../services/storageService.ts';
 import { offlineCacheService, PRELOADED_OFFLINE_LESSON_PLANS } from '../services/offlineCacheService.ts';
 import { exportToPdf, exportToWord } from '../lib/exportUtils.ts';
@@ -38,7 +38,13 @@ const AIPlanner: React.FC = () => {
   const [showOfflineModal, setShowOfflineModal] = useState(false);
 
   const handleLoadOfflineTemplate = (item: typeof PRELOADED_OFFLINE_LESSON_PLANS[0]) => {
-    setPlan(item.content);
+    const normalized = normalizeLessonPlan(item.content, {
+      topic: item.metadata?.topic || item.title,
+      subject: item.metadata?.sport || 'Physical Education',
+      grade: item.metadata?.grade || '6-8',
+      date: new Date().toISOString().split('T')[0]
+    });
+    setPlan(normalized);
     setSport(item.metadata?.sport || 'PE Activity');
     setTopic(item.metadata?.topic || 'Field Skills');
     setShowOfflineModal(false);
@@ -82,7 +88,7 @@ const AIPlanner: React.FC = () => {
         equipment.join(', ') || 'None'
       );
       
-      setPlan({ 
+      const normalizedPlan = normalizeLessonPlan({ 
         ...generated, 
         period: "1",
         termWeek: "Term 1 / Wk 2",
@@ -90,14 +96,15 @@ const AIPlanner: React.FC = () => {
         date: date,
         duration: duration
       });
+      setPlan(normalizedPlan);
 
       setLoadingStep('Visualizing Drills...');
       
       // Parallel generation for speed
       const [warmupUrl, explanationUrl, gameUrl] = await Promise.all([
-        generateLessonDiagram(generated.warmupDiagramPrompt, 'warmup drill'),
-        generateLessonDiagram(generated.explanationDiagramPrompt, 'technical skill demonstration'),
-        generateLessonDiagram(generated.gameDiagramPrompt, 'small sided game')
+        generateLessonDiagram(normalizedPlan.warmupDiagramPrompt, 'warmup drill'),
+        generateLessonDiagram(normalizedPlan.explanationDiagramPrompt, 'technical skill demonstration'),
+        generateLessonDiagram(normalizedPlan.gameDiagramPrompt, 'small sided game')
       ]);
       
       setPlan(prev => prev ? ({ 
@@ -187,20 +194,20 @@ const AIPlanner: React.FC = () => {
         </ul>
 
         <div class="section-title">Equipment & Safety</div>
-        <p><b>Equipment:</b> ${plan.equipment?.join(', ') || 'None'}</p>
-        <p><b>Teaching Aids:</b> ${plan.teachingAids?.join(', ') || 'None'}</p>
-        <p><b>Safety:</b> ${plan.safety?.join(', ') || 'Standard PE safety protocols'}</p>
-        <p><b>Vocabulary:</b> ${plan.keyVocabulary?.join(', ') || 'None'}</p>
+        <p><b>Equipment:</b> ${Array.isArray(plan.equipment) ? plan.equipment.join(', ') : (plan.equipment || 'None')}</p>
+        <p><b>Teaching Aids:</b> ${Array.isArray(plan.teachingAids) ? plan.teachingAids.join(', ') : (plan.teachingAids || 'None')}</p>
+        <p><b>Safety:</b> ${Array.isArray(plan.safety) ? plan.safety.join(', ') : (plan.safety || 'Standard PE safety protocols')}</p>
+        <p><b>Vocabulary:</b> ${Array.isArray(plan.keyVocabulary) ? plan.keyVocabulary.join(', ') : (plan.keyVocabulary || 'None')}</p>
 
         <div class="section-title">1. Starter Activity (${plan.starter?.time || '10 min'})</div>
         <p><b>${plan.starter?.title || 'Warm-up'}</b></p>
         <p>${plan.starter?.description || 'General warm-up.'}</p>
 
         <div class="section-title">2. Main Activities (${plan.mainActivity?.time || '30 min'})</div>
-        ${(plan.mainActivity?.activities || []).map((act, i) => `
+        ${(Array.isArray(plan.mainActivity?.activities) ? plan.mainActivity.activities : []).map((act, i) => `
           <p><b>${i+1}. ${act.title || 'Activity'}</b></p>
           <p>${act.description || ''}</p>
-          <p><i>Coaching Points: ${(act.coachingPoints || []).join(', ')}</i></p>
+          <p><i>Coaching Points: ${Array.isArray(act.coachingPoints) ? act.coachingPoints.join(', ') : (act.coachingPoints || '')}</i></p>
         `).join('')}
 
         <div class="section-title">3. Plenary & Cooling Down (${plan.plenary?.time || '10 min'})</div>
@@ -515,26 +522,26 @@ const AIPlanner: React.FC = () => {
                      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
                         <h4 className="font-black text-slate-800 uppercase tracking-widest text-xs mb-3">Equipment & Teaching Aids</h4>
                         <div className="flex flex-wrap gap-2 mb-4">
-                           {plan.equipment?.map((item, i) => (
-                             <span key={i} className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600">{item}</span>
+                           {(Array.isArray(plan.equipment) ? plan.equipment : (typeof plan.equipment === 'string' && plan.equipment ? [plan.equipment] : [])).map((item, i) => (
+                             <span key={i} className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600">{typeof item === 'object' ? JSON.stringify(item) : String(item)}</span>
                            ))}
                         </div>
                         <div className="flex flex-wrap gap-2">
-                           {plan.teachingAids?.map((item, i) => (
-                             <span key={i} className="px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-lg text-xs font-bold text-indigo-600">{item}</span>
+                           {(Array.isArray(plan.teachingAids) ? plan.teachingAids : (typeof plan.teachingAids === 'string' && plan.teachingAids ? [plan.teachingAids] : [])).map((item, i) => (
+                             <span key={i} className="px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-lg text-xs font-bold text-indigo-600">{typeof item === 'object' ? JSON.stringify(item) : String(item)}</span>
                            ))}
                         </div>
                      </div>
                      <div className="bg-red-50 p-6 rounded-2xl border border-red-100">
                         <h4 className="font-black text-red-800 uppercase tracking-widest text-xs mb-3">Safety & Vocabulary</h4>
                         <ul className="list-disc list-inside space-y-1 mb-4">
-                           {plan.safety?.map((item, i) => (
-                             <li key={i} className="text-xs font-bold text-red-700">{item}</li>
+                           {(Array.isArray(plan.safety) ? plan.safety : (typeof plan.safety === 'string' && plan.safety ? [plan.safety] : [])).map((item, i) => (
+                             <li key={i} className="text-xs font-bold text-red-700">{typeof item === 'object' ? JSON.stringify(item) : String(item)}</li>
                            ))}
                         </ul>
                         <div className="flex flex-wrap gap-2">
-                           {plan.keyVocabulary?.map((item, i) => (
-                             <span key={i} className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-black uppercase tracking-tighter text-slate-500">{item}</span>
+                           {(Array.isArray(plan.keyVocabulary) ? plan.keyVocabulary : (typeof plan.keyVocabulary === 'string' && plan.keyVocabulary ? [plan.keyVocabulary] : [])).map((item, i) => (
+                             <span key={i} className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-black uppercase tracking-tighter text-slate-500">{typeof item === 'object' ? JSON.stringify(item) : String(item)}</span>
                            ))}
                         </div>
                      </div>
@@ -602,20 +609,20 @@ const AIPlanner: React.FC = () => {
                           <span className="px-3 py-1 bg-orange-50 text-orange-700 text-xs font-black rounded-full uppercase">{typeof plan.mainActivity?.time === 'object' ? JSON.stringify(plan.mainActivity?.time) : plan.mainActivity?.time}</span>
                        </div>
                        
-                       <div className="space-y-6">
-                         {plan.mainActivity?.activities?.map((act, i) => (
+                        <div className="space-y-6">
+                         {(Array.isArray(plan.mainActivity?.activities) ? plan.mainActivity.activities : []).map((act, i) => (
                            <div key={i} className="bg-slate-50 p-5 rounded-2xl print:bg-transparent print:p-0 print:mb-4">
                               <h5 className="font-bold text-slate-800 mb-2 flex items-center">
                                 <span className="w-6 h-6 bg-orange-500 text-white rounded-full flex items-center justify-center text-xs mr-2">{i+1}</span>
-                                {typeof act.title === 'object' ? JSON.stringify(act.title) : act.title}
+                                {typeof act.title === 'object' ? JSON.stringify(act.title) : String(act.title || `Activity ${i+1}`)}
                               </h5>
-                              <p className="text-slate-600 text-sm mb-3 leading-relaxed">{typeof act.description === 'object' ? JSON.stringify(act.description) : act.description}</p>
+                              <p className="text-slate-600 text-sm mb-3 leading-relaxed">{typeof act.description === 'object' ? JSON.stringify(act.description) : String(act.description || '')}</p>
                               <div>
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Coaching Points</span>
                                 <div className="flex flex-wrap gap-2 mt-2">
-                                  {act.coachingPoints?.map((cp, cpi) => (
+                                  {(Array.isArray(act.coachingPoints) ? act.coachingPoints : (typeof act.coachingPoints === 'string' && act.coachingPoints ? [act.coachingPoints] : [])).map((cp, cpi) => (
                                     <span key={cpi} className="px-2 py-1 bg-white border border-slate-200 rounded text-xs text-slate-600">
-                                      {typeof cp === 'object' ? JSON.stringify(cp) : cp}
+                                      {typeof cp === 'object' ? JSON.stringify(cp) : String(cp)}
                                     </span>
                                   ))}
                                 </div>

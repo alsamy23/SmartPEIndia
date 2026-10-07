@@ -37,7 +37,7 @@ export interface StudentProgressItem {
   baselineScore: number | string;
   latestScore: number | string;
   progressChange: string;
-  progressStatus: 'Significant Improvement' | 'Improving' | 'Stable' | 'Needs Attention' | 'Declining' | 'Initial Assessment' | 'Assessment Pending';
+  progressStatus: string;
   overallDevLevel: string;
   technicalScore: string;
   tacticalScore: string;
@@ -68,7 +68,115 @@ export interface CohortProgressSummary {
   completionRate: number;
   averageScore: number;
   improvingCount: number;
+  stableCount: number;
   needsAttentionCount: number;
+}
+
+/**
+ * Formats a skill name with its explicit proficiency level (Level 1 to 5) and percentage.
+ * Gives Principal / HOD immediate clarity on whether a skill is Beginning, Proficient, or Advanced.
+ */
+export function formatSkillWithLevel(skillName: string, rawScore: number | undefined): string {
+  if (!skillName || skillName === '—') return '—';
+  if (rawScore === undefined || rawScore === null) {
+    return `${skillName} (Level 3 - Proficient)`;
+  }
+  // 1-5 scale
+  if (rawScore <= 5) {
+    const pct = Math.round((rawScore / 5) * 100);
+    if (rawScore >= 4.5) return `${skillName} [Level 5 - Mastery, ${pct}%]`;
+    if (rawScore >= 3.8) return `${skillName} [Level 4 - Advanced, ${pct}%]`;
+    if (rawScore >= 2.8) return `${skillName} [Level 3 - Proficient, ${pct}%]`;
+    if (rawScore >= 1.8) return `${skillName} [Level 2 - Developing, ${pct}%]`;
+    return `${skillName} [Level 1 - Beginning, ${pct}%]`;
+  }
+  // 0-100 scale
+  if (rawScore >= 85) return `${skillName} [Level 5 - Mastery, ${rawScore}%]`;
+  if (rawScore >= 75) return `${skillName} [Level 4 - Advanced, ${rawScore}%]`;
+  if (rawScore >= 60) return `${skillName} [Level 3 - Proficient, ${rawScore}%]`;
+  if (rawScore >= 45) return `${skillName} [Level 2 - Developing, ${rawScore}%]`;
+  return `${skillName} [Level 1 - Beginning, ${rawScore}%]`;
+}
+
+/**
+ * Generates subject-expert AI coaching feedback specifically formatted for Excel cell display.
+ * Concise, high-impact pedagogical prescription tailored by sport discipline and student weakness.
+ */
+export function generateAiCoachingAction(
+  sport: string,
+  weakness: string,
+  weaknessScore?: number,
+  existingCoachRecommendation?: string
+): string {
+  if (
+    existingCoachRecommendation &&
+    existingCoachRecommendation.trim().length > 10 &&
+    existingCoachRecommendation.length < 135
+  ) {
+    return existingCoachRecommendation.trim();
+  }
+
+  const wLower = (weakness || '').toLowerCase();
+  const sLower = (sport || '').toLowerCase();
+
+  if (sLower.includes('foot') || sLower.includes('soccer')) {
+    if (wLower.includes('pass')) return '3 sessions/wk: 2-touch passing gates, wall-rebound drills (both feet), and 4v2 directional rondos.';
+    if (wLower.includes('dribbl') || wLower.includes('control') || wLower.includes('touch')) return 'Daily 15-min cone slalom, tight space sole-roll drills and 1v1 transitional duels.';
+    if (wLower.includes('turn') || wLower.includes('direct') || wLower.includes('agil')) return '3x/wk agility ladder into 180° drag-backs, Cruyff turns and rapid acceleration sprints.';
+    if (wLower.includes('shoot') || wLower.includes('finish')) return 'Edge-of-box target corner striking, first-time finish off low cutbacks, composure under keeper rush.';
+    if (wLower.includes('defend') || wLower.includes('tackl')) return 'Defensive jockey posture drills, side-on channel containment, and delay-and-tackle timing circuits.';
+    if (wLower.includes('vision') || wLower.includes('decis') || wLower.includes('tact')) return 'Small-sided 5v5 overload games enforcing 2-touch limit and scanning before reception.';
+  }
+
+  if (sLower.includes('basket')) {
+    if (wLower.includes('dribbl') || wLower.includes('handl')) return 'Two-ball stationary dribbling routines, low-stance crossover drills and full-court speed change.';
+    if (wLower.includes('shoot')) return 'Form shooting from 5 perimeter spots (100 makes daily), balanced set-point release and free throws.';
+    if (wLower.includes('pass')) return 'Chest and bounce pass target boards with defensive closeouts, pick-and-roll pocket pass reads.';
+    if (wLower.includes('defen')) return 'Defensive slide lateral shuffles, active closeout footwork on shooters and box-out fundamentals.';
+  }
+
+  if (sLower.includes('cricket')) {
+    if (wLower.includes('bat') || wLower.includes('drive')) return 'Front and back foot transfer drills on hanging ball, high-elbow drive repetitions and soft-hand defense.';
+    if (wLower.includes('bowl')) return 'Target cone line-and-length spot bowling, rhythm run-up consistency and upright seam release.';
+    if (wLower.includes('field') || wLower.includes('catch')) return 'High-catch judging in wind, slip cordon reflex reaction drills and aggressive pick-and-throw stumps.';
+  }
+
+  if (sLower.includes('badminton')) {
+    if (wLower.includes('footwork') || wLower.includes('move')) return '6-corner shadow footwork intervals, split-step timing and explosive lunging recovery drills.';
+    if (wLower.includes('clear') || wLower.includes('smash') || wLower.includes('stroke')) return 'High clear baseline depth drills, drop shot net-spin precision and overhead smash angle work.';
+  }
+
+  if (sLower.includes('tennis')) {
+    if (wLower.includes('forehand') || wLower.includes('backhand')) return 'Cross-court baseline rallying consistency, topspin brush mechanics and early shoulder unit turn.';
+    if (wLower.includes('serve') || wLower.includes('volley')) return 'Toss placement drills, pronation on flat/slice serves and low split-step volley reflex practice.';
+  }
+
+  if (sLower.includes('chess')) {
+    return 'Daily 20 tactical calculation puzzles, blunder-check checklist before moving, and rook endgame study.';
+  }
+
+  if (weakness && weakness !== '—' && weakness !== 'Assessment Required') {
+    return `3 sessions/wk: targeted ${weakness} progressive circuits, technique repetition sets and match simulations.`;
+  }
+
+  return 'Maintain structured weekly multi-pillar physical training, skill mastery and competitive match play.';
+}
+
+/**
+ * Generates measurable next performance target for the upcoming assessment cycle.
+ */
+export function generateNextPerformanceTarget(weakness: string, rawScore?: number): string {
+  if (!weakness || weakness === '—' || weakness === 'Assessment Required') {
+    return 'Complete scheduled multi-pillar athletic evaluation.';
+  }
+
+  if (rawScore !== undefined && rawScore !== null) {
+    const curPct = rawScore <= 5 ? Math.round((rawScore / 5) * 100) : rawScore;
+    const tgtPct = Math.min(100, Math.max(curPct + 15, 65));
+    return `Improve ${weakness} proficiency from ${curPct}% to ${tgtPct}%+ by next review cycle.`;
+  }
+
+  return `Develop consistent execution and error-free application of ${weakness} under game pressure.`;
 }
 
 /**
@@ -110,6 +218,7 @@ export const coachingExcelReportService = {
     let assessedCount = 0;
     let totalScoreSum = 0;
     let improvingCount = 0;
+    let stableCount = 0;
     let needsAttentionCount = 0;
 
     const items: StudentProgressItem[] = targetPlayers.map((player, idx) => {
@@ -153,7 +262,7 @@ export const coachingExcelReportService = {
           baselineScore: '—',
           latestScore: '—',
           progressChange: '—',
-          progressStatus: 'Assessment Pending' as const,
+          progressStatus: 'ASSESSMENT PENDING (Awaiting Baseline)',
           overallDevLevel: 'Pending',
           technicalScore: '—',
           tacticalScore: '—',
@@ -196,66 +305,67 @@ export const coachingExcelReportService = {
 
       let top1 = '—', top2 = '—', top3 = '—';
       let weak1 = '—', weak2 = '—', weak3 = '—';
-      let weakestSkillObj: { name: string; score: number } | null = null;
+      let weakestSkillName = '—';
+      let weakestSkillScore: number | undefined = undefined;
 
       if (skillEntries.length > 0) {
         // High scores = strengths
         const sortedDesc = [...skillEntries].sort((a, b) => b.score - a.score);
-        top1 = sortedDesc[0]?.name || '—';
-        top2 = sortedDesc[1]?.name || '—';
-        top3 = sortedDesc[2]?.name || '—';
+        top1 = formatSkillWithLevel(sortedDesc[0]?.name || '—', sortedDesc[0]?.score);
+        top2 = formatSkillWithLevel(sortedDesc[1]?.name || '—', sortedDesc[1]?.score);
+        top3 = formatSkillWithLevel(sortedDesc[2]?.name || '—', sortedDesc[2]?.score);
 
         // Low scores = weaknesses
         const sortedAsc = [...skillEntries].sort((a, b) => a.score - b.score);
-        weak1 = sortedAsc[0]?.name || '—';
-        weak2 = sortedAsc[1]?.name || '—';
-        weak3 = sortedAsc[2]?.name || '—';
-        weakestSkillObj = sortedAsc[0];
+        weak1 = formatSkillWithLevel(sortedAsc[0]?.name || '—', sortedAsc[0]?.score);
+        weak2 = formatSkillWithLevel(sortedAsc[1]?.name || '—', sortedAsc[1]?.score);
+        weak3 = formatSkillWithLevel(sortedAsc[2]?.name || '—', sortedAsc[2]?.score);
+        weakestSkillName = sortedAsc[0]?.name || '—';
+        weakestSkillScore = sortedAsc[0]?.score;
       } else {
         // Fallback to recorded strengths / priorities arrays
-        top1 = latest.strengths?.[0] || '—';
-        top2 = latest.strengths?.[1] || '—';
-        top3 = latest.strengths?.[2] || '—';
-        weak1 = latest.developmentPriorities?.[0] || '—';
-        weak2 = latest.developmentPriorities?.[1] || '—';
-        weak3 = latest.developmentPriorities?.[2] || '—';
+        top1 = formatSkillWithLevel(latest.strengths?.[0] || '—', undefined);
+        top2 = formatSkillWithLevel(latest.strengths?.[1] || '—', undefined);
+        top3 = formatSkillWithLevel(latest.strengths?.[2] || '—', undefined);
+        weak1 = formatSkillWithLevel(latest.developmentPriorities?.[0] || '—', undefined);
+        weak2 = formatSkillWithLevel(latest.developmentPriorities?.[1] || '—', undefined);
+        weak3 = formatSkillWithLevel(latest.developmentPriorities?.[2] || '—', undefined);
+        weakestSkillName = latest.developmentPriorities?.[0] || '—';
       }
 
-      // Priority Development Area
-      const priorityDevArea = weak1 !== '—' 
-        ? weak1 
+      // Priority Development Area (raw name for targets)
+      const priorityDevArea = weakestSkillName !== '—'
+        ? weakestSkillName
         : (latest.developmentPriorities?.[0] || 'Foundational Fundamentals');
 
-      // Recommended Coaching Action (Practical & concise for cell fit)
-      let coachingAction = '';
-      if (latest.coachRecommendation && latest.coachRecommendation.trim().length > 5 && latest.coachRecommendation.length < 130) {
-        coachingAction = latest.coachRecommendation.trim();
-      } else if (weak1 !== '—') {
-        coachingAction = `3 sessions/week: targeted ${weak1} circuits, 1v1 drills and match situations.`;
-      } else {
-        coachingAction = 'Maintain structured weekly multi-pillar training and scrimmage practice.';
-      }
+      // AI Coaching System Feedback & Action (Practical & concise for cell fit)
+      const coachingAction = generateAiCoachingAction(
+        player.sport || sportName,
+        priorityDevArea,
+        weakestSkillScore,
+        latest.coachRecommendation
+      );
 
-      // Next Performance Target (Measurable if skill score available, else qualitative)
-      let nextTarget = '';
-      if (weakestSkillObj && typeof weakestSkillObj.score === 'number') {
-        const curPct = Math.round((weakestSkillObj.score / 5) * 100);
-        const tgtPct = Math.min(100, curPct + 20);
-        nextTarget = `Improve ${weakestSkillObj.name} from ${curPct}% to ${tgtPct}%+ by next review.`;
-      } else if (weak1 !== '—') {
-        nextTarget = `Develop consistent execution of ${weak1} under competitive match pressure.`;
-      } else {
-        nextTarget = 'Maintain advanced rating across all core pillar drills.';
-      }
-
+      // Next Performance Target
+      const nextTarget = generateNextPerformanceTarget(priorityDevArea, weakestSkillScore);
       const nextReviewDate = latest.nextAssessmentDate || '90 Days';
+
+      // Overall Development Level
+      const overallDevLevel = latest.developmentLevel || (
+        latest.overallScore >= 80 ? 'Level 4 (Advanced)' :
+        latest.overallScore >= 65 ? 'Level 3 (Proficient)' :
+        latest.overallScore >= 50 ? 'Level 2 (Developing)' :
+        'Level 1 (Beginning)'
+      );
 
       // =======================================================================
       // CASE 2: SINGLE ASSESSMENT (BASELINE ESTABLISHED - NO INVENTED PROGRESS)
       // =======================================================================
       if (history.length === 1) {
-        if (latest.overallScore < 55) {
+        if (latest.overallScore < 50) {
           needsAttentionCount++;
+        } else {
+          stableCount++;
         }
 
         return {
@@ -272,8 +382,8 @@ export const coachingExcelReportService = {
           baselineScore: latest.overallScore,
           latestScore: latest.overallScore,
           progressChange: 'Baseline Established',
-          progressStatus: 'Initial Assessment' as const,
-          overallDevLevel: latest.developmentLevel,
+          progressStatus: 'INITIAL ASSESSMENT (Baseline Set)',
+          overallDevLevel,
           technicalScore: `${latest.domainScores?.technical ?? latest.overallScore}%`,
           tacticalScore: `${latest.domainScores?.tactical ?? latest.overallScore}%`,
           physicalScore: `${latest.domainScores?.physical ?? latest.overallScore}%`,
@@ -288,7 +398,7 @@ export const coachingExcelReportService = {
           coachingAction,
           nextTarget,
           nextReviewDate,
-          coachRemark: latest.coachObservation || 'Baseline established with active session participation.',
+          coachRemark: latest.coachObservation || 'Baseline established with active training participation.',
           assessmentStatus: 'Completed (1 Review)',
           assessmentCount: 1,
           history,
@@ -303,20 +413,21 @@ export const coachingExcelReportService = {
       const baseline = history[0];
       const diff = latest.overallScore - baseline.overallScore;
 
-      let progressStatus: StudentProgressItem['progressStatus'] = 'Stable';
+      let progressStatus = 'STABLE (Maintaining Standard)';
       if (diff >= 15) {
-        progressStatus = 'Significant Improvement';
+        progressStatus = `IN PROGRESS (Significant Improvement: +${diff} pts)`;
         improvingCount++;
       } else if (diff >= 5) {
-        progressStatus = 'Improving';
+        progressStatus = `IN PROGRESS (Improving: +${diff} pts)`;
         improvingCount++;
-      } else if (diff >= -4) {
-        progressStatus = 'Stable';
-      } else if (diff >= -14) {
-        progressStatus = 'Needs Attention';
+      } else if (diff >= -3) {
+        progressStatus = `STABLE (Maintaining Standard: ${diff >= 0 ? `+${diff}` : diff} pts)`;
+        stableCount++;
+      } else if (diff >= -10) {
+        progressStatus = `NOT PROGRESSING (Needs Attention: ${diff} pts)`;
         needsAttentionCount++;
       } else {
-        progressStatus = 'Declining';
+        progressStatus = `NOT PROGRESSING (Declining: ${diff} pts)`;
         needsAttentionCount++;
       }
 
@@ -325,6 +436,8 @@ export const coachingExcelReportService = {
       const remark = latest.coachObservation || (
         diff > 0 
           ? `Commendable growth observed (+${diff} pts since baseline test).`
+          : diff >= -3
+          ? 'Performance level maintained consistently across evaluation cycles.'
           : 'Focused corrective support advised for upcoming training cycle.'
       );
 
@@ -343,7 +456,7 @@ export const coachingExcelReportService = {
         latestScore: latest.overallScore,
         progressChange,
         progressStatus,
-        overallDevLevel: latest.developmentLevel,
+        overallDevLevel,
         technicalScore: `${latest.domainScores?.technical ?? latest.overallScore}%`,
         tacticalScore: `${latest.domainScores?.tactical ?? latest.overallScore}%`,
         physicalScore: `${latest.domainScores?.physical ?? latest.overallScore}%`,
@@ -381,6 +494,7 @@ export const coachingExcelReportService = {
         completionRate,
         averageScore,
         improvingCount,
+        stableCount,
         needsAttentionCount
       }
     };
@@ -433,22 +547,26 @@ export const coachingExcelReportService = {
       // =========================================================================
       const progressSheetRows: any[][] = [
         [`${programName.toUpperCase()} - OFFICIAL STUDENT PROGRESS REPORT`],
-        ['PRIMARY INDIVIDUAL STUDENT ATHLETIC & PHYSICAL EDUCATION DEVELOPMENT MONITOR'],
+        ['DEPARTMENT OF PHYSICAL EDUCATION & SPORTS - PRIMARY STUDENT-BY-STUDENT PROGRESSION MONITOR'],
+        [`Session: ${academicYear} | Cycle: ${termTitle} | Report Date: ${reportDate} | Head Coach / HOD: ${headCoach}`],
+        [`Scope: ${options.sportFilter && options.sportFilter !== 'all' ? `Sport Discipline: ${options.sportFilter}` : 'Entire Enrolled Student Cohort'} | Standards: CBSE & National PE Framework`],
         [''],
+        ['EXECUTIVE COHORT PROGRESS SUMMARY (FOR PRINCIPAL & HOD REVIEW)'],
         [
-          `Total Students: ${progressSummary.totalStudents}`,
-          `Assessed: ${progressSummary.assessedCount}`,
-          `Pending: ${progressSummary.pendingCount}`,
-          `Completion: ${progressSummary.completionRate}%`
+          'Total Enrolled Students', progressSummary.totalStudents,
+          'Assessed Students', progressSummary.assessedCount,
+          'Pending Evaluation', progressSummary.pendingCount,
+          'Completion Rate', `${progressSummary.completionRate}%`,
+          'Cohort Average Score', `${progressSummary.averageScore}/100`
         ],
         [
-          `Average Score: ${progressSummary.averageScore}/100`,
-          `Improving: ${progressSummary.improvingCount}`,
-          `Needs Attention: ${progressSummary.needsAttentionCount}`,
-          `Reporting Period: ${academicYear} (${termTitle})`
+          'In Progress (Improving)', progressSummary.improvingCount,
+          'Stable / On Track', progressSummary.stableCount,
+          'Not Progressing (Needs Attention)', progressSummary.needsAttentionCount,
+          'Cohort Standing', progressSummary.needsAttentionCount > 0 ? 'Targeted Interventions Required' : 'Cohort Progress On Track'
         ],
         [''],
-        // 30 Recommended Columns (One row per student)
+        // 30 Standard Columns (One row per student)
         [
           'S.No',
           'Student ID',
@@ -459,27 +577,27 @@ export const coachingExcelReportService = {
           'Sport',
           'Playing Position / Role',
           'Squad / Batch',
+          'Assessment Status',
           'Baseline Score',
           'Latest Score',
           'Progress Change',
-          'Progress Status',
-          'Overall Development Level',
+          'Progress Status (Principal & HOD Track)',
+          'Overall Skill Level',
           'Technical Score',
           'Tactical Score',
           'Physical Score',
           'Behaviour / Grit Score',
-          'Top Strength 1',
-          'Top Strength 2',
-          'Top Strength 3',
-          'Priority Weakness 1',
-          'Priority Weakness 2',
-          'Priority Weakness 3',
+          'Best Skill 1 (Level & Score)',
+          'Best Skill 2 (Level & Score)',
+          'Best Skill 3 (Level & Score)',
+          'Priority Weakness 1 (Level & Score)',
+          'Priority Weakness 2 (Level & Score)',
+          'Priority Weakness 3 (Level & Score)',
           'Priority Development Area',
-          'Recommended Coaching Action',
+          'AI Coaching System Feedback & Action',
           'Next Performance Target',
           'Next Review Date',
-          'Coach Development Remark',
-          'Assessment Status'
+          'Coach Development Remark'
         ]
       ];
 
@@ -494,6 +612,7 @@ export const coachingExcelReportService = {
           item.sport,
           item.position,
           item.squad,
+          item.assessmentStatus,
           item.baselineScore,
           item.latestScore,
           item.progressChange,
@@ -513,8 +632,7 @@ export const coachingExcelReportService = {
           item.coachingAction,
           item.nextTarget,
           item.nextReviewDate,
-          item.coachRemark,
-          item.assessmentStatus
+          item.coachRemark
         ]);
       });
 
@@ -526,506 +644,38 @@ export const coachingExcelReportService = {
         { wch: 16 },  // Grade / Age
         { wch: 14 },  // Age Category
         { wch: 10 },  // Gender
-        { wch: 20 },  // Sport
-        { wch: 22 },  // Position / Role
-        { wch: 22 },  // Squad / Batch
+        { wch: 18 },  // Sport
+        { wch: 20 },  // Position / Role
+        { wch: 20 },  // Squad / Batch
+        { wch: 20 },  // Assessment Status
         { wch: 15 },  // Baseline Score
         { wch: 15 },  // Latest Score
         { wch: 18 },  // Progress Change
-        { wch: 22 },  // Progress Status
-        { wch: 24 },  // Overall Dev Level
-        { wch: 16 },  // Technical Score
-        { wch: 16 },  // Tactical Score
-        { wch: 16 },  // Physical Score
+        { wch: 34 },  // Progress Status (Principal & HOD Track)
+        { wch: 22 },  // Overall Dev Level
+        { wch: 15 },  // Technical Score
+        { wch: 15 },  // Tactical Score
+        { wch: 15 },  // Physical Score
         { wch: 20 },  // Behaviour / Grit Score
-        { wch: 24 },  // Top Strength 1
-        { wch: 24 },  // Top Strength 2
-        { wch: 24 },  // Top Strength 3
-        { wch: 26 },  // Priority Weakness 1
-        { wch: 26 },  // Priority Weakness 2
-        { wch: 26 },  // Priority Weakness 3
+        { wch: 30 },  // Best Skill 1
+        { wch: 30 },  // Best Skill 2
+        { wch: 30 },  // Best Skill 3
+        { wch: 32 },  // Priority Weakness 1
+        { wch: 32 },  // Priority Weakness 2
+        { wch: 32 },  // Priority Weakness 3
         { wch: 28 },  // Priority Dev Area
-        { wch: 45 },  // Recommended Coaching Action
-        { wch: 42 },  // Next Performance Target
+        { wch: 55 },  // AI Coaching System Feedback & Action
+        { wch: 45 },  // Next Performance Target
         { wch: 16 },  // Next Review Date
-        { wch: 45 },  // Coach Remark
-        { wch: 22 }   // Assessment Status
+        { wch: 45 }   // Coach Remark
       ];
 
+      // Enable AutoFilter on header row (Row 10) for Principal/HOD instant filtering
+      wsProgress['!autofilter'] = { ref: `A10:AD${progressSheetRows.length}` };
+
+      // Append strictly ONE SHEET to workbook as requested (All detail preserved in PDF)
       XLSX.utils.book_append_sheet(wb, wsProgress, 'Student_Progress_Report');
 
-      // =========================================================================
-      // SHEET 2: STUDENT_DETAIL_REPORT (INDIVIDUAL STUDENT DEEP-DIVE & HISTORY)
-      // =========================================================================
-      const detailSheetRows: any[][] = [
-        [`${programName.toUpperCase()} - STUDENT DETAIL ASSESSMENT DOSSIER`],
-        ['COMPREHENSIVE MULTI-EVALUATION TIMELINE & GRANULAR SKILL PERFORMANCE HISTORY'],
-        ['']
-      ];
-
-      progressItems.forEach(item => {
-        detailSheetRows.push([`STUDENT: ${item.studentName.toUpperCase()} (${item.studentId})`]);
-        detailSheetRows.push(['Sport:', item.sport, 'Position / Role:', item.position, 'Squad / Batch:', item.squad]);
-        detailSheetRows.push(['Grade / Age:', item.gradeAge, 'Age Category:', item.ageCategory, 'Gender:', item.gender]);
-        detailSheetRows.push([
-          'Baseline Score:', item.baselineScore, 
-          'Latest Score:', item.latestScore, 
-          'Progress Delta:', `${item.progressChange} (${item.progressStatus})`, 
-          'Development Level:', item.overallDevLevel
-        ]);
-        detailSheetRows.push([
-          'Technical Core:', item.technicalScore, 
-          'Tactical IQ:', item.tacticalScore, 
-          'Physical Fitness:', item.physicalScore, 
-          'Behaviour & Grit:', item.behaviourScore
-        ]);
-        detailSheetRows.push(['Top Strengths:', `${item.topStrength1}; ${item.topStrength2}; ${item.topStrength3}`]);
-        detailSheetRows.push(['Priority Weaknesses:', `${item.priorityWeakness1}; ${item.priorityWeakness2}; ${item.priorityWeakness3}`]);
-        detailSheetRows.push(['Priority Development Area:', item.priorityDevArea]);
-        detailSheetRows.push(['Recommended Coaching Action:', item.coachingAction]);
-        detailSheetRows.push(['Next Performance Target:', item.nextTarget]);
-        detailSheetRows.push(['Next Review Date:', item.nextReviewDate, 'Assessment Status:', item.assessmentStatus]);
-
-        if (item.history.length > 0) {
-          detailSheetRows.push(['']);
-          detailSheetRows.push(['Assessment History Timeline:']);
-          detailSheetRows.push(['Test Date', 'Evaluation Cycle', 'Overall Score', 'Technical %', 'Tactical %', 'Physical %', 'Behaviour %', 'Evaluating Coach']);
-          item.history.forEach(h => {
-            detailSheetRows.push([
-              h.assessmentDate,
-              h.assessmentType,
-              `${h.overallScore} / 100`,
-              `${h.domainScores?.technical ?? h.overallScore}%`,
-              `${h.domainScores?.tactical ?? h.overallScore}%`,
-              `${h.domainScores?.physical ?? h.overallScore}%`,
-              `${h.domainScores?.gameBehaviour ?? h.overallScore}%`,
-              h.coachName
-            ]);
-          });
-        } else {
-          detailSheetRows.push(['Assessment Status: Pending Initial Evaluation. Baseline review scheduled.']);
-        }
-
-        detailSheetRows.push(['------------------------------------------------------------------------------------------------------------------------------------------------']);
-        detailSheetRows.push(['']);
-      });
-
-      const wsDetail = XLSX.utils.aoa_to_sheet(detailSheetRows);
-      wsDetail['!cols'] = [
-        { wch: 28 },
-        { wch: 28 },
-        { wch: 28 },
-        { wch: 28 },
-        { wch: 18 },
-        { wch: 18 },
-        { wch: 18 },
-        { wch: 24 }
-      ];
-      XLSX.utils.book_append_sheet(wb, wsDetail, 'Student_Detail_Report');
-
-      // =========================================================================
-      // SHEET 3: EXECUTIVE SUMMARY (PRESERVED MANAGEMENT DASHBOARD)
-      // =========================================================================
-      const targetPlayers = options.sportFilter && options.sportFilter !== 'all'
-        ? allPlayers.filter(p => p.sport === options.sportFilter)
-        : allPlayers;
-
-      // Group latest assessment per player for management summary
-      const playerLatestAssessmentMap = new Map<string, PlayerAssessmentRecord>();
-      allAssessments.forEach(a => {
-        const existing = playerLatestAssessmentMap.get(a.playerId);
-        if (!existing || new Date(a.assessmentDate).getTime() > new Date(existing.assessmentDate).getTime()) {
-          playerLatestAssessmentMap.set(a.playerId, a);
-        }
-      });
-
-      const totalStudents = targetPlayers.length;
-      let assessedCount = 0;
-      let totalOverallScore = 0;
-      let techSum = 0;
-      let tactSum = 0;
-      let physSum = 0;
-      let mentalSum = 0;
-      let assessedWithDomains = 0;
-
-      const meritCounts = {
-        'High Merit': 0,
-        'Merit': 0,
-        'Pass': 0,
-        'Foundation': 0
-      };
-
-      const genderCounts = { Male: 0, Female: 0, Other: 0 };
-      const sportCounts: Record<string, { total: number; assessed: number; scoreSum: number }> = {};
-
-      targetPlayers.forEach(p => {
-        if (p.gender === 'Female') genderCounts.Female++;
-        else if (p.gender === 'Other') genderCounts.Other++;
-        else genderCounts.Male++;
-
-        const sKey = p.sport || 'football';
-        if (!sportCounts[sKey]) {
-          sportCounts[sKey] = { total: 0, assessed: 0, scoreSum: 0 };
-        }
-        sportCounts[sKey].total++;
-
-        const assess = playerLatestAssessmentMap.get(p.id);
-        if (assess) {
-          assessedCount++;
-          totalOverallScore += assess.overallScore;
-
-          const merit = getMeritClassification(assess.overallScore);
-          if (merit.category.includes('High Merit')) meritCounts['High Merit']++;
-          else if (merit.category.includes('Merit')) meritCounts['Merit']++;
-          else if (merit.category.includes('Pass')) meritCounts['Pass']++;
-          else meritCounts['Foundation']++;
-
-          if (assess.domainScores) {
-            techSum += assess.domainScores.technical || assess.overallScore;
-            tactSum += assess.domainScores.tactical || assess.overallScore;
-            physSum += assess.domainScores.physical || assess.overallScore;
-            mentalSum += assess.domainScores.gameBehaviour || assess.overallScore;
-            assessedWithDomains++;
-          }
-
-          sportCounts[sKey].assessed++;
-          sportCounts[sKey].scoreSum += assess.overallScore;
-        }
-      });
-
-      const avgScore = assessedCount > 0 ? Math.round(totalOverallScore / assessedCount) : 0;
-      const completionRate = totalStudents > 0 ? Math.round((assessedCount / totalStudents) * 100) : 0;
-      const avgTech = assessedWithDomains > 0 ? Math.round(techSum / assessedWithDomains) : 0;
-      const avgTact = assessedWithDomains > 0 ? Math.round(tactSum / assessedWithDomains) : 0;
-      const avgPhys = assessedWithDomains > 0 ? Math.round(physSum / assessedWithDomains) : 0;
-      const avgMental = assessedWithDomains > 0 ? Math.round(mentalSum / assessedWithDomains) : 0;
-
-      const summaryRows: any[][] = [
-        ['OFFICIAL SCHOOL MANAGEMENT ATHLETIC & PHYSICAL EDUCATION REPORT'],
-        [`${programName.toUpperCase()} - COMPREHENSIVE PERFORMANCE SUBMISSION`],
-        [''],
-        ['1. INSTITUTIONAL & REPORT IDENTIFICATION'],
-        ['School / Academy Name:', programName, 'Academic Session:', academicYear],
-        ['Reporting Authority / Department:', 'Department of Physical Education & Sports', 'Evaluation Term / Cycle:', termTitle],
-        ['Lead Coach / Director:', headCoach, 'Report Generation Date:', reportDate],
-        ['Affiliation / Curriculum Standards:', 'CBSE / CISCE / National Sports Framework & Age Norms', 'Submission Scope:', options.sportFilter && options.sportFilter !== 'all' ? `Sport: ${options.sportFilter}` : 'Entire Student Body (All Sports)'],
-        [''],
-        ['2. COHORT PARTICIPATION & EVALUATION SUMMARY'],
-        ['Total Enrolled Student Athletes:', totalStudents, 'Total Completed Evaluations:', assessedCount],
-        ['Evaluation Completion Rate:', `${completionRate}%`, 'Academy Performance Index:', `${avgScore} / 100 PTS`],
-        ['Male Student Athletes:', genderCounts.Male, 'Female Student Athletes:', genderCounts.Female],
-        ['Other / Unspecified:', genderCounts.Other, 'Overall Cohort Standing:', avgScore >= 80 ? 'Distinction / Exemplary' : avgScore >= 65 ? 'Proficient / Healthy Standards' : 'Developing Support Required'],
-        [''],
-        ['3. FOUR-PILLAR INSTITUTIONAL PERFORMANCE INDEX'],
-        ['Pillar Domain', 'Cohort Average (%)', 'CBSE/Standard Benchmark (%)', 'Evaluation Status'],
-        ['Technical Skill Core', `${avgTech}%`, '70%', avgTech >= 70 ? 'Meets Standards' : 'Focus Needed'],
-        ['Tactical Game Sense & Spatial IQ', `${avgTact}%`, '65%', avgTact >= 65 ? 'Meets Standards' : 'Focus Needed'],
-        ['Physical Fitness, Speed & Stamina', `${avgPhys}%`, '70%', avgPhys >= 70 ? 'Meets Standards' : 'Focus Needed'],
-        ['Game Behavior, Grit & Coachability', `${avgMental}%`, '75%', avgMental >= 75 ? 'Meets Standards' : 'Focus Needed'],
-        [''],
-        ['4. MERIT & DEVELOPMENT LEVEL DISTRIBUTION'],
-        ['Merit Classification', 'Student Count', 'Percentage of Assessed', 'Institutional Implication'],
-        ['High Merit (Score 85 - 100)', meritCounts['High Merit'], `${assessedCount > 0 ? Math.round((meritCounts['High Merit'] / assessedCount) * 100) : 0}%`, 'Elite Talent Pool (Inter-School / State Squad)'],
-        ['Merit (Score 70 - 84)', meritCounts['Merit'], `${assessedCount > 0 ? Math.round((meritCounts['Merit'] / assessedCount) * 100) : 0}%`, 'Strong Competitor (School Team Core)'],
-        ['Pass with Merit (Score 55 - 69)', meritCounts['Pass'], `${assessedCount > 0 ? Math.round((meritCounts['Pass'] / assessedCount) * 100) : 0}%`, 'Satisfactory Mastery (Development Squad)'],
-        ['Foundation / Remedial (Score < 55)', meritCounts['Foundation'], `${assessedCount > 0 ? Math.round((meritCounts['Foundation'] / assessedCount) * 100) : 0}%`, 'Targeted Corrective Drills Assigned'],
-        [''],
-        ['5. SPORT-WISE ENROLLMENT & PERFORMANCE BREAKDOWN'],
-        ['Sport Discipline', 'Enrolled Students', 'Evaluated Students', 'Avg Score (/100)', 'Proficiency Level']
-      ];
-
-      Object.entries(sportCounts).forEach(([sKey, data]) => {
-        const tmpl = SPORT_TEMPLATES[sKey as CoachingSportId];
-        const sName = tmpl?.name || sKey.toUpperCase();
-        const sAvg = data.assessed > 0 ? Math.round(data.scoreSum / data.assessed) : 0;
-        summaryRows.push([
-          sName,
-          data.total,
-          data.assessed,
-          data.assessed > 0 ? sAvg : 'Pending',
-          sAvg >= 80 ? 'Advanced' : sAvg >= 65 ? 'Proficient' : data.assessed > 0 ? 'Developing' : 'Not Evaluated'
-        ]);
-      });
-
-      summaryRows.push(['']);
-      summaryRows.push(['6. VERIFICATION & ADMINISTRATIVE SIGN-OFF']);
-      summaryRows.push(['Role', 'Designee Name', 'Signature / Seal', 'Verification Date']);
-      summaryRows.push(['Lead Sports Coach / Trainer', headCoach, '_________________________', reportDate]);
-      summaryRows.push(['Head of Physical Education (HOD)', 'HOD Sports & PE', '_________________________', reportDate]);
-      summaryRows.push(['School Principal / Director', 'Principal / Management Trustee', '_________________________', reportDate]);
-
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-      wsSummary['!cols'] = [
-        { wch: 36 },
-        { wch: 28 },
-        { wch: 32 },
-        { wch: 36 }
-      ];
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Executive_Summary');
-
-      // =========================================================================
-      // SHEET 4: MASTER STUDENT ROSTER (PRESERVED COMPLETE COHORT ROSTER)
-      // =========================================================================
-      const rosterHeaders = [
-        'S.No',
-        'Student ID',
-        'Student Full Name',
-        'Grade / Class',
-        'Age',
-        'Age Category',
-        'Gender',
-        'Primary Sport',
-        'Playing Role / Position',
-        'Squad / Batch',
-        'Dominant Side',
-        'Enrollment Date',
-        'Evaluation Status',
-        'Latest Test Date',
-        'Evaluation Type',
-        'Overall Score (/100)',
-        'Development Level',
-        'Merit Classification',
-        'Technical Score (%)',
-        'Tactical Score (%)',
-        'Physical Score (%)',
-        'Behavior & Grit (%)',
-        'Top Strengths Observed',
-        'Priority Growth Areas',
-        'Recommended Corrective Drills',
-        'Coach Remarks & Developmental Notes',
-        'Next Review Date',
-        'Fee / Compliance Status',
-        'Parent / Guardian Name',
-        'Parent Emergency Contact'
-      ];
-
-      const rosterData: any[][] = [rosterHeaders];
-
-      targetPlayers.forEach((p, idx) => {
-        const assess = playerLatestAssessmentMap.get(p.id);
-        const sportTmpl = SPORT_TEMPLATES[p.sport as CoachingSportId];
-        const sportName = sportTmpl?.name || p.sport;
-        const merit = assess ? getMeritClassification(assess.overallScore) : null;
-
-        rosterData.push([
-          idx + 1,
-          p.id,
-          p.name,
-          p.gradeOrClass || `Age ${p.age}`,
-          p.age,
-          p.ageCategory || (p.age <= 10 ? 'U-10' : p.age <= 12 ? 'U-12' : p.age <= 14 ? 'U-14' : p.age <= 16 ? 'U-16' : 'U-19'),
-          p.gender,
-          sportName,
-          p.position || 'All-Rounder',
-          p.batchOrTeam || 'Main Academy Squad',
-          p.dominantSide || 'Right',
-          p.joiningDate || p.createdAt?.split('T')[0] || reportDate,
-          assess ? 'COMPLETED' : 'PENDING EVALUATION',
-          assess ? assess.assessmentDate : '—',
-          assess ? assess.assessmentType : '—',
-          assess ? assess.overallScore : '—',
-          assess ? assess.developmentLevel : 'Pending',
-          merit ? merit.category : 'Pending',
-          assess?.domainScores?.technical ?? '—',
-          assess?.domainScores?.tactical ?? '—',
-          assess?.domainScores?.physical ?? '—',
-          assess?.domainScores?.gameBehaviour ?? '—',
-          assess ? (assess.strengths || []).join('; ') : '—',
-          assess ? (assess.developmentPriorities || []).join('; ') : '—',
-          assess ? (assess.coachRecommendation || 'Continue daily foundational drills') : '—',
-          assess ? (assess.coachObservation || 'Consistent participation in team training') : 'Evaluation scheduled',
-          assess?.nextAssessmentDate || '—',
-          p.feeStatus || 'Paid',
-          p.parentName || '—',
-          p.parentContact || '—'
-        ]);
-      });
-
-      const wsRoster = XLSX.utils.aoa_to_sheet(rosterData);
-      wsRoster['!cols'] = [
-        { wch: 6 },  { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 6 },
-        { wch: 12 }, { wch: 8 },  { wch: 18 }, { wch: 20 }, { wch: 22 },
-        { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 18 },
-        { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 },
-        { wch: 14 }, { wch: 14 }, { wch: 32 }, { wch: 32 }, { wch: 32 },
-        { wch: 36 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 18 }
-      ];
-      XLSX.utils.book_append_sheet(wb, wsRoster, 'Master_Student_Roster');
-
-      // =========================================================================
-      // SHEET 5: SKILL DIAGNOSTICS MATRIX (PRESERVED SKILL EVALUATION DATA)
-      // =========================================================================
-      const skillMatrixHeaders = [
-        'S.No',
-        'Student Name',
-        'Class / Grade',
-        'Sport',
-        'Evaluation Date',
-        'Skill ID',
-        'Skill Name',
-        'Skill Category',
-        'Score / Rating (1-5)',
-        'Normalized Pct (%)',
-        'Benchmark Standard',
-        'Performance Status',
-        'Coaching Cue & Target'
-      ];
-
-      const skillMatrixRows: any[][] = [skillMatrixHeaders];
-      let skillRowIndex = 1;
-
-      targetPlayers.forEach(p => {
-        const assess = playerLatestAssessmentMap.get(p.id);
-        if (!assess || !assess.skillRatings) return;
-
-        const sportTmpl = SPORT_TEMPLATES[assess.sport as CoachingSportId];
-        if (!sportTmpl) return;
-
-        sportTmpl.skills.forEach(skill => {
-          const rawScore = assess.skillRatings[skill.id];
-          if (rawScore !== undefined) {
-            const pct = Math.round((rawScore / 5) * 100);
-            const status = rawScore >= 4 ? 'Exceeds Benchmark' : rawScore >= 3 ? 'Meets Benchmark' : 'Needs Development';
-            const observation = assess.skillObservations?.[skill.id] || skill.coachingCue || 'Standard technique practice';
-
-            skillMatrixRows.push([
-              skillRowIndex++,
-              p.name,
-              p.gradeOrClass || `Age ${p.age}`,
-              sportTmpl.name,
-              assess.assessmentDate,
-              skill.id,
-              skill.name,
-              skill.category.toUpperCase(),
-              rawScore,
-              `${pct}%`,
-              'Level 3 (Proficient)',
-              status,
-              observation
-            ]);
-          }
-        });
-      });
-
-      if (skillMatrixRows.length === 1) {
-        skillMatrixRows.push([
-          1,
-          'Sample Diagnostic Baseline',
-          'Grade 8',
-          'Football',
-          reportDate,
-          'fb_dribble',
-          'Slalom Dribble & Control',
-          'TECHNICAL',
-          4,
-          '80%',
-          'Level 3 (Proficient)',
-          'Meets Benchmark',
-          'Keep ball close with both feet'
-        ]);
-      }
-
-      const wsSkillMatrix = XLSX.utils.aoa_to_sheet(skillMatrixRows);
-      wsSkillMatrix['!cols'] = [
-        { wch: 6 },  { wch: 22 }, { wch: 12 }, { wch: 18 }, { wch: 14 },
-        { wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 14 },
-        { wch: 20 }, { wch: 20 }, { wch: 36 }
-      ];
-      XLSX.utils.book_append_sheet(wb, wsSkillMatrix, 'Skill_Diagnostics_Matrix');
-
-      // =========================================================================
-      // SHEET 6: SQUAD & BATCH BREAKDOWN (PRESERVED SQUAD ANALYTICS)
-      // =========================================================================
-      const batchGroups: Record<string, {
-        students: PlayerProfileData[];
-        assessedCount: number;
-        scoreSum: number;
-        sport: string;
-      }> = {};
-
-      targetPlayers.forEach(p => {
-        const bName = p.batchOrTeam || 'Main Academy Batch';
-        if (!batchGroups[bName]) {
-          batchGroups[bName] = {
-            students: [],
-            assessedCount: 0,
-            scoreSum: 0,
-            sport: p.sport
-          };
-        }
-        batchGroups[bName].students.push(p);
-
-        const assess = playerLatestAssessmentMap.get(p.id);
-        if (assess) {
-          batchGroups[bName].assessedCount++;
-          batchGroups[bName].scoreSum += assess.overallScore;
-        }
-      });
-
-      const batchRows: any[][] = [
-        ['SQUAD & BATCH TRAINING ANALYTICS (SCHOOL MANAGEMENT RESOURCE AUDIT)'],
-        [''],
-        [
-          'Batch / Squad Name',
-          'Sport Discipline',
-          'Total Strength',
-          'Assessed Count',
-          'Evaluation Rate',
-          'Average Score',
-          'Performance Standing',
-          'Primary Training Needs & Notes'
-        ]
-      ];
-
-      Object.entries(batchGroups).forEach(([bName, bData]) => {
-        const bAvg = bData.assessedCount > 0 ? Math.round(bData.scoreSum / bData.assessedCount) : 0;
-        const bRate = bData.students.length > 0 ? Math.round((bData.assessedCount / bData.students.length) * 100) : 0;
-        const sportTmpl = SPORT_TEMPLATES[bData.sport as CoachingSportId];
-
-        batchRows.push([
-          bName,
-          sportTmpl?.name || bData.sport,
-          bData.students.length,
-          bData.assessedCount,
-          `${bRate}%`,
-          bData.assessedCount > 0 ? `${bAvg} / 100` : 'Pending',
-          bAvg >= 80 ? 'Advanced Mastery' : bAvg >= 65 ? 'Proficient' : bData.assessedCount > 0 ? 'Developing' : 'Awaiting Review',
-          bAvg < 65 ? 'Increase technical drill frequency' : 'Ready for competitive inter-school fixtures'
-        ]);
-      });
-
-      const wsBatch = XLSX.utils.aoa_to_sheet(batchRows);
-      wsBatch['!cols'] = [
-        { wch: 28 }, { wch: 18 }, { wch: 14 }, { wch: 14 },
-        { wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 36 }
-      ];
-      XLSX.utils.book_append_sheet(wb, wsBatch, 'Squad_Batch_Analytics');
-
-      // =========================================================================
-      // SHEET 7: MANAGEMENT COMPLIANCE & SAFETY AUDIT (PRESERVED AUDIT SHEET)
-      // =========================================================================
-      const complianceRows: any[][] = [
-        ['SCHOOL MANAGEMENT SPORTS & SAFETY AUDIT VERIFICATION'],
-        ['Statutory & Institutional Governance Checklist for Academic Review'],
-        [''],
-        ['Audit Item / Protocol', 'Requirement Specification', 'Compliance Status', 'Auditor Notes'],
-        ['Curriculum Standardization', 'CBSE/CISCE physical education guidelines aligned', 'COMPLIANT', 'Standardized multi-sport rubric deployed'],
-        ['Coach Certification & Accreditation', 'Certified coaching faculty assigned per sport', 'COMPLIANT', `Supervised by ${headCoach}`],
-        ['Emergency Medical Readiness', 'First-aid kit, hydration station & ICE protocols', 'COMPLIANT', 'Field marshals trained in sports first aid'],
-        ['Parental Communication', 'Term progress report dispatch via PDF/Excel', 'ACTIVE', 'Reports generated for all enrolled cohorts'],
-        ['Injury & Fitness Clearance', 'Pre-season athletic screening and consent forms', 'VERIFIED', 'Active student records maintained'],
-        ['Equipment Safety Inspection', 'Goalposts anchored, balls inflated, protective gear', 'INSPECTED', 'Quarterly facility audit signed off'],
-        [''],
-        ['Management Approval Stamp:'],
-        ['Submitted for official review to School Board / Managing Committee.'],
-        ['Date of Sign-off:', reportDate]
-      ];
-
-      const wsCompliance = XLSX.utils.aoa_to_sheet(complianceRows);
-      wsCompliance['!cols'] = [
-        { wch: 32 }, { wch: 36 }, { wch: 18 }, { wch: 36 }
-      ];
-      XLSX.utils.book_append_sheet(wb, wsCompliance, 'Management_Compliance_Audit');
 
       // =========================================================================
       // TRIGGER BROWSER DOWNLOAD VIA BLOB
@@ -1124,28 +774,16 @@ export const coachingExcelReportService = {
       studentCardRows.push(['Prescribed Corrective Drills:', assessment.coachRecommendation || '30-minute daily technical ball drills recommended.']);
       studentCardRows.push(['Next Scheduled Review:', assessment.nextAssessmentDate || '3 Months']);
 
-      const wsStudent = XLSX.utils.aoa_to_sheet(studentCardRows);
-      wsStudent['!cols'] = [
-        { wch: 28 },
-        { wch: 24 },
-        { wch: 20 },
-        { wch: 36 }
-      ];
-      XLSX.utils.book_append_sheet(wb, wsStudent, 'Student_Development_Card');
-
-      // Sheet 2: Progress History (if historical data exists)
+      // Historical milestones appended to the same master sheet (strictly 1-sheet report)
       if (history && history.length > 0) {
-        const historyRows: any[][] = [
-          ['HISTORICAL DEVELOPMENTAL MILESTONES'],
-          [''],
-          ['Evaluation Date', 'Evaluation Type', 'Overall Score', 'Development Level', 'Technical %', 'Tactical %', 'Physical %', 'Mental %', 'Coach']
-        ];
-
+        studentCardRows.push(['']);
+        studentCardRows.push(['HISTORICAL DEVELOPMENTAL MILESTONES & PERFORMANCE HISTORY']);
+        studentCardRows.push(['Evaluation Date', 'Evaluation Type', 'Overall Score', 'Development Level', 'Technical %', 'Tactical %', 'Physical %', 'Mental %', 'Evaluating Coach']);
         history.forEach(h => {
-          historyRows.push([
+          studentCardRows.push([
             h.assessmentDate,
             h.assessmentType,
-            `${h.overallScore} / 100`,
+            `${h.overallScore} / 100 PTS`,
             h.developmentLevel,
             `${h.domainScores?.technical ?? h.overallScore}%`,
             `${h.domainScores?.tactical ?? h.overallScore}%`,
@@ -1154,14 +792,16 @@ export const coachingExcelReportService = {
             h.coachName
           ]);
         });
-
-        const wsHistory = XLSX.utils.aoa_to_sheet(historyRows);
-        wsHistory['!cols'] = [
-          { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 18 },
-          { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }
-        ];
-        XLSX.utils.book_append_sheet(wb, wsHistory, 'Growth_History_Log');
       }
+
+      const wsStudent = XLSX.utils.aoa_to_sheet(studentCardRows);
+      wsStudent['!cols'] = [
+        { wch: 28 },
+        { wch: 24 },
+        { wch: 20 },
+        { wch: 36 }
+      ];
+      XLSX.utils.book_append_sheet(wb, wsStudent, 'Student_Development_Card');
 
       // Download
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -1218,10 +858,61 @@ export const coachingExcelReportService = {
         }
       });
 
-      // Sheet 1: Student Progress Report
+      // Compute cohort metrics for Principal & HOD Executive Summary
+      const totalAthletes = athletes.length;
+      let evaluatedCount = 0;
+      let scoreSum = 0;
+      let improvingCount = 0;
+      let stableCount = 0;
+      let needsAttentionCount = 0;
+
+      athletes.forEach(ath => {
+        const history = (athleteAssessmentsMap.get(ath.id) || []).sort(
+          (a, b) => new Date(a.testDate).getTime() - new Date(b.testDate).getTime()
+        );
+        if (history.length > 0) {
+          evaluatedCount++;
+          const latest = history[history.length - 1];
+          scoreSum += latest.overallScore;
+
+          if (history.length === 1) {
+            if (latest.overallScore < 50) needsAttentionCount++;
+            else stableCount++;
+          } else {
+            const baseline = history[0];
+            const diff = latest.overallScore - baseline.overallScore;
+            if (diff >= 5) improvingCount++;
+            else if (diff >= -3) stableCount++;
+            else needsAttentionCount++;
+          }
+        }
+      });
+
+      const pendingCount = totalAthletes - evaluatedCount;
+      const completionRate = totalAthletes > 0 ? Math.round((evaluatedCount / totalAthletes) * 100) : 0;
+      const avgScore = evaluatedCount > 0 ? Math.round(scoreSum / evaluatedCount) : 0;
+
+      // ONE-SHEET MASTER PROGRESS REPORT: STUDENT_PROGRESS_REPORT
       const progressRows: any[][] = [
-        [`${programName.toUpperCase()} - ATHLETE PROGRESS & DEVELOPMENT REPORT`],
-        ['INDIVIDUAL STUDENT PROGRESS MONITOR (ONE ROW PER ATHLETE)'],
+        [`${programName.toUpperCase()} - OFFICIAL ATHLETE & STUDENT PROGRESS REPORT`],
+        ['SPORTS COACHING DEPARTMENT - ATHLETE-BY-ATHLETE PROGRESSION MONITOR (ONE-SHEET MASTER REPORT)'],
+        [`Generated: ${reportDate} | Head Coach / Lead Trainer: ${coachName} | Standard: Universal Sports Skill Standards`],
+        ['Scope: Registered Athletes Cohort | Format: Institutional Single-Sheet Submission'],
+        [''],
+        ['EXECUTIVE COHORT PROGRESS SUMMARY (FOR PRINCIPAL & HOD REVIEW)'],
+        [
+          'Total Registered Athletes', totalAthletes,
+          'Assessed Athletes', evaluatedCount,
+          'Pending Evaluation', pendingCount,
+          'Completion Rate', `${completionRate}%`,
+          'Cohort Average Score', `${avgScore}/100`
+        ],
+        [
+          'In Progress (Improving)', improvingCount,
+          'Stable / On Track', stableCount,
+          'Not Progressing (Needs Attention)', needsAttentionCount,
+          'Cohort Standing', needsAttentionCount > 0 ? 'Targeted Interventions Required' : 'Cohort Progress On Track'
+        ],
         [''],
         [
           'S.No',
@@ -1233,26 +924,27 @@ export const coachingExcelReportService = {
           'Sport Discipline',
           'Squad / Batch',
           'Jersey No',
+          'Assessment Status',
           'Baseline Score',
           'Latest Score',
           'Progress Change',
-          'Progress Status',
-          'Skill Tier',
+          'Progress Status (Principal & HOD Track)',
+          'Overall Skill Level',
           'Technical %',
           'Tactical %',
           'Physical %',
           'Mental %',
-          'Top Strength 1',
-          'Top Strength 2',
-          'Top Strength 3',
-          'Priority Weakness 1',
-          'Priority Weakness 2',
-          'Priority Weakness 3',
+          'Best Skill 1 (Level & Score)',
+          'Best Skill 2 (Level & Score)',
+          'Best Skill 3 (Level & Score)',
+          'Priority Weakness 1 (Level & Score)',
+          'Priority Weakness 2 (Level & Score)',
+          'Priority Weakness 3 (Level & Score)',
           'Priority Development Area',
-          'Recommended Drills',
+          'AI Coaching System Feedback & Action',
+          'Next Performance Target',
           'Next Review Date',
-          'Coach Feedback',
-          'Assessment Status'
+          'Coach Feedback'
         ]
       ];
 
@@ -1274,23 +966,34 @@ export const coachingExcelReportService = {
             sportName,
             ath.squadOrBatch,
             ath.jerseyNo || '—',
+            'Pending Evaluation',
             '—',
             '—',
             '—',
-            'Assessment Pending',
+            'ASSESSMENT PENDING (Awaiting Baseline)',
             'Pending',
             '—', '—', '—', '—',
             '—', '—', '—',
             '—', '—', '—',
             'Assessment Required',
-            'Schedule baseline test',
+            'Schedule baseline athletic evaluation and skill testing.',
+            'Complete initial skill assessment.',
             '—',
-            'Enrolled athlete pending baseline evaluation.',
-            'Pending'
+            'Enrolled athlete pending baseline evaluation.'
           ]);
         } else if (history.length === 1) {
           const single = history[0];
-          const drillsText = single.prescribedDrills ? single.prescribedDrills.map(d => `${d.drillName} (${d.frequency})`).join('; ') : 'Continue foundational training';
+          const best1 = single.strengths[0] ? formatSkillWithLevel(single.strengths[0], 4) : '—';
+          const best2 = single.strengths[1] ? formatSkillWithLevel(single.strengths[1], 4) : '—';
+          const best3 = single.strengths[2] ? formatSkillWithLevel(single.strengths[2], 3) : '—';
+          const weak1 = single.growthAreas[0] ? formatSkillWithLevel(single.growthAreas[0], 2) : '—';
+          const weak2 = single.growthAreas[1] ? formatSkillWithLevel(single.growthAreas[1], 2) : '—';
+          const weak3 = single.growthAreas[2] ? formatSkillWithLevel(single.growthAreas[2], 2) : '—';
+          const priorityArea = single.growthAreas[0] || 'Foundational Skills';
+          const drillsText = single.prescribedDrills && single.prescribedDrills.length > 0
+            ? single.prescribedDrills.map(d => `${d.drillName} (${d.frequency})`).join('; ')
+            : generateAiCoachingAction(sportName, priorityArea, undefined, single.coachFeedback);
+
           progressRows.push([
             idx + 1,
             ath.id,
@@ -1301,33 +1004,52 @@ export const coachingExcelReportService = {
             sportName,
             ath.squadOrBatch,
             ath.jerseyNo || '—',
+            'Completed (1 Review)',
             single.overallScore,
             single.overallScore,
             'Baseline Established',
-            'Initial Assessment',
+            'INITIAL ASSESSMENT (Baseline Set)',
             single.overallTier,
             single.pillarAverages.technical,
             single.pillarAverages.tactical,
             single.pillarAverages.physical,
             single.pillarAverages.mental,
-            single.strengths[0] || '—',
-            single.strengths[1] || '—',
-            single.strengths[2] || '—',
-            single.growthAreas[0] || '—',
-            single.growthAreas[1] || '—',
-            single.growthAreas[2] || '—',
-            single.growthAreas[0] || 'Foundational Skills',
+            best1,
+            best2,
+            best3,
+            weak1,
+            weak2,
+            weak3,
+            priorityArea,
             drillsText,
+            generateNextPerformanceTarget(priorityArea),
             '90 Days',
-            single.coachFeedback || 'Baseline recorded.',
-            'Completed (1 Review)'
+            single.coachFeedback || 'Baseline recorded with positive engagement.'
           ]);
         } else {
           const baseline = history[0];
           const latest = history[history.length - 1];
           const diff = latest.overallScore - baseline.overallScore;
-          const status = diff >= 15 ? 'Significant Improvement' : diff >= 5 ? 'Improving' : diff >= -4 ? 'Stable' : diff >= -14 ? 'Needs Attention' : 'Declining';
-          const drillsText = latest.prescribedDrills ? latest.prescribedDrills.map(d => `${d.drillName} (${d.frequency})`).join('; ') : 'Continue drills';
+          const status = diff >= 15 
+            ? `IN PROGRESS (Significant Improvement: +${diff} pts)`
+            : diff >= 5 
+            ? `IN PROGRESS (Improving: +${diff} pts)` 
+            : diff >= -3 
+            ? `STABLE (Maintaining Standard: ${diff >= 0 ? `+${diff}` : diff} pts)` 
+            : diff >= -10
+            ? `NOT PROGRESSING (Needs Attention: ${diff} pts)`
+            : `NOT PROGRESSING (Declining: ${diff} pts)`;
+
+          const best1 = latest.strengths[0] ? formatSkillWithLevel(latest.strengths[0], 4) : '—';
+          const best2 = latest.strengths[1] ? formatSkillWithLevel(latest.strengths[1], 4) : '—';
+          const best3 = latest.strengths[2] ? formatSkillWithLevel(latest.strengths[2], 3) : '—';
+          const weak1 = latest.growthAreas[0] ? formatSkillWithLevel(latest.growthAreas[0], 2) : '—';
+          const weak2 = latest.growthAreas[1] ? formatSkillWithLevel(latest.growthAreas[1], 2) : '—';
+          const weak3 = latest.growthAreas[2] ? formatSkillWithLevel(latest.growthAreas[2], 2) : '—';
+          const priorityArea = latest.growthAreas[0] || 'Core Mechanics';
+          const drillsText = latest.prescribedDrills && latest.prescribedDrills.length > 0
+            ? latest.prescribedDrills.map(d => `${d.drillName} (${d.frequency})`).join('; ')
+            : generateAiCoachingAction(sportName, priorityArea, undefined, latest.coachFeedback);
 
           progressRows.push([
             idx + 1,
@@ -1339,6 +1061,7 @@ export const coachingExcelReportService = {
             sportName,
             ath.squadOrBatch,
             ath.jerseyNo || '—',
+            `Completed (${history.length} Reviews)`,
             baseline.overallScore,
             latest.overallScore,
             diff > 0 ? `+${diff}` : `${diff}`,
@@ -1348,17 +1071,17 @@ export const coachingExcelReportService = {
             latest.pillarAverages.tactical,
             latest.pillarAverages.physical,
             latest.pillarAverages.mental,
-            latest.strengths[0] || '—',
-            latest.strengths[1] || '—',
-            latest.strengths[2] || '—',
-            latest.growthAreas[0] || '—',
-            latest.growthAreas[1] || '—',
-            latest.growthAreas[2] || '—',
-            latest.growthAreas[0] || 'Core Mechanics',
+            best1,
+            best2,
+            best3,
+            weak1,
+            weak2,
+            weak3,
+            priorityArea,
             drillsText,
+            generateNextPerformanceTarget(priorityArea),
             '90 Days',
-            latest.coachFeedback || 'Progress tracked across cycles.',
-            `Completed (${history.length} Reviews)`
+            latest.coachFeedback || 'Progress tracked across training cycles.'
           ]);
         }
       });
@@ -1366,144 +1089,23 @@ export const coachingExcelReportService = {
       const wsProgress = XLSX.utils.aoa_to_sheet(progressRows);
       wsProgress['!cols'] = [
         { wch: 6 },  { wch: 14 }, { wch: 22 }, { wch: 6 },  { wch: 12 },
-        { wch: 8 },  { wch: 18 }, { wch: 22 }, { wch: 10 }, { wch: 14 },
-        { wch: 14 }, { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 12 },
-        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 22 },
-        { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 26 },
-        { wch: 36 }, { wch: 14 }, { wch: 36 }, { wch: 20 }
+        { wch: 8 },  { wch: 18 }, { wch: 20 }, { wch: 10 }, { wch: 20 },
+        { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 34 }, { wch: 16 },
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 30 },
+        { wch: 30 }, { wch: 30 }, { wch: 32 }, { wch: 32 }, { wch: 32 },
+        { wch: 26 }, { wch: 55 }, { wch: 45 }, { wch: 14 }, { wch: 45 }
       ];
+
+      // Enable AutoFilter on row 10 for Principal & HOD filtering
+      wsProgress['!autofilter'] = { ref: `A10:AD${progressRows.length}` };
+
+      // Append strictly ONE SHEET to workbook
       XLSX.utils.book_append_sheet(wb, wsProgress, 'Student_Progress_Report');
-
-      // Sheet 2: Executive Summary
-      const totalAthletes = athletes.length;
-      let evaluatedCount = 0;
-      let scoreSum = 0;
-      let techSum = 0;
-      let tactSum = 0;
-      let physSum = 0;
-      let mentSum = 0;
-
-      athletes.forEach(ath => {
-        const assess = latestAssessments.get(ath.id);
-        if (assess) {
-          evaluatedCount++;
-          scoreSum += assess.overallScore;
-          techSum += assess.pillarAverages.technical;
-          tactSum += assess.pillarAverages.tactical;
-          physSum += assess.pillarAverages.physical;
-          mentSum += assess.pillarAverages.mental;
-        }
-      });
-
-      const avgScore = evaluatedCount > 0 ? Math.round(scoreSum / evaluatedCount) : 0;
-      const avgTech = evaluatedCount > 0 ? Math.round(techSum / evaluatedCount) : 0;
-      const avgTact = evaluatedCount > 0 ? Math.round(tactSum / evaluatedCount) : 0;
-      const avgPhys = evaluatedCount > 0 ? Math.round(physSum / evaluatedCount) : 0;
-      const avgMent = evaluatedCount > 0 ? Math.round(mentSum / evaluatedCount) : 0;
-
-      const summaryRows: any[][] = [
-        ['OFFICIAL SPORTS ACADEMY & COACHING PERFORMANCE REPORT'],
-        [`${programName.toUpperCase()} - SCHOOL MANAGEMENT SUBMISSION`],
-        [''],
-        ['1. INSTITUTIONAL METRICS'],
-        ['Academy / School Program:', programName, 'Head Coach / Lead Trainer:', coachName],
-        ['Total Registered Athletes:', totalAthletes, 'Completed Evaluations:', evaluatedCount],
-        ['Evaluation Completion Rate:', `${totalAthletes > 0 ? Math.round((evaluatedCount / totalAthletes) * 100) : 0}%`, 'Program Performance Index:', `${avgScore} / 100 PTS`],
-        ['Report Generation Date:', reportDate, 'Standard Framework:', 'Universal Sports Skill Standard & CBSE PE Guidelines'],
-        [''],
-        ['2. FOUR-PILLAR PERFORMANCE BENCHMARKS'],
-        ['Pillar Domain', 'Cohort Average (%)', 'Proficiency Standard', 'Standing Status'],
-        ['Technical Mastery', `${avgTech}%`, '70%', avgTech >= 70 ? 'Meets Standards' : 'Attention Required'],
-        ['Tactical Game Sense', `${avgTact}%`, '65%', avgTact >= 65 ? 'Meets Standards' : 'Attention Required'],
-        ['Physical Conditioning', `${avgPhys}%`, '70%', avgPhys >= 70 ? 'Meets Standards' : 'Attention Required'],
-        ['Coachability & Grit', `${avgMent}%`, '75%', avgMent >= 75 ? 'Meets Standards' : 'Attention Required'],
-        [''],
-        ['3. ADMINISTRATIVE SIGN-OFF'],
-        ['Submitted to School Management & Physical Education Department.'],
-        ['Head Coach Signature: _______________________', 'Date:', reportDate]
-      ];
-
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-      wsSummary['!cols'] = [{ wch: 32 }, { wch: 28 }, { wch: 24 }, { wch: 32 }];
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Executive_Summary');
-
-      // Sheet 3: Master Athletes Roster
-      const rosterHeaders = [
-        'S.No',
-        'Athlete ID',
-        'Athlete Full Name',
-        'Age',
-        'Age Bracket',
-        'Gender',
-        'Sport Discipline',
-        'Batch / Squad',
-        'Jersey No',
-        'Joining Date',
-        'Evaluation Status',
-        'Latest Test Date',
-        'Assessment Cycle',
-        'Overall Score (/100)',
-        'Skill Tier',
-        'Technical %',
-        'Tactical %',
-        'Physical %',
-        'Mental Grit %',
-        'Identified Strengths',
-        'Developmental Priorities',
-        'Coach Feedback & Prescribed Drills',
-        'Guardian Name',
-        'Guardian Contact'
-      ];
-
-      const rosterRows: any[][] = [rosterHeaders];
-      athletes.forEach((ath, idx) => {
-        const assess = latestAssessments.get(ath.id);
-        const sportDef = SPORTS_REGISTRY[ath.sport];
-        const sportName = sportDef?.name || ath.sport;
-        const drillsText = assess?.prescribedDrills ? assess.prescribedDrills.map(d => `${d.drillName} (${d.frequency})`).join('; ') : '';
-
-        rosterRows.push([
-          idx + 1,
-          ath.id,
-          ath.name,
-          ath.age,
-          assess?.ageBracket || (ath.age <= 10 ? 'U-10' : ath.age <= 12 ? 'U-12' : ath.age <= 14 ? 'U-14' : ath.age <= 16 ? 'U-16' : 'U-18'),
-          ath.gender,
-          sportName,
-          ath.squadOrBatch,
-          ath.jerseyNo || '—',
-          ath.joiningDate,
-          assess ? 'COMPLETED' : 'PENDING',
-          assess?.testDate || '—',
-          assess?.cycleType?.toUpperCase() || '—',
-          assess?.overallScore ?? '—',
-          assess?.overallTier || 'Pending',
-          assess?.pillarAverages?.technical ?? '—',
-          assess?.pillarAverages?.tactical ?? '—',
-          assess?.pillarAverages?.physical ?? '—',
-          assess?.pillarAverages?.mental ?? '—',
-          assess ? (assess.strengths || []).join('; ') : '—',
-          assess ? (assess.growthAreas || []).join('; ') : '—',
-          assess ? `${assess.coachFeedback || ''} ${drillsText ? `Drills: ${drillsText}` : ''}`.trim() : 'Scheduled',
-          ath.guardianName || '—',
-          ath.guardianContact || '—'
-        ]);
-      });
-
-      const wsRoster = XLSX.utils.aoa_to_sheet(rosterRows);
-      wsRoster['!cols'] = [
-        { wch: 6 },  { wch: 14 }, { wch: 22 }, { wch: 6 },  { wch: 12 },
-        { wch: 8 },  { wch: 18 }, { wch: 22 }, { wch: 10 }, { wch: 14 },
-        { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 },
-        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 32 },
-        { wch: 32 }, { wch: 36 }, { wch: 20 }, { wch: 18 }
-      ];
-      XLSX.utils.book_append_sheet(wb, wsRoster, 'Master_Athletes_Roster');
 
       // Download
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const sanitizedName = programName.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const fileName = `${sanitizedName}_Management_Excel_Report_${reportDate}.xlsx`;
+      const fileName = `${sanitizedName}_Student_Progress_Report_${reportDate}.xlsx`;
 
       const blob = new Blob([wbout], { 
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 

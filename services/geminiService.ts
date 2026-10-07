@@ -143,6 +143,188 @@ const safeParseJson = (data: any): any => {
   return data;
 };
 
+export const normalizeLessonPlan = (data: any, fallbackDefaults?: Partial<LessonPlan>): LessonPlan => {
+  if (!data || typeof data !== 'object') {
+    data = {};
+  }
+
+  const safeArray = (val: any): string[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) {
+      return val
+        .map(item => {
+          if (item == null) return '';
+          if (typeof item === 'object') {
+            return item.title || item.name || item.text || item.description || JSON.stringify(item);
+          }
+          return String(item);
+        })
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+    }
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (!trimmed) return [];
+      if (trimmed.includes('\n')) {
+        return trimmed.split('\n').map(s => s.replace(/^[-*•\d.]+\s*/, '').trim()).filter(Boolean);
+      }
+      if (trimmed.includes(';') || trimmed.includes(',')) {
+        return trimmed.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+      }
+      return [trimmed];
+    }
+    if (typeof val === 'object') {
+      return Object.values(val)
+        .map(v => typeof v === 'object' && v !== null ? (v as any).title || (v as any).name || JSON.stringify(v) : String(v))
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+    }
+    return [String(val).trim()].filter(Boolean);
+  };
+
+  const safeString = (val: any, fallback = ''): string => {
+    if (val == null) return fallback;
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+      return val.description || val.title || val.text || JSON.stringify(val);
+    }
+    return String(val);
+  };
+
+  // Starter / Warmup
+  const starterRaw = data.starter || data.warmup || {};
+  const starter = {
+    time: safeString(starterRaw.time, '10 min'),
+    title: safeString(starterRaw.title || (typeof starterRaw === 'string' ? starterRaw : ''), 'Warm-up & Movement Prep'),
+    description: safeString(starterRaw.description || (typeof starterRaw === 'string' ? starterRaw : ''), 'Dynamic warm-up focusing on pulse raising and joint mobility.')
+  };
+
+  // Main Activities
+  const mainRaw = data.mainActivity || {};
+  let activitiesRaw: any = mainRaw.activities || data.activities || data.explanationSkillDrills;
+  let activitiesList: { title: string; description: string; coachingPoints: string[] }[] = [];
+
+  if (Array.isArray(activitiesRaw)) {
+    activitiesList = activitiesRaw.map((act: any, idx: number) => {
+      if (typeof act === 'string') {
+        return {
+          title: `Drill ${idx + 1}`,
+          description: act,
+          coachingPoints: ['Focus on proper technique and posture']
+        };
+      }
+      return {
+        title: safeString(act?.title || act?.name, `Activity ${idx + 1}`),
+        description: safeString(act?.description || act?.details, 'Technical drill practice.'),
+        coachingPoints: safeArray(act?.coachingPoints || act?.teachingPoints || act?.cues)
+      };
+    });
+  } else if (activitiesRaw && typeof activitiesRaw === 'object') {
+    activitiesList = Object.keys(activitiesRaw).map((key, idx) => {
+      const act = activitiesRaw[key];
+      if (typeof act === 'string') {
+        return {
+          title: `Activity ${idx + 1}`,
+          description: act,
+          coachingPoints: ['Focus on proper technique']
+        };
+      }
+      return {
+        title: safeString(act?.title || act?.name || key, `Activity ${idx + 1}`),
+        description: safeString(act?.description || act?.details, 'Skill progression practice.'),
+        coachingPoints: safeArray(act?.coachingPoints || act?.teachingPoints || act?.cues)
+      };
+    });
+  } else if (typeof activitiesRaw === 'string' && activitiesRaw.trim()) {
+    activitiesList = [{
+      title: 'Main Activity',
+      description: activitiesRaw,
+      coachingPoints: ['Focus on proper skill execution']
+    }];
+  }
+
+  if (activitiesList.length === 0) {
+    activitiesList = [
+      {
+        title: 'Core Skill Development',
+        description: safeString(mainRaw.description || data.topic, 'Skill practice with progression drills.'),
+        coachingPoints: ['Focus on fundamental movement mechanics', 'Maintain active body posture']
+      }
+    ];
+  }
+
+  // Plenary / Cool-down
+  const plenaryRaw = data.plenary || data.coolingDown || {};
+  const plenary = {
+    time: safeString(plenaryRaw.time, '10 min'),
+    title: safeString(plenaryRaw.title || (typeof plenaryRaw === 'string' ? plenaryRaw : ''), 'Plenary & Cool-down'),
+    description: safeString(plenaryRaw.description || (typeof plenaryRaw === 'string' ? plenaryRaw : ''), 'Cool-down stretches and review questions.')
+  };
+
+  // Objectives
+  const objectivesRaw = data.objectives || {};
+  const objectives = {
+    know: safeString(objectivesRaw.know || data.learningObjectives?.[0], 'Understand the core movement concepts and sport rules.'),
+    understand: safeString(objectivesRaw.understand || data.learningObjectives?.[1], 'Develop technical execution and spatial awareness.'),
+    beAbleTo: safeString(objectivesRaw.beAbleTo || data.learningObjectives?.[2], 'Apply skills in structured drills and small-sided games.')
+  };
+
+  // Success Criteria
+  const scRaw = data.successCriteria || {};
+  const successCriteria = {
+    all: safeString(scRaw.all || data.assessmentCriteria?.[0], 'Participate actively and perform basic technical actions.'),
+    most: safeString(scRaw.most || data.assessmentCriteria?.[1], 'Demonstrate consistent technique with proper footwork/coordination.'),
+    some: safeString(scRaw.some || data.assessmentCriteria?.[2], 'Execute advanced game application and guide peers effectively.')
+  };
+
+  // SEN
+  const senRaw = data.sen || {};
+  const sen = {
+    wave1: safeString(senRaw.wave1, 'Provide larger markers and frequent rest intervals.'),
+    wave2: safeString(senRaw.wave2, 'Pair with peer mentor and adjust court size / distances.'),
+    wave3: safeString(senRaw.wave3, 'Individualized target task with high visual cues.')
+  };
+
+  return {
+    teacher: safeString(data.teacher || fallbackDefaults?.teacher, 'PE Coach'),
+    subject: safeString(data.subject, 'Physical Education'),
+    grade: safeString(data.grade || fallbackDefaults?.grade, '6'),
+    date: safeString(data.date || fallbackDefaults?.date, new Date().toISOString().split('T')[0]),
+    topic: safeString(data.topic || fallbackDefaults?.topic, 'General Physical Education'),
+    period: safeString(data.period, '1'),
+    termWeek: safeString(data.termWeek, 'Term 1 / Wk 1'),
+    duration: safeString(data.duration || fallbackDefaults?.duration, '40 min'),
+
+    equipment: safeArray(data.equipment || data.equipmentNeeded || ['Cones', 'Whistle', 'Marker Bibs']),
+    teachingAids: safeArray(data.teachingAids || ['Whistle', 'Tactical board', 'Cones']),
+    safety: safeArray(data.safety || data.safetyGuidelines || ['Ensure ground is free of obstacles', 'Adequate water breaks']),
+    keyVocabulary: safeArray(data.keyVocabulary || ['Coordination', 'Agility', 'Teamwork']),
+
+    sen,
+    objectives,
+    successCriteria,
+
+    starter,
+    mainActivity: {
+      time: safeString(mainRaw.time, '25 min'),
+      activities: activitiesList
+    },
+    plenary,
+
+    homework: safeString(data.homework, 'Practice 10 minutes of daily core mobility at home.'),
+    collaboration: safeString(data.collaboration, 'Pair and small-group teamwork in drills.'),
+    differentiation: safeString(data.differentiation, 'Tiered progression distances based on student confidence.'),
+    criticalThinking: safeString(data.criticalThinking, 'Encourage students to analyze best passing angles.'),
+
+    warmupDiagramPrompt: safeString(data.warmupDiagramPrompt, 'Warmup drill grid layout'),
+    warmupDiagramUrl: data.warmupDiagramUrl,
+    explanationDiagramPrompt: safeString(data.explanationDiagramPrompt, 'Skill drill technical demonstration'),
+    explanationDiagramUrl: data.explanationDiagramUrl,
+    gameDiagramPrompt: safeString(data.gameDiagramPrompt, 'Small sided game pitch layout'),
+    gameDiagramUrl: data.gameDiagramUrl
+  };
+};
+
 export const generateLessonPlan = async (
   board: BoardType,
   grade: string,
@@ -264,13 +446,23 @@ export const generateLessonPlan = async (
 
   // Handle both { text: "..." } and direct object responses
   const aiText = response.text || (typeof response === 'string' ? response : null);
-  if (aiText) return safeParseJson(aiText);
-  
-  // If it's already an object but not in .text (some proxies)
-  if (typeof response === 'object' && !Array.isArray(response) && Object.keys(response).length > 2) {
-    return response;
+  let parsed: any = null;
+  if (aiText) {
+    parsed = safeParseJson(aiText);
+  } else if (typeof response === 'object' && !Array.isArray(response) && Object.keys(response).length > 2) {
+    parsed = response;
   }
-  
+
+  if (parsed) {
+    return normalizeLessonPlan(parsed, {
+      teacher: teacherName,
+      grade,
+      topic,
+      duration,
+      date
+    });
+  }
+
   throw new Error("AI returned an unexpected response format.");
 };
 

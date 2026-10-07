@@ -207,23 +207,27 @@ export const CoachingReportsView: React.FC<CoachingReportsViewProps> = ({
     }
   };
 
-  const getProgressBadgeColor = (status: StudentProgressItem['progressStatus']) => {
-    switch (status) {
-      case 'Significant Improvement':
-        return 'bg-purple-100 text-purple-900 border-purple-300';
-      case 'Improving':
-        return 'bg-emerald-100 text-emerald-900 border-emerald-300';
-      case 'Stable':
-        return 'bg-blue-100 text-blue-900 border-blue-300';
-      case 'Needs Attention':
-        return 'bg-amber-100 text-amber-900 border-amber-300';
-      case 'Declining':
-        return 'bg-rose-100 text-rose-900 border-rose-300';
-      case 'Initial Assessment':
-        return 'bg-cyan-100 text-cyan-900 border-cyan-300';
-      default:
-        return 'bg-slate-100 text-slate-600 border-slate-200';
+  const getProgressBadgeColor = (status: string) => {
+    const s = status || '';
+    if (s.includes('Significant Improvement')) {
+      return 'bg-purple-100 text-purple-900 border-purple-300';
     }
+    if (s.includes('Improving') || (s.includes('IN PROGRESS') && !s.includes('NOT PROGRESSING'))) {
+      return 'bg-emerald-100 text-emerald-900 border-emerald-300';
+    }
+    if (s.includes('Stable') || s.includes('STABLE')) {
+      return 'bg-blue-100 text-blue-900 border-blue-300';
+    }
+    if (s.includes('Needs Attention') || s.includes('NOT PROGRESSING')) {
+      return 'bg-amber-100 text-amber-900 border-amber-300';
+    }
+    if (s.includes('Declining')) {
+      return 'bg-rose-100 text-rose-900 border-rose-300';
+    }
+    if (s.includes('Initial Assessment') || s.includes('INITIAL ASSESSMENT')) {
+      return 'bg-cyan-100 text-cyan-900 border-cyan-300';
+    }
+    return 'bg-slate-100 text-slate-600 border-slate-200';
   };
 
   return (

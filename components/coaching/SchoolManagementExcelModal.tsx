@@ -104,13 +104,13 @@ export const SchoolManagementExcelModal: React.FC<SchoolManagementExcelModalProp
           <div className="relative z-10 space-y-1">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#D4A017]/20 border border-[#D4A017]/40 rounded-full text-[#D4A017] text-[11px] font-black uppercase tracking-wider">
               <FileSpreadsheet size={13} />
-              <span>Institutional Management Report</span>
+              <span>1-Sheet Master Progress Report</span>
             </div>
             <h2 className="text-xl font-black tracking-tight font-display">
-              Export School Management Excel Report
+              Export Student Progress Excel Report
             </h2>
             <p className="text-xs text-slate-300 font-medium max-w-lg">
-              Official multi-worksheet spreadsheet submission formatted for School Principals, Management Committees &amp; Board of Trustees.
+              Official 1-sheet student-by-student progress report formatted for School Principals, HODs &amp; PE Directors.
             </p>
           </div>
           <button
@@ -139,8 +139,8 @@ export const SchoolManagementExcelModal: React.FC<SchoolManagementExcelModalProp
             </div>
             <div>
               <div className="text-[10px] font-black uppercase text-slate-500">Workbook Scope</div>
-              <div className="text-xl font-black text-[#0D2B52]">5 Sheets</div>
-              <div className="text-[10px] text-slate-500">Multi-Tab .XLSX</div>
+              <div className="text-xl font-black text-[#0D2B52]">1 Sheet</div>
+              <div className="text-[10px] text-emerald-600 font-bold">Official One-Sheet .XLSX</div>
             </div>
           </div>
 
@@ -225,31 +225,31 @@ export const SchoolManagementExcelModal: React.FC<SchoolManagementExcelModalProp
           </div>
 
           {/* Included Sheets Specification */}
-          <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2">
-            <div className="font-black text-amber-950 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <ShieldCheck size={14} className="text-amber-600" />
-              <span>Workbook Structure for School Management Submission:</span>
+          <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-2">
+            <div className="font-black text-emerald-950 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+              <ShieldCheck size={14} className="text-emerald-600" />
+              <span>Workbook Structure: Streamlined 1-Sheet Excel Report</span>
             </div>
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] text-amber-900 font-medium">
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] text-emerald-900 font-medium">
               <li className="flex items-center gap-1.5">
                 <CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" />
-                <span><strong>Sheet 1:</strong> Executive Summary &amp; 4-Pillar Index</span>
+                <span><strong>Single Sheet:</strong> Student_Progress_Report (1 row per student)</span>
               </li>
               <li className="flex items-center gap-1.5">
                 <CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" />
-                <span><strong>Sheet 2:</strong> Master Student Roster &amp; Merit Standing</span>
+                <span><strong>Principal &amp; HOD Track:</strong> In Progress vs Not Progressing status</span>
               </li>
               <li className="flex items-center gap-1.5">
                 <CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" />
-                <span><strong>Sheet 3:</strong> Skill Diagnostics Matrix (Drill Ratings)</span>
+                <span><strong>Best Skills:</strong> Top 3 skills with Levels (1-5) and % ratings</span>
               </li>
               <li className="flex items-center gap-1.5">
                 <CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" />
-                <span><strong>Sheet 4:</strong> Squad &amp; Batch Training Analytics</span>
+                <span><strong>AI Coaching Feedback:</strong> Actionable prescriptions in cell</span>
               </li>
               <li className="flex items-center gap-1.5 sm:col-span-2">
                 <CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" />
-                <span><strong>Sheet 5:</strong> Management Statutory Safety &amp; Audit Sign-off</span>
+                <span><strong>Full Cohort Census:</strong> All {resolvedPlayers.length} enrolled students included (Completed &amp; Pending)</span>
               </li>
             </ul>
           </div>
@@ -273,7 +273,7 @@ export const SchoolManagementExcelModal: React.FC<SchoolManagementExcelModalProp
             className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-md cursor-pointer transition active:scale-95"
           >
             <Download size={15} />
-            <span>{isExporting ? 'Generating Excel Workbook...' : 'Download Management Excel Report (.xlsx)'}</span>
+            <span>{isExporting ? 'Generating Excel Report...' : 'Download 1-Sheet Progress Excel (.xlsx)'}</span>
           </button>
         </div>
 

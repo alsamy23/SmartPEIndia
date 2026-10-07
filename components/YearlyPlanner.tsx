@@ -313,11 +313,12 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
           sportName = termFocus;
           objectives = `Know: ${aiPlan.objectives?.know || ''}. Understand: ${aiPlan.objectives?.understand || ''}. Apply: ${aiPlan.objectives?.beAbleTo || ''}`;
           warmup = `${aiPlan.starter?.time || ''} - ${aiPlan.starter?.title || ''}: ${aiPlan.starter?.description || ''}`;
-          mainDrill = `${aiPlan.mainActivity?.time || '25m'} - Activities: ` + (aiPlan.mainActivity?.activities?.map(a => `${a.title}: ${a.description}`).join('; ') || '');
+          const drillList = Array.isArray(aiPlan.mainActivity?.activities) ? aiPlan.mainActivity.activities : [];
+          mainDrill = `${aiPlan.mainActivity?.time || '25m'} - Activities: ` + (drillList.map(a => `${a.title || 'Drill'}: ${a.description || ''}`).join('; ') || '');
           cooldown = `${aiPlan.plenary?.time || ''} - ${aiPlan.plenary?.title || ''}: ${aiPlan.plenary?.description || ''}`;
           assessment = `Success Criteria: ALL (${aiPlan.successCriteria?.all || ''}) MOST (${aiPlan.successCriteria?.most || ''}).`;
-          equipment = aiPlan.equipment?.join(', ') || '';
-          safety = aiPlan.safety?.join('; ') || '';
+          equipment = Array.isArray(aiPlan.equipment) ? aiPlan.equipment.join(', ') : (aiPlan.equipment || '');
+          safety = Array.isArray(aiPlan.safety) ? aiPlan.safety.join('; ') : (aiPlan.safety || '');
         } else {
           const defaults = getCurriculumPlanLocal(week.topic, week.details, termFocus, grade);
           sportName = defaults.sport;
@@ -869,7 +870,7 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                                   <span>Central Drills (25m)</span>
                                 </div>
                                 <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-                                  {aiPlan ? (aiPlan.mainActivity?.activities?.map(a => `${a.title}: ${a.description}`).join('; ') || '') : defaults.mainDrill}
+                                  {aiPlan ? ((Array.isArray(aiPlan.mainActivity?.activities) ? aiPlan.mainActivity.activities : []).map(a => `${a.title || 'Drill'}: ${a.description || ''}`).join('; ') || '') : defaults.mainDrill}
                                 </p>
                               </div>
 
