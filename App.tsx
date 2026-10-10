@@ -88,6 +88,8 @@ import { auth } from './services/firebase.ts';
 import { onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth';
 import { trackEvent } from './services/analytics.ts';
 import { toast, SHOW_TOAST_EVENT, SHOW_CONFIRM_EVENT, ToastConfig, ConfirmConfig } from './services/toast.ts';
+import { userActivityService } from './services/userActivityService.ts';
+import { isBrandSuperAdmin } from './types.ts';
 
 type Tab = 'dashboard' | 'cbse-physical-education' | 'khelo-india-fitness-assessment' | 'ai-pe-lesson-planner' | 'physical-education-assessment' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'physical-development' | 'coaching-assessment' | 'coaching-academy' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
 
@@ -566,6 +568,27 @@ const StickyHeader: React.FC<StickyHeaderProps> = React.memo(({
             <span>Voice Guide</span>
           </button>
         )}
+
+        {/* Super Admin Quick Access to User Logins & Live Activity */}
+        {user && isBrandSuperAdmin(user.email) && (
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.setItem('smartpe_admin_active_tab', 'directory');
+              window.dispatchEvent(new CustomEvent('open_superadmin_directory'));
+              handleTabChange('school-admin');
+            }}
+            className="hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900 border border-emerald-400/60 text-white text-xs font-black uppercase tracking-wider hover:bg-slate-800 transition-all shadow-sm cursor-pointer"
+            title="Super Admin: View All Registered Users & Live Logins"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <Users size={13} className="text-emerald-400" />
+            <span>Users & Logins</span>
+          </button>
+        )}
       </div>
 
       <div className="w-full md:max-w-xs lg:max-w-sm">
@@ -747,6 +770,7 @@ const App: React.FC = () => {
       setIsAuthReady(true);
       if (currentUser) {
         setIsAuthView(false); // Reset auth view when user logs in
+        userActivityService.recordUserPresence(currentUser).catch(() => {});
         // Show lightweight welcome toast instead of blocking pop-up modal
         if (!sessionStorage.getItem('welcome_notified')) {
           const name = currentUser.displayName || currentUser.email?.split('@')[0] || 'Educator';

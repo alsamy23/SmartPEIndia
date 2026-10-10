@@ -18,6 +18,7 @@ import { toast } from '../services/toast.ts';
 import { sendAutomatedWelcomeEmail } from '../services/emailService.ts';
 import { academicCoachingCloudService, AcademicCoachingProgram } from '../services/academicCoachingCloudService.ts';
 import { PrivacyNoticeModal } from './privacy/PrivacyNoticeModal.tsx';
+import { userActivityService } from '../services/userActivityService.ts';
 
 interface AuthProps {
   onBack?: () => void;
@@ -204,6 +205,12 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           localStorage.setItem('smartpe_active_workspace', 'school');
         }
 
+        userActivityService.recordUserLogin(user, {
+          workspaceType: workspaceType,
+          orgName: workspaceType === 'academy' ? academyName : schoolName,
+          role: 'admin'
+        }).catch(() => {});
+
         trackEvent('signup', { method: 'google', workspace: workspaceType });
       } else {
         const uData = userSnap.data();
@@ -213,6 +220,13 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
         if (activeWs === 'academy' || uData.academyId) {
           academicCoachingCloudService.getOrFetchProgramForCurrentUser().catch(() => {});
         }
+
+        // Record existing user login event for Super Admin tracking
+        userActivityService.recordUserLogin(user, {
+          workspaceType: activeWs,
+          orgName: uData.schoolName || uData.academyName,
+          role: uData.role
+        }).catch(() => {});
       }
     } catch (err: any) {
       if (
@@ -250,11 +264,24 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
         // Determine active workspace from user document
         const userDocRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userDocRef);
+        let activeWs: WorkspaceType = 'school';
+        let orgName = '';
+        let userRole = 'teacher';
+
         if (userSnap.exists()) {
           const uData = userSnap.data();
-          const activeWs = uData.activeWorkspace || (uData.academyId && !uData.schoolId ? 'academy' : 'school');
+          activeWs = (uData.activeWorkspace || (uData.academyId && !uData.schoolId ? 'academy' : 'school')) as WorkspaceType;
+          orgName = uData.schoolName || uData.academyName || '';
+          userRole = uData.role || 'teacher';
           localStorage.setItem('smartpe_active_workspace', activeWs);
         }
+
+        // Record user login event in Firestore for Super Admin tracking
+        userActivityService.recordUserLogin(user, {
+          workspaceType: activeWs,
+          orgName,
+          role: userRole
+        }).catch(() => {});
       } else {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
@@ -286,10 +313,20 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             role: 'admin',
             createdAt: nowIso,
             registrationDate: nowIso,
+            lastLoginAt: nowIso,
+            lastActiveAt: nowIso,
+            loginCount: 1,
             nurtureStep1SentAt: nowIso
           });
 
           localStorage.setItem('smartpe_active_workspace', 'academy');
+
+          // Record new registration login activity
+          userActivityService.recordUserLogin(user, {
+            workspaceType: 'academy',
+            orgName: finalAcademyName,
+            role: 'admin'
+          }).catch(() => {});
 
           trackEvent('signup', { method: 'email', workspace: 'academy' });
           trackEvent('profile_created', { workspace: 'academy' });
@@ -363,6 +400,13 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           });
 
           localStorage.setItem('smartpe_active_workspace', 'school');
+
+          // Record new school registration login activity
+          userActivityService.recordUserLogin(user, {
+            workspaceType: 'school',
+            orgName: finalSchoolName,
+            role
+          }).catch(() => {});
 
           trackEvent('signup', { method: 'email', workspace: 'school' });
           trackEvent('profile_created', { workspace: 'school' });
@@ -640,6 +684,28 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
                 >
                   Forgot Password?
                 </button>
+              </div>
+            )}
+
+            {isLogin && (
+              <div className="p-4 bg-emerald-50/80 border-2 border-emerald-300 rounded-2xl text-[11px] text-emerald-950 leading-relaxed space-y-2 shadow-sm">
+                <div className="font-black uppercase tracking-wider text-emerald-900 flex items-center justify-between gap-1 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck size={16} className="text-emerald-700 shrink-0" />
+                    <span>Physical Education Privacy & Trust</span>
+                  </div>
+                  <span className="text-[9px] px-2 py-0.5 bg-emerald-200/80 text-emerald-800 rounded-full font-black uppercase tracking-widest">
+                    Zero Data Sale
+                  </span>
+                </div>
+                <p className="text-emerald-900/90 font-medium">
+                  SmartPE India is an assistive educational utility built for PE teachers. All student fitness metrics and sports assessment records remain the exclusive property of your school/academy and are <strong>never sold, monetized, or shared</strong> with third parties.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 pt-1 text-[10px] font-black text-emerald-800">
+                  <span className="flex items-center gap-1">✓ School Data Ownership</span>
+                  <span className="flex items-center gap-1">✓ Zero AI Data Mining</span>
+                  <span className="flex items-center gap-1">✓ 1-Click Self Deletion</span>
+                </div>
               </div>
             )}
 

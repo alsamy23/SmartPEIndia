@@ -170,14 +170,40 @@ const AIToolCenter: React.FC = () => {
               <p className="text-slate-400 text-sm font-medium mb-8">{selectedTool.description}</p>
 
               <div className="space-y-4">
-                <input className="w-full bg-slate-50 border p-4 rounded-xl font-bold outline-none" placeholder="Topic / Skill / Focus" onChange={e => setFormData({...formData, topic: e.target.value})} />
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">Topic / Sport / Focus *</label>
+                  <input 
+                    className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl font-bold text-sm text-slate-800 outline-none focus:ring-2 focus:ring-indigo-300" 
+                    placeholder="e.g. Badminton Smash, Basketball Dribbling, Nutrition" 
+                    value={formData.topic || ''}
+                    onChange={e => setFormData({...formData, topic: e.target.value})} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">Target Grade / Class</label>
+                  <input 
+                    className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl font-bold text-sm text-slate-800 outline-none focus:ring-2 focus:ring-indigo-300" 
+                    placeholder="e.g. Class 12, Grade 9, Class 6" 
+                    value={formData.grade || ''}
+                    onChange={e => setFormData({...formData, grade: e.target.value})} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">Curriculum / Context</label>
+                  <input 
+                    className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl font-bold text-sm text-slate-800 outline-none focus:ring-2 focus:ring-indigo-300" 
+                    placeholder="e.g. CBSE 2025-26, ICSE, Khelo India" 
+                    value={formData.curriculum || ''}
+                    onChange={e => setFormData({...formData, curriculum: e.target.value})} 
+                  />
+                </div>
                 <button 
                   onClick={runTool}
-                  disabled={loading}
-                  className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black shadow-lg hover:scale-[1.02] transition-all flex items-center justify-center space-x-2"
+                  disabled={loading || !formData.topic}
+                  className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-2xl font-black text-sm shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center space-x-2"
                 >
-                  {loading ? <Loader2 className="animate-spin" /> : <Zap size={20} />}
-                  <span>{loading ? 'Processing...' : 'Build Resource'}</span>
+                  {loading ? <Loader2 className="animate-spin" /> : <Zap size={18} />}
+                  <span>{loading ? 'Synthesizing...' : 'Build Resource'}</span>
                 </button>
               </div>
             </div>

@@ -180,7 +180,7 @@ const WeeklyPlannerTool: React.FC = () => {
                    AI-Drafted Lesson
                  </div>
                  <h2 className="text-xl font-black text-slate-800">{selectedClass.title} — {selectedClass.subtitle}</h2>
-                 <p className="text-xs text-slate-500 font-bold mt-1">{selectedClass.day} • {selectedClass.period} • AC HPE v9.0 outcomes tagged</p>
+                 <p className="text-xs text-slate-500 font-bold mt-1">{selectedClass.day} • {selectedClass.period} • CBSE Physical Education & HPE outcomes tagged</p>
                </div>
                <button onClick={() => setSelectedClass(null)} className="p-2 bg-slate-200 text-slate-600 hover:bg-slate-300 rounded-full transition-colors">
                  <X size={20} />

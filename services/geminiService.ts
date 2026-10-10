@@ -425,18 +425,23 @@ export const generateLessonPlan = async (
     contents: `Detailed PE Lesson Plan. Board: ${board}, Grade: ${grade}, Sport: ${sport}, Topic: ${topic}, Lang: ${language}, Duration: ${duration}, Available Equipment: ${equipment || 'Standard PE equipment'}.`,
     config: {
       thinkingConfig: { thinkingLevel: "LOW" },
-      systemInstruction: `You are an expert Physical Education Curriculum Designer and Teacher's Assistant. 
+      systemInstruction: `You are an expert Physical Education Curriculum Designer and Senior Educator following CBSE / NCERT / National Indian school standards. 
       Be decisive and do not ask for clarification.
       Create a highly professional, structured PE lesson plan for a ${duration} session. 
+      
+      PEDAGOGICAL ADAPTATION:
+      - If the topic or sport is an on-field game or athletic skill: Provide active motor drills, progressive practice channels, coaching cues, and small-sided games.
+      - If the topic is a Physical Education Theory unit (e.g. Biomechanics, Management of Sporting Events, Yoga for Lifestyle, Sports Nutrition, Postural Deformities, Test & Measurement): Structure the Starter as a concept hook / diagnostic discussion, the Main Activity as interactive concept demonstrations, formula/fixture calculations, case studies, and board exam question solving, and the Plenary as a formative review.
+      
       Format:
       1. Objectives: Clear Psychomotor (Know), Cognitive (Understand), and Affective (Apply) goals.
       2. Success Criteria: Differentiated (All, Most, Some).
-      3. Starter: Engaging warm-up related to the topic (${duration} appropriate).
-      4. Main Activity: 3 progressive drills with clear coaching points.
-      5. Plenary: Cool-down and reflective questions.
-      6. Safety: Specific risks for this sport/activity.
+      3. Starter: Engaging warm-up / concept hook related to the topic (${duration} appropriate).
+      4. Main Activity: 3 progressive drills / pedagogical stages with clear coaching points.
+      5. Plenary: Cool-down / reflective review questions.
+      6. Safety: Specific risks and precautions.
       7. Equipment: List all necessary items. You MUST design the lesson plan around the available equipment provided by the user. If no specific equipment is provided, use standard PE equipment.
-      8. Teaching Aids: Whistles, cones, charts, etc.
+      8. Teaching Aids: Whistles, cones, charts, NCERT models, etc.
       9. Key Vocabulary: Terms students should learn.
       Translate all content to ${language}. Ensure NO fields are empty strings. Use the provided duration (${duration}) to time the activities correctly.`,
       responseMimeType: "application/json",
@@ -475,7 +480,8 @@ export const generateYearlyPlan = async (
   term2Focus: string,
   startDate: string,
   duration: string,
-  language: Language
+  language: Language,
+  planTrack: 'integrated' | 'theory' | 'practical' = 'integrated'
 ): Promise<YearlyPlan> => {
   const safeCalendarText = calendarText ? calendarText.substring(0, 1500) : "No calendar.";
   
@@ -529,22 +535,31 @@ export const generateYearlyPlan = async (
     Grade: ${grade}, Board: ${board}, Language: ${language}. 
     Cycle: Indian Academic Session (April to March).
     Start Month: April. End Month: March.
-    Term 1 Focus Game/Activities: "${term1Focus}".
-    Term 2 Focus Game/Activities: "${term2Focus}".
+    Plan Track: ${planTrack}.
+    Term 1 Focus / Syllabus Units: "${term1Focus}".
+    Term 2 Focus / Syllabus Units: "${term2Focus}".
     Additional Holidays/Calendar: ${safeCalendarText}`,
     config: {
       thinkingConfig: { thinkingLevel: "LOW" },
-      systemInstruction: `You are a Senior Physical Education Director in a premium school following CBSE/national guidelines. 
+      systemInstruction: `You are a Senior Physical Education Director in a premier Indian school adhering strictly to the CBSE / NCERT / National Curriculum Framework (NCF).
       Generate a strictly valid JSON following the Indian academic cycle (APRIL to MARCH).
       
       STRUCTURE:
       - Term 1: April to September.
       - Term 2: October to March.
       
-      STRICT TERM-WIDE FOCAL PURITY (MANDATORY NO-MIX RULE):
-      - Term 1 (April to September) MUST focus EXCLUSIVELY on "${term1Focus}" and standard physical fitness tests (like CBSE Khelo India Battery). Under NO circumstance should you mix in or refer to "${term2Focus}".
-      - Term 2 (October to March) MUST focus EXCLUSIVELY on "${term2Focus}" and relevant assessments/rules. Under NO circumstance should you mix in or refer to "${term1Focus}".
-      - Keep each Term's lessons purely dedicated to its designated focus game. For example, if Basketball is selected for Term 1, weeks in Term 1 should be purely structured around basketball skills (dribbling, passing, layup, rules, assessments) and fitness, not mixing in football or other unselected sports.
+      CURRICULUM TRACK GUIDANCE:
+      1. If Grade is 11 or 12 or if Track is "theory" or "integrated":
+         - For Class 12 CBSE (Code 048):
+           * Term 1 (April to September): Must progress through Units 1 to 5: Unit 1 (Management of Sporting Events - Planning, Committees, Tournaments Fixtures Knockout/League), Unit 2 (Children & Women in Sports - Postural deformities, Female athlete triad), Unit 3 (Yoga as Preventive measure for Lifestyle Disease - Asanas for Obesity, Diabetes, Asthma, Hypertension), Unit 4 (PE & Sports for CWSN - Special Olympics, Paralympics, Deaflympics, Inclusion), Unit 5 (Sports & Nutrition - Macronutrients, Micronutrients, BMI) + Term 1 Physical Fitness Tests (SAI Khelo India Battery) & Mid-Term Exam Revision.
+           * Term 2 (October to March): Must progress through Units 6 to 10: Unit 6 (Test & Measurement in Sports - SAI Khelo India, Barrow Motor Ability, Harvard Step Test), Unit 7 (Physiology & Injuries in Sports - Fitness physiology, PRICE protocol, Injuries), Unit 8 (Biomechanics & Sports - Newton's Laws, Levers, Equilibrium, Friction, Projectiles), Unit 9 (Psychology & Sports - Personality, Motivation, Aggression), Unit 10 (Training in Sports - Periodization, Strength/Speed/Endurance methods, Circuit Training) + CBSE Board Practical File preparation, Viva Voce practice, Pre-Board exams & Final revision.
+         - For Class 11 CBSE (Code 048):
+           * Term 1 (April to September): Units 1 to 5: Unit 1 (Changing Trends & Career in PE), Unit 2 (Olympic Value Education), Unit 3 (Yoga), Unit 4 (PE for CWSN), Unit 5 (Physical Fitness, Wellness & Lifestyle) + Khelo India Fitness Test battery.
+           * Term 2 (October to March): Units 6 to 10: Unit 6 (Test, Measurement & Evaluation), Unit 7 (Fundamentals of Anatomy & Physiology), Unit 8 (Fundamentals of Kinesiology & Biomechanics), Unit 9 (Psychology & Sports), Unit 10 (Training & Doping in Sports) + Practical Assessment & Final Revision.
+      2. If Track is "practical" or for Classes 1 to 10:
+         - Term 1 focuses on "${term1Focus}" and core physical fitness motor skills.
+         - Term 2 focuses on "${term2Focus}" and tactical gameplay/assessments.
+         - Ensure progressive skill acquisition (Foundations -> Intermediate drills -> Game situations -> Tournaments & Testing).
       
       CALENDAR CONSTRAINTS:
       - May: Mark as 'Holiday' for at least 3-4 weeks (Summer Break).
@@ -553,9 +568,8 @@ export const generateYearlyPlan = async (
       
       WEEKLY CONTENT:
       - Each month MUST have exactly 4 weeks.
-      - 'topic': Name of the specific skill, sport, or assessment (e.g., "${term1Focus} - Chest Pass" or "${term1Focus} - Physical Fitness Assessment").
-      - 'details': Include specific skills, assessment parameters, how-to coaching points, and physical technical details (e.g., "Coaching points: Knees slightly bent, release the ball from chest, hands push outwards"). Make it highly professional and syllabus-aligned.
-      - Ensure logical skill progressions (Intro, Basic Skills, Advanced Skills, Game Tactics, and Assessments).
+      - 'topic': Clean, descriptive academic topic or sport skill.
+      - 'details': Include specific learning objectives, coaching cues, chalk-talk/lab points, or physical technical details. Make it highly professional and syllabus-aligned.
       
       TRANSFERS: Translate all Topic and Details to ${language}.`,
       responseMimeType: "application/json",
@@ -573,7 +587,7 @@ export const generateYearlyPlan = async (
     duration: duration,
     terms: terms,
     generatedDate: new Date().toLocaleDateString(),
-    academicYear: parsed.academicYear || "2024-2025"
+    academicYear: parsed.academicYear || "2025-2026"
   };
 };
 
@@ -607,14 +621,15 @@ export const generateMindMap = async (grade: string, chapter: string, board: Boa
 
   const response = await callAIBase({
     model: 'gemini-3.7-flash',
-    contents: `Generate a comprehensive mind map structure for CBSE Class ${grade} Physical Education Chapter: ${chapter}. 
+    contents: `Generate a comprehensive mind map structure for CBSE Physical Education Grade ${grade} Chapter/Unit: "${chapter}". 
     Include ALL major topics and sub-topics from the latest 2025-2026 CBSE curriculum and NCERT textbook.
     Provide exactly 6 to 8 main branches with clear, academic titles and brief descriptions.
     Each branch should have 3-5 sub-topics.`,
     config: {
       thinkingConfig: { thinkingLevel: "LOW" },
-      systemInstruction: `You are a CBSE Physical Education Subject Matter Expert. 
-      Generate a structured, hierarchical mind map in JSON format. 
+      systemInstruction: `You are a CBSE Physical Education Subject Matter Expert and Chief Examiner for Subject Code 048. 
+      Generate a structured, hierarchical mind map in JSON format strictly grounded in the official CBSE NCERT Physical Education syllabus.
+      CRITICAL: Content MUST strictly be Physical Education & Sports Science. Under NO circumstance should you output business management, accounting, or non-PE concepts.
       Ensure 'center' is a string and 'branches' is an array of objects.
       Each branch object MUST have 'title', 'description', and 'subTopics' (array of strings).
       Ensure full coverage of the specified chapter according to the 2025-2026 syllabus.`,
@@ -653,27 +668,40 @@ export const generateTheoryContent = async (grade: string, topic: string, board:
     required: ["title", "content", "questions"]
   };
 
-  const isCBSE12 = board === 'CBSE' && (grade === '12' || grade === 'Class 12');
-  const contextUrl = "https://www.failures.in/p/physical-education-class-12-notes-pdf.html";
-
   const response = await callAIBase({
     model: 'gemini-3.7-flash',
-    contents: `PE Theory Content. Grade ${grade} ${board}. Topic: ${topic}. Type: ${contentType}. Language: ${language}.${isCBSE12 ? ` Use context from ${contextUrl}` : ''}`,
+    contents: `CBSE Physical Education Theory Content. Grade: ${grade}, Board: ${board}. Topic/Unit: "${topic}". Content Type: ${contentType}. Language: ${language}.`,
     config: { 
       thinkingConfig: { thinkingLevel: "LOW" },
-      systemInstruction: `You are an expert CBSE PE Teacher. Output valid JSON. 
-      Content Language: ${language}. 
-      
-      GUIDELINES:
-      1. Reference: Strictly follow NCERT and CBSE 2025-26 curriculum.
-      2. Style: For 'Notes', use the "shortest way for math-like understanding" - very logical, bulleted, and precise. Avoid fluff.
-      3. Case Studies: For 'CaseStudy', follow the latest board sample paper patterns (2024-25/2025-26). Include a scenario followed by 3-4 analytical questions.
-      4. MCQs: Ensure options are challenging and follow board patterns.
-      
-      ${isCBSE12 ? `IMPORTANT: Prioritize and summarize information from ${contextUrl} for this CBSE Class 12 request.` : ''}`,
+      systemInstruction: `You are an expert CBSE Physical Education Senior Faculty Member and Chief Examiner for Subject Code 048 and CBSE Health & Physical Education.
+Output valid JSON. Content Language: ${language}.
+
+CRITICAL SYLLABUS INTEGRITY (MANDATORY):
+1. You are strictly generating content for CBSE Physical Education (Subject Code 048 / CBSE HPE).
+2. Under NO circumstance should you output business management, corporate accounting, financial ethics, environmental law, or non-PE domains.
+3. Every definition, concept, question, case study, and answer MUST be 100% grounded in the official CBSE Physical Education curriculum and NCERT textbooks:
+   - Class 12 Syllabus (Code 048):
+     * Unit 1: Management of Sporting Events (Planning, Organizing, Staffing, Directing, Controlling; Committees & responsibilities; Tournament Fixtures - Knockout, League/Round Robin with bye calculations, Combination; Intramural/Extramural; Community Sports programs).
+     * Unit 2: Children and Women in Sports (WHO Exercise Guidelines; Common Postural Deformities - Flat foot, Knock knees, Bow legs, Lordosis, Kyphosis, Scoliosis, Round shoulders & corrective exercises; Menarche, Menstrual dysfunction; Female Athlete Triad - Osteoporosis, Amenorrhea, Eating disorders).
+     * Unit 3: Yoga as Preventive Measure for Lifestyle Disease (Obesity, Diabetes, Asthma, Hypertension, Back Pain: Asanas, procedure, benefits, contraindications for each condition).
+     * Unit 4: Physical Education & Sports for CWSN (Special Olympics, Paralympics, Deaflympics; Concept of Classification and Divisioning; Inclusion in Sports; Assistive technology).
+     * Unit 5: Sports and Nutrition (Balanced diet, Macro & Micro nutrients; Nutritive & Non-nutritive components; Eating for weight control, Healthy BMI, Pitfalls of dieting, Food myths).
+     * Unit 6: Test and Measurement in Sports (SAI Khelo India Fitness Test in schools; Barrow Three-Item General Motor Ability; Harvard Step Test / Rockport Test; Rikli & Jones Senior Citizen Test).
+     * Unit 7: Physiology & Injuries in Sports (Physiological factors determining Speed, Strength, Endurance, Flexibility; Effects of exercise on muscular/cardiorespiratory systems; Sports Injuries classification - Soft tissue abrasion, contusion, laceration, incision, sprain, strain; Bone fractures, joint dislocations; First aid: PRICE protocol).
+     * Unit 8: Biomechanics and Sports (Newton's Laws of Motion in sports; Types of Levers Class 1, 2, 3 in body movements; Equilibrium - Static/Dynamic & Centre of Gravity; Friction in sports; Projectile motion factors).
+     * Unit 9: Psychology and Sports (Personality definition & Carl Jung / Big Five traits; Motivation types & techniques; Exercise adherence; Aggression in sports - Hostile, Instrumental, Assertive; Mental imagery & psychological attributes).
+     * Unit 10: Training in Sports (Concept of Sports Training; Periodization Micro/Meso/Macro cycles; Strength development methods - Isometric, Isotonic, Isokinetic; Endurance methods - Continuous, Interval, Fartlek; Speed & Flexibility methods; Circuit training).
+   - Class 11 Syllabus (Code 048):
+     * Unit 1: Changing Trends & Career in PE; Unit 2: Olympic Value Education; Unit 3: Yoga & Ashtanga; Unit 4: Adaptive PE for CWSN; Unit 5: Physical Fitness, Wellness & Lifestyle; Unit 6: Test, Measurements & Evaluation (BMI, Somatotypes Endomorph/Mesomorph/Ectomorph); Unit 7: Fundamentals of Anatomy & Physiology; Unit 8: Fundamentals of Kinesiology & Biomechanics; Unit 9: Psychology & Sports; Unit 10: Training & Doping (WADA, NADA, Prohibited substances).
+   - Classes 9 & 10 (CBSE HPE):
+     * Strand 1: Games & Sports (Athletics, Team games, Individual games); Strand 2: Health & Fitness (Fitness tests, posture, nutrition, first aid); Strand 3: SEWA; Strand 4: Health and Activity Card.
+
+FORMATTING GUIDELINES BY CONTENT TYPE:
+- For 'Notes': Highly structured, clear headings, concise bullet points, definitions, classifications, and exam-focused mnemonic summaries. Avoid filler.
+- For 'MCQ': 5 to 8 challenging CBSE board-standard MCQs with 4 options (A, B, C, D), correct answer, and clear rationale.
+- For 'CaseStudy': 2 realistic sports scenarios (e.g., student undergoing Khelo India fitness test, athlete recovering from ligament sprain, coach planning tournament fixtures, sprinter applying Newton's third law) followed by analytical questions and model answers.`,
       responseMimeType: "application/json",
-      responseSchema: schema,
-      tools: isCBSE12 ? [{ urlContext: {} }] : undefined
+      responseSchema: schema
     }
   });
   return safeParseJson(response.text || response);
@@ -741,6 +769,82 @@ Provide a structured output matching the schema:`;
   return safeParseJson(response.text || response);
 };
 
+export const generateUnitPlan = async (
+  topic: string,
+  grade: string,
+  numberOfLessons: number,
+  duration: string,
+  curriculum: string,
+  learningObjectives?: string,
+  assessmentStrategies?: string,
+  availableEquipment?: string
+) => {
+  const schema = {
+    type: "OBJECT",
+    properties: {
+      unitTitle: { type: "STRING" },
+      grade: { type: "STRING" },
+      curriculum: { type: "STRING" },
+      duration: { type: "STRING" },
+      numberOfLessons: { type: "NUMBER" },
+      overview: { type: "STRING" },
+      learningObjectives: { type: "ARRAY", items: { type: "STRING" } },
+      assessmentStrategies: { type: "ARRAY", items: { type: "STRING" } },
+      equipmentNeeded: { type: "ARRAY", items: { type: "STRING" } },
+      weeklyBreakdown: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            week: { type: "NUMBER" },
+            focus: { type: "STRING" },
+            keyLearning: { type: "STRING" },
+            starter: { type: "STRING" },
+            mainActivity: { type: "STRING" },
+            plenary: { type: "STRING" },
+            suggestedDrills: { type: "ARRAY", items: { type: "STRING" } },
+            coachingCues: { type: "ARRAY", items: { type: "STRING" } }
+          },
+          required: ["week", "focus", "keyLearning", "suggestedDrills"]
+        }
+      },
+      differentiation: {
+        type: "OBJECT",
+        properties: {
+          support: { type: "STRING" },
+          extension: { type: "STRING" }
+        }
+      },
+      safetyGuidelines: { type: "ARRAY", items: { type: "STRING" } }
+    },
+    required: ["unitTitle", "overview", "learningObjectives", "weeklyBreakdown"]
+  };
+
+  const response = await callAIBase({
+    model: 'gemini-3.7-flash',
+    contents: `Generate a comprehensive Physical Education Unit Plan.
+Topic/Unit: "${topic}".
+Grade/Level: "${grade}".
+Number of Lessons: ${numberOfLessons}.
+Lesson Duration: ${duration} minutes.
+Curriculum Standards: "${curriculum}".
+User Objectives: "${learningObjectives || 'Standard grade-appropriate physical competence and cognitive understanding'}".
+User Assessments: "${assessmentStrategies || 'Formative observation, skill checks, and peer evaluations'}".
+Available Equipment: "${availableEquipment || 'Standard school sports facilities and equipment'}".`,
+    config: {
+      thinkingConfig: { thinkingLevel: "LOW" },
+      systemInstruction: `You are an expert Physical Education Curriculum Director specializing in Indian and international PE curricula (${curriculum}, CBSE, ICSE, National Framework).
+Generate a complete, highly practical, and syllabus-aligned Unit Plan.
+Break the unit down into exactly ${numberOfLessons} progressive lessons, with clear skill progressions, coaching cues, starter warm-ups, core drills, cool-downs, differentiation, safety, and assessment checkpoints.
+Output strictly valid JSON matching the schema.`,
+      responseMimeType: "application/json",
+      responseSchema: schema
+    }
+  });
+
+  return safeParseJson(response.text || response);
+};
+
 export const generateAIToolContent = async (toolId: string, params: any) => {
   const schema = {
     type: "OBJECT",
@@ -757,12 +861,27 @@ export const generateAIToolContent = async (toolId: string, params: any) => {
     required: ["title", "content"]
   };
 
+  const toolPrompts: Record<string, string> = {
+    'rubric-maker': 'You are a sports assessment specialist. Create an objective, 4-tier rubric (Beginning, Developing, Proficient, Mastery) with concrete criteria for technique, game sense, safety, and sportsmanship.',
+    'worksheet-maker': 'You are an educational designer. Create an interactive student PE theory & practical reflection worksheet with concept summaries, fill-in-blanks, true/false, and practical questions.',
+    'report-writer': 'You are a physical education department head. Write personalized, constructive, strengths-based PE report card comments covering psychomotor execution, fitness engagement, team cooperation, and targets for improvement.',
+    'game-generator': 'You are a master PE game designer. Generate 5 engaging, high-activity, skill-focused physical education games with clear rules, setup diagrams descriptions, equipment, and modifications for all abilities.',
+    'adapted-pe': 'You are an inclusive sports and adaptive PE specialist. Provide concrete adaptations using the TREE framework (Teaching, Rules, Equipment, Environment) for students with diverse abilities.',
+    'differentiator': 'You are a pedagogical differentiator. Provide 3 tiers of differentiated sports activities (Must Do, Should Do, Could Do) to challenge all skill levels simultaneously.',
+    'sports-science': 'You are a sports scientist. Connect the physical sport to scientific principles (biomechanics, heart rate dynamics, energy systems, or physiology) through an experiential student activity.',
+    'ask-advisor': 'You are the SmartPE India Senior Educational Advisor. Provide authoritative, practical guidance tailored to Indian school environments, CBSE/ICSE mandates, and physical education best practices.',
+    'lesson-observer': 'You are an instructional coach. Generate a structured PE lesson observation checklist with indicators for active learning time, safety, clear coaching cues, and positive climate.',
+    'policy-writer': 'You are a school athletic administrator. Draft an official, comprehensive physical education departmental policy with safety protocols, weather/heat guidelines, attire, and emergency procedures.'
+  };
+
+  const selectedInstruction = toolPrompts[toolId] || "You are a PE Expert. Be decisive and do not ask for clarification. Generate high-quality, actionable content. Do not return empty fields.";
+
   const response = await callAIBase({
     model: 'gemini-3.7-flash',
-    contents: `PE Tool ${toolId}. Parameters: ${JSON.stringify(params)}.`,
+    contents: `PE Tool: ${toolId}. User Input Parameters: ${JSON.stringify(params)}. Generate an exhaustive, professional, and syllabus-aligned resource.`,
     config: { 
       thinkingConfig: { thinkingLevel: "LOW" },
-      systemInstruction: "You are a PE Expert. Be decisive and do not ask for clarification. Generate high-quality, actionable content. Do not return empty fields. If specific data is missing, generate realistic examples.",
+      systemInstruction: `${selectedInstruction} Ensure the content is relevant to school physical education, actionable, and formatted cleanly into title, content, items array, and summary.`,
       responseMimeType: "application/json",
       responseSchema: schema
     }
@@ -1049,9 +1168,14 @@ export const generateTestPaper = async (
     config: {
       thinkingConfig: { thinkingLevel: "LOW" },
       maxOutputTokens: 8192,
-      systemInstruction: `You are an expert CBSE Physical Education Examiner. 
+      systemInstruction: `You are an expert CBSE Physical Education Examiner for Subject Code 048. 
       Be decisive and do not ask for clarification.
       Create a professional question paper following standard CBSE 2025-26 educational patterns for Code 048.
+      
+      CRITICAL SYLLABUS INTEGRITY (MANDATORY):
+      - All questions, MCQs, case studies, and marking scheme answers MUST strictly belong to CBSE Physical Education (Code 048).
+      - Do NOT include questions on corporate business management, commerce, environmental law, or unrelated domains.
+      - Case studies MUST involve authentic sports situations (e.g., student fitness assessment, athletic injury first aid PRICE, tournament fixtures, biomechanics of sports moves, yoga for lifestyle diseases).
       
       ${maxMarks === 35 ? `
       STRICT STRUCTURE FOR 35 MARKS:
@@ -1145,11 +1269,15 @@ export const generateParentLetter = async (
   details: string,
   language: Language
 ): Promise<string> => {
+  // Anonymize names to protect student privacy: AI generates template, client inserts actual names
+  const safePurpose = purpose || 'Physical Education Progress Update';
+  const safeDetails = details || 'Regular semester PE and fitness evaluation';
+  
   const response = await callAIBase({
     model: 'gemini-3.7-flash',
-    contents: `Generate a professional parent letter. 
-    Student: ${studentName}, Teacher: ${teacherName}, 
-    Purpose: ${purpose}, Details: ${details}, 
+    contents: `Generate a professional parent letter template. 
+    Purpose: ${safePurpose}, 
+    Context: ${safeDetails}, 
     Language: ${language}.`,
     config: {
       thinkingConfig: { thinkingLevel: "LOW" },
@@ -1157,16 +1285,24 @@ export const generateParentLetter = async (
       Write a formal, polite, and professional letter to a parent. 
       The letter should follow a standard school communication format:
       - Date
-      - Salutation (Dear Parent/Guardian of [Student Name])
+      - Salutation (Dear Parent/Guardian of {{STUDENT_NAME}})
       - Clear subject line
-      - Body text clearly explaining the purpose: ${purpose}
-      - Include specific details if provided: ${details}
-      - Professional closing (Sincerely, [Teacher Name])
+      - Body text clearly explaining the purpose: ${safePurpose}
+      - Include specific details if provided: ${safeDetails}
+      - Professional closing (Sincerely, {{TEACHER_NAME}})
       Language: ${language}. 
-      Ensure the tone is supportive and professional.`,
+      Ensure the tone is supportive and professional.
+      Use exactly {{STUDENT_NAME}} for the student name placeholder and {{TEACHER_NAME}} for the teacher name placeholder.`,
     }
   });
-  return response.text;
+
+  const rawText = response.text || '';
+  // Fill in the actual names locally on the device without ever sending student PII over the wire
+  return rawText
+    .replace(/\{\{STUDENT_NAME\}\}/g, studentName || 'Student')
+    .replace(/\{\{TEACHER_NAME\}\}/g, teacherName || 'Physical Education Teacher')
+    .replace(/\[Student Name\]/gi, studentName || 'Student')
+    .replace(/\[Teacher Name\]/gi, teacherName || 'Physical Education Teacher');
 };
 
 export interface WeeklyAcademicPlanRow {

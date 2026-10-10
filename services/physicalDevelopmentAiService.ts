@@ -19,8 +19,7 @@ export async function generatePhysicalDevelopmentInsights(
   const prompt = `You are a physical education curriculum specialist assisting a PE teacher.
 Based STRICTLY on the deterministic Physical Development Profile data provided below for a student, generate a supportive, actionable, parent-friendly summary.
 
-STUDENT PROFILE:
-- Name: ${profile.studentName}
+STUDENT PROFILE (Anonymized for Child Privacy):
 - Grade/Class: ${profile.grade} - Section ${profile.section}
 - Gender: ${profile.gender}
 - Age: ${profile.age} years

@@ -25,30 +25,48 @@ import { storageService } from '../services/storageService.ts';
 import { exportToPdf, exportToWord } from '../lib/exportUtils.ts';
 import { useRef } from 'react';
 
+const CHAPTERS_9 = [
+  "Strand 1: Athletics, Track Events & Sprint Mechanics",
+  "Strand 1: Team Sports Fundamentals & Game Rules (Football, Basketball, Cricket)",
+  "Strand 2: Health, Personal Hygiene & Physical Growth Dynamics",
+  "Strand 2: Nutrition, Hydration & Sports Safety Protocols",
+  "Strand 2: Basic First Aid & Sports Injury Prevention",
+  "Strand 3 & 4: SEWA, Yoga Asanas & Fitness Profiling"
+];
+
+const CHAPTERS_10 = [
+  "Strand 1: Major Games & Athletics Tactics (Track, Jumps, Throws)",
+  "Strand 1: Indigenous Games (Kabaddi, Kho-Kho) & Racket Sports",
+  "Strand 2: Physical Fitness Benchmarking (Khelo India Battery & BMI)",
+  "Strand 2: Health, Postural Deformities & Balanced Nutrition",
+  "Strand 3: SEWA & Community Health Action",
+  "Strand 4: Health & Activity Card Assessment"
+];
+
 const CHAPTERS_11 = [
-  "Changing Trends & Career in Physical Education",
-  "Olympic Value Education",
-  "Yoga",
-  "Physical Education & Sports for CWSN",
-  "Physical Fitness, Wellness",
-  "Test, Measurements & Evaluation",
-  "Fundamentals of Anatomy and Physiology in Sports",
-  "Fundamentals of Kinesiology and Biomechanics in Sports",
-  "Psychology and Sports",
-  "Training & Doping in Sports"
+  "Unit 1: Changing Trends & Career in Physical Education",
+  "Unit 2: Olympic Value Education",
+  "Unit 3: Yoga & Yogic Practices",
+  "Unit 4: Physical Education & Sports for CWSN (Divyang)",
+  "Unit 5: Physical Fitness, Wellness and Lifestyle",
+  "Unit 6: Test, Measurements & Evaluation",
+  "Unit 7: Fundamentals of Anatomy & Physiology in Sports",
+  "Unit 8: Fundamentals of Kinesiology & Biomechanics in Sports",
+  "Unit 9: Psychology and Sports",
+  "Unit 10: Training & Doping in Sports"
 ];
 
 const CHAPTERS_12 = [
-  "Management of Sporting Events",
-  "Children and Women in Sports",
-  "Yoga as Preventive measure for Lifestyle Disease",
-  "Physical Education & Sports for (CWSN)",
-  "Sports & Nutrition",
-  "Test and Measurement in Sports",
-  "Physiology & Injuries in Sport",
-  "Biomechanics and Sports",
-  "Psychology and Sports",
-  "Training in Sports"
+  "Unit 1: Management of Sporting Events",
+  "Unit 2: Children and Women in Sports",
+  "Unit 3: Yoga as Preventive Measure for Lifestyle Disease",
+  "Unit 4: Physical Education & Sports for CWSN (Divyang)",
+  "Unit 5: Sports & Nutrition",
+  "Unit 6: Test and Measurement in Sports",
+  "Unit 7: Physiology & Injuries in Sports",
+  "Unit 8: Biomechanics and Sports",
+  "Unit 9: Psychology and Sports",
+  "Unit 10: Training in Sports"
 ];
 
 const TheoryHub: React.FC = () => {
@@ -123,7 +141,17 @@ const TheoryHub: React.FC = () => {
     exportToWord(html, `Theory_${result.title}_Grade${grade}`);
   };
 
-  const chapters = grade === '11' ? CHAPTERS_11 : CHAPTERS_12;
+  const getChaptersForGrade = () => {
+    switch (grade) {
+      case '9': return CHAPTERS_9;
+      case '10': return CHAPTERS_10;
+      case '11': return CHAPTERS_11;
+      case '12': return CHAPTERS_12;
+      default: return CHAPTERS_12;
+    }
+  };
+
+  const chapters = getChaptersForGrade();
 
   const handleChapterSelect = async (chapter: string) => {
     setSelectedChapter(chapter);
@@ -221,16 +249,28 @@ const TheoryHub: React.FC = () => {
             </p>
           </div>
           
-          <div className="flex bg-white/5 backdrop-blur-md p-1.5 rounded-2xl border border-white/10">
+          <div className="flex flex-wrap bg-white/5 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 gap-1">
+            <button 
+              onClick={() => { setGrade('9'); resetView(); }}
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${grade === '9' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+            >
+              Class 9
+            </button>
+            <button 
+              onClick={() => { setGrade('10'); resetView(); }}
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${grade === '10' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+            >
+              Class 10
+            </button>
             <button 
               onClick={() => { setGrade('11'); resetView(); }}
-              className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${grade === '11' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${grade === '11' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
             >
               Class 11
             </button>
             <button 
               onClick={() => { setGrade('12'); resetView(); }}
-              className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${grade === '12' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${grade === '12' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
             >
               Class 12
             </button>

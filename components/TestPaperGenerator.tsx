@@ -59,12 +59,12 @@ const TestPaperGenerator: React.FC = () => {
   const chapters11 = [
     "Changing Trends & Career in Physical Education",
     "Olympic Value Education",
+    "Yoga & Yogic Practices",
+    "Physical Education & Sports for CWSN (Divyang)",
     "Physical Fitness, Wellness & Lifestyle",
-    "Physical Education & Sports for CWSN",
-    "Yoga",
-    "Physical Activity & Leadership Training",
     "Test, Measurement & Evaluation",
-    "Fundamentals of Anatomy, Physiology & Kinesiology in Sports",
+    "Fundamentals of Anatomy & Physiology in Sports",
+    "Fundamentals of Kinesiology & Biomechanics in Sports",
     "Psychology & Sports",
     "Training & Doping in Sports"
   ];

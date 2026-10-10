@@ -45,17 +45,45 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
   const [error, setError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   
-  const [grade, setGrade] = useState('6');
+  const [grade, setGrade] = useState('12');
   const [board, setBoard] = useState<BoardType>(BoardType.CBSE);
   const [frequency, setFrequency] = useState('2');
   const [duration, setDuration] = useState('40 min');
   const [startDate, setStartDate] = useState('2026-04-01');
   const [language, setLanguage] = useState<Language>('English');
   const [calendarText, setCalendarText] = useState(SAMPLE_CALENDAR_TEXT);
-  const [term1Focus, setTerm1Focus] = useState('Locomotor Skills & Basic Fitness');
-  const [term2Focus, setTerm2Focus] = useState('Football & Team Games');
+  const [planTrack, setPlanTrack] = useState<'integrated' | 'theory' | 'practical'>('integrated');
+  const [term1Focus, setTerm1Focus] = useState('CBSE Units 1-5: Management of Sporting Events, Children & Women in Sports, Lifestyle Disease Yoga, CWSN, Sports & Nutrition + Term 1 Fitness Tests');
+  const [term2Focus, setTerm2Focus] = useState('CBSE Units 6-10: Test & Measurement, Physiology & Injuries, Biomechanics, Psychology, Training in Sports + Board Practical File & Revision');
   
   const [plan, setPlan] = useState<YearlyPlan | null>(null);
+
+  const applyCbsesyllabusDefaults = (selectedGrade: string, track: 'integrated' | 'theory' | 'practical') => {
+    const cleanGrade = selectedGrade.trim();
+    if (cleanGrade === '12' || cleanGrade === 'Class 12' || cleanGrade === 'Grade 12') {
+      if (track === 'practical') {
+        setTerm1Focus('Basketball & Football Advanced Match Tactics + SAI Khelo India Fitness Battery');
+        setTerm2Focus('Volleyball / Badminton Match Proficiency + 30-Mark CBSE Practical Assessment File & Viva');
+      } else {
+        setTerm1Focus('CBSE Units 1-5: Management of Sporting Events, Children & Women, Lifestyle Disease Yoga, CWSN, Sports & Nutrition + Fitness Tests');
+        setTerm2Focus('CBSE Units 6-10: Test & Measurement, Physiology & Injuries, Biomechanics, Sports Psychology, Training in Sports + Board Practical File & Revision');
+      }
+    } else if (cleanGrade === '11' || cleanGrade === 'Class 11' || cleanGrade === 'Grade 11') {
+      if (track === 'practical') {
+        setTerm1Focus('Athletics (Sprints & Relay) + SAI Khelo India Fitness Battery');
+        setTerm2Focus('Team Games (Cricket / Basketball) + Practical Assessment Records');
+      } else {
+        setTerm1Focus('CBSE Units 1-5: Changing Trends & Career, Olympic Values, Yoga, CWSN, Physical Fitness & Wellness + Khelo India Battery');
+        setTerm2Focus('CBSE Units 6-10: Test & Measurement, Anatomy & Physiology, Biomechanics, Psychology, Training & Doping + Practical Assessment & Revision');
+      }
+    } else if (cleanGrade === '9' || cleanGrade === '10' || cleanGrade === 'Class 9' || cleanGrade === 'Class 10') {
+      setTerm1Focus('CBSE HPE Strand 1 (Team Sports & Athletics) & Strand 2 (Health, Postural Deformities & Balanced Diet)');
+      setTerm2Focus('CBSE HPE Strand 2 (First Aid & Injury Protocols) & Strand 3 & 4 (SEWA Community Action, Yoga & Health Card)');
+    } else {
+      setTerm1Focus('Locomotor & Manipulative Agility, Fundamental Motor Skills & Khelo India Fitness Battery');
+      setTerm2Focus('Team Sports Fundamentals (Football, Basketball, Kho-Kho) & Cooperative Games');
+    }
+  };
 
   useEffect(() => {
     const savedPlan = localStorage.getItem('peYearlyPlan');
@@ -97,6 +125,151 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     const t = (topic || '').toLowerCase();
     const f = (termFocus || '').toLowerCase();
     
+    // --- CBSE THEORY UNITS DETECTORS ---
+    if (t.includes('event') || t.includes('fixture') || t.includes('tournament') || t.includes('committee') || t.includes('management') || t.includes('intramural') || t.includes('extramural')) {
+      return {
+        sport: 'CBSE PE Unit 1: Management of Sporting Events',
+        objectives: `Understand planning, organizing, staffing, directing, and controlling; master drawing Knockout & League tournament fixtures with exact bye formulas ((N+1)/2, next power of 2 minus N) for Class ${currentGrade} CBSE exams.`,
+        warmup: `10 min Concept Starter: Discussion on IPL/Olympic organizational committees (Publicity, Ground, Technical, Refreshment) and pre/during/post responsibilities.`,
+        mainDrill: `25 min Theory & Problem Solving: Step-by-step mathematical fixture construction for 11, 13, 19, and 21 teams; calculating total matches (N-1), upper/lower half divisions, and cyclic/staircase league methods.`,
+        cooldown: `10 min Board Practice: Solve 2 CBSE past-year 3-mark case studies and 2 MCQs on bye calculation formulas.`,
+        assessment: `CBSE Marking Rubric: Fixture diagram accuracy, correct bye placement (lower half bottom, upper half top, etc.), and committee duties recall.`,
+        equipment: `Smartboard / Whiteboard, CBSE NCERT PE Textbook, Graph/Chart papers, geometry ruler.`,
+        safety: `Ensure students follow structured step-by-step drawing protocols to avoid mathematical fixture calculation errors.`
+      };
+    }
+
+    if (t.includes('women') || t.includes('child') || t.includes('postur') || t.includes('deform') || t.includes('flat foot') || t.includes('knock knee') || t.includes('lordosis') || t.includes('kyphosis') || t.includes('scoliosis') || t.includes('female athlete')) {
+      return {
+        sport: 'CBSE PE Unit 2: Children and Women in Sports',
+        objectives: `Examine WHO exercise recommendations; diagnose common postural deformities (Kyphosis, Lordosis, Scoliosis, Knock Knees, Flat Foot) and analyze the Female Athlete Triad (Osteoporosis, Amenorrhea, Eating Disorders) for Class ${currentGrade}.`,
+        warmup: `10 min Physical Demonstration: Visual posture alignment assessment against plumb lines; observe spine curvature and arch of the foot.`,
+        mainDrill: `25 min Corrective Exercises & Theory: Practice corrective yoga/physiotherapy movements (Tadasana for Flat Foot, Gomukhasana for Round Shoulders, Chakrasana for Kyphosis, Padmasana for Knock Knees); analyze physiological factors behind female athlete triad.`,
+        cooldown: `10 min Summary & Board Prep: Tabulate deformity vs corrective measures; solve 3 CBSE board assertion-reason questions.`,
+        assessment: `Diagnostic evaluation: Accurately matching postural deformities with root causes and corrective exercise protocols.`,
+        equipment: `Yoga mats, posture grids, NCERT diagrams, demonstration charts.`,
+        safety: `Perform corrective spinal extensions gently; avoid forceful hyperextensions on students with existing spinal discomfort.`
+      };
+    }
+
+    if (t.includes('lifestyle') || t.includes('obesity') || t.includes('diabetes') || t.includes('asthma') || t.includes('hypertension') || t.includes('back pain') || (t.includes('yoga') && (t.includes('disease') || t.includes('prevent')))) {
+      return {
+        sport: 'CBSE PE Unit 3: Yoga as Preventive Measure for Lifestyle Diseases',
+        objectives: `Master therapeutic yoga asanas for 5 lifestyle disorders (Obesity, Diabetes, Asthma, Hypertension, Back Pain/Arthritis) including procedures, benefits, and contraindications.`,
+        warmup: `10 min Gentle Joint Mobilization: Sukshma Vyayama, neck rotations, wrist extensions, and gentle diaphragmatic breathing (Pranayama).`,
+        mainDrill: `25 min Asana Practice & Theory: Step-by-step execution and diagnostic justification: Tadasana, Katichakrasana, Pavanmuktasana (Obesity); Bhujangasana, Paschimottanasana (Diabetes); Sukhasana, Matsyasana (Asthma); Tadasana, Vakrasana (Hypertension); Shalabhasana, Vakrasana (Back Pain).`,
+        cooldown: `10 min Shavasana & Reflection: Progressive neuromuscular relaxation, breath normalization, and Contraindication checklist recap.`,
+        assessment: `Asana Rubric & Board Test: Flawless posture hold, correct breathing rhythm, and reciting contraindications for each condition.`,
+        equipment: `Non-slip yoga mats, bolster cushions, textbook asana charts.`,
+        safety: `Hypertensive students must NOT perform head-lowering inverted asanas or strenuous breath retentions (Kumbhaka).`
+      };
+    }
+
+    if (t.includes('cwsn') || t.includes('divyang') || t.includes('special olympic') || t.includes('paralympic') || t.includes('deaflympic') || t.includes('adaptive')) {
+      return {
+        sport: 'CBSE PE Unit 4: PE & Sports for CWSN (Children with Special Needs)',
+        objectives: `Understand adaptive physical education aims, roles of professionals (Counselor, Occupational Therapist, Physiotherapist, PE Teacher, Speech Therapist), and global disability sports organizations.`,
+        warmup: `10 min Sensory Awareness Drill: Blindfolded partner walk or seated balloon tapping to build sensory inclusion empathy.`,
+        mainDrill: `25 min Curriculum Analysis: Deep dive into Special Olympics Bharat, Paralympics (classification and divisioning), Deaflympics, and inclusion strategies in regular physical education classes.`,
+        cooldown: `10 min Group Discussion: Identify 3 inclusive modifications (TREE framework) for school sports day.`,
+        assessment: `Knowledge Verification: Differentiating Special Olympics vs Paralympics; articulating the professional roles in IEP (Individualized Education Plan).`,
+        equipment: `Bell-balls, blindfolds, wheelchair/seated equipment, inclusion guideline charts.`,
+        safety: `Maintain clear, obstruction-free floor space and clear communication cues for all adaptive drills.`
+      };
+    }
+
+    if (t.includes('nutrition') || t.includes('diet') || t.includes('nutrient') || t.includes('macro') || t.includes('micro') || t.includes('food myth') || t.includes('weight control')) {
+      return {
+        sport: 'CBSE PE Unit 5: Sports and Nutrition',
+        objectives: `Analyze components of a balanced diet, differentiate macro (Carbs, Fats, Proteins) vs micro (Vitamins, Minerals) nutrients, calculate BMI, and debunk dieting pitfalls and food myths for Class ${currentGrade}.`,
+        warmup: `10 min Nutrition Log Review: Calculate personal BMI = Weight (kg) / Height (m)², and categorize into WHO BMI categories.`,
+        mainDrill: `25 min Core Concepts & Case Studies: Daily calorie requirements for athletes, nutritive vs non-nutritive components (Water, Roughage, Color, Flavor), food intolerances vs food allergies, pitfalls of crash dieting.`,
+        cooldown: `10 min Board MCQ Quiz: Review water-soluble (B, C) vs fat-soluble (A, D, E, K) vitamins and their deficiency symptoms.`,
+        assessment: `Problem-Solving Rubric: Designing a balanced athlete meal plan and identifying vitamin/mineral deficiencies.`,
+        equipment: `Stadiometer, weighing scale, nutrient flashcards, NCERT nutrition tables.`,
+        safety: `Discourage unscientific calorie-restriction habits and emphasize wholesome hydration and balanced nourishment.`
+      };
+    }
+
+    if (t.includes('test') || t.includes('measurement') || t.includes('evaluation') || t.includes('khelo india') || t.includes('barrow') || t.includes('harvard') || t.includes('rikli') || t.includes('fitness battery')) {
+      return {
+        sport: 'CBSE PE Unit 6: Test and Measurement in Sports',
+        objectives: `Conduct SAI Khelo India National Fitness Test battery; compute Fitness Index via Harvard Step Test; administer Barrow 3-item motor ability and Rikli & Jones senior citizen tests.`,
+        warmup: `10 min Pulse Check & Dynamic Warm-up: Learn radial/carotid pulse measurement for 15 seconds; light cardiovascular jog.`,
+        mainDrill: `25 min Field Lab Station Testing: Administer Harvard Step Test (5-minute step up/down on 20-inch bench, measure recovery pulses at 1-1.5m, 2-2.5m, 3-3.5m) using Fitness Index = (100 x test duration in seconds) / (2 x sum of recovery pulse beats).`,
+        cooldown: `10 min Recovery Heart Rate Graphing: Record recovery pulse rates, calculate individual Fitness Index scores, and map to CBSE norms.`,
+        assessment: `Standard Protocol Adherence: Metronome cadence precision (30 steps/min), stopwatch timing, and formula calculation accuracy.`,
+        equipment: `20-inch sturdy stepping bench / gymnasium box, metronome/audio cadence, stopwatches, heart rate logs.`,
+        safety: `Stop immediately if student exhibits extreme dizziness, hyperventilation, or chest discomfort during aerobic trials.`
+      };
+    }
+
+    if (t.includes('injury') || t.includes('injuries') || t.includes('physiology') || t.includes('first aid') || t.includes('price') || t.includes('fracture') || t.includes('sprain') || t.includes('strain') || t.includes('cardiorespiratory')) {
+      return {
+        sport: 'CBSE PE Unit 7: Physiology & Injuries in Sports',
+        objectives: `Understand physiological factors determining physical fitness components; categorize sports injuries (Soft tissue, Bone, Joint) and demonstrate the PRICE first aid protocol for Class ${currentGrade}.`,
+        warmup: `10 min Physiological Observation: Measure resting heart rate vs post-jumping jack heart rate to observe stroke volume and cardiac output responses.`,
+        mainDrill: `25 min Injury Classification & First Aid Lab: Soft tissue injuries (Contusion, Abrasion, Laceration, Incision, Sprain vs Strain); Bone fractures (Greenstick, Comminuted, Transverse, Oblique, Impacted); Joint dislocations; Hands-on PRICE application (Protect, Rest, Ice, Compression, Elevation).`,
+        cooldown: `10 min Practical Debrief: Wrap a model ankle joint using crepe compression bandage; recite 4-step emergency evaluation.`,
+        assessment: `First Aid Mastery Rubric: Correct crepe bandage compression pressure, ice pack application duration (15-20 mins), and differentiation between ligament sprain vs muscle strain.`,
+        equipment: `First aid medical kit, ice packs/gel wraps, crepe bandages, triangular slings, injury illustration cards.`,
+        safety: `Never apply direct ice directly onto bare skin; always wrap ice in a thin towel to prevent cold burn/frostbite.`
+      };
+    }
+
+    if (t.includes('biomechanic') || t.includes('lever') || t.includes('newton') || t.includes('equilibrium') || t.includes('friction') || t.includes('projectile')) {
+      return {
+        sport: 'CBSE PE Unit 8: Biomechanics and Sports',
+        objectives: `Apply Newton's 3 Laws of Motion to sports; classify 1st, 2nd, and 3rd Class anatomical levers (Fulcrum, Effort, Load); analyze Centre of Gravity, Equilibrium, and Projectile Motion.`,
+        warmup: `10 min Physics-in-Motion Warm-up: Sprint starts and jump stops demonstrating inertia, action-reaction, and wide-base stability.`,
+        mainDrill: `25 min Biomechanical Analysis: Class 1 lever (Nodding head / triceps extension - Fulcrum in middle); Class 2 lever (Calf raise / plantar flexion - Load in middle); Class 3 lever (Bicep curl / kicking - Effort in middle); Newton's laws in high jump, swimming starts, and javelin launch angle (45° in vacuum vs ~35°-38° with aerodynamic drag).`,
+        cooldown: `10 min Diagram Lab: Draw and label anatomical lever classes; answer 2 CBSE case-study scenario questions.`,
+        assessment: `Physics Concept Application: Accurately identifying fulcrum, load, and effort points in body joints during sports movements.`,
+        equipment: `Medicine balls, javelins/footballs for launch observation, skeleton anatomical lever model, whiteboard.`,
+        safety: `Use controlled weights for lever demonstrations to prevent excessive tendon strain at mechanical disadvantage.`
+      };
+    }
+
+    if (t.includes('psycholog') || t.includes('personality') || t.includes('motivation') || t.includes('aggression') || t.includes('imagery') || t.includes('self-esteem')) {
+      return {
+        sport: 'CBSE PE Unit 9: Psychology and Sports',
+        objectives: `Analyze personality dimensions (Carl Jung classification & Big Five traits), differentiate intrinsic vs extrinsic motivation, explore exercise adherence, and classify types of sports aggression.`,
+        warmup: `10 min Mental Focus Routine: 3 minutes of box breathing (4s in, 4s hold, 4s out, 4s hold) and positive mental imagery for free-throw shooting.`,
+        mainDrill: `25 min Psychological Case Studies: Extroverts vs Introverts in sports selection; Big Five (OCEAN: Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism); Aggression in sports: Hostile (harm intent) vs Instrumental (goal-directed within rules) vs Assertive behavior.`,
+        cooldown: `10 min Reflective Journaling: Students identify 2 intrinsic motivators for daily physical fitness and 1 goal-setting strategy.`,
+        assessment: `Analytical Rubric: Distinguishing between instrumental aggression and foul play; applying self-talk techniques to athletic performance.`,
+        equipment: `Case study reflection worksheets, psychological trait checklists, timer.`,
+        safety: `Foster an emotionally safe, non-judgmental classroom environment for personality and mental health discussions.`
+      };
+    }
+
+    if (t.includes('training') || t.includes('doping') || t.includes('periodization') || t.includes('circuit') || t.includes('fartlek') || t.includes('interval') || t.includes('isometric') || t.includes('isotonic')) {
+      return {
+        sport: 'CBSE PE Unit 10: Training in Sports & Doping',
+        objectives: `Structure training periodization cycles (Micro, Meso, Macro); compare strength training methods (Isometric, Isotonic, Isokinetic); design continuous, interval, and Fartlek endurance sessions; examine WADA/NADA anti-doping regulations.`,
+        warmup: `10 min Heart Rate Elevation: Progressive 4-station pulse-raising circuit (skipping, high knees, squat holds, lateral hops).`,
+        mainDrill: `25 min Training Methodology & Anti-Doping: Strength methods (Hettinger & Muller isometrics, DeLorme isotonics); Swedish Fartlek speed-play design; Circuit training station layout; WADA Prohibited List (Anabolic steroids, peptide hormones, blood doping, stimulants) and health hazards.`,
+        cooldown: `10 min Circuit Cool-Down: Static stretching of major muscle groups, hydration, and review of WADA anti-doping testing protocols.`,
+        assessment: `Training Architecture Rubric: Designing an age-appropriate 8-station circuit training routine with proper work-to-rest ratios.`,
+        equipment: `Agility cones, medicine balls, skipping ropes, exercise mats, stopwatches, WADA guideline charts.`,
+        safety: `Ensure strict work-to-rest intervals (1:1 or 1:2) to prevent overtraining syndrome and acute muscle exhaustion.`
+      };
+    }
+
+    if (t.includes('olympic') || t.includes('ancient') || t.includes('ioa') || t.includes('values')) {
+      return {
+        sport: 'CBSE PE: Olympic Value Education',
+        objectives: `Understand ancient vs modern Olympic history, Olympic symbols, rings, flag, flame, motto (Citius, Altius, Fortius - Communiter), and the structure of the Indian Olympic Association (IOA).`,
+        warmup: `10 min Olympic Trivia Starter: Quick recall of Pierre de Coubertin, 1896 Athens Games, and India's historic Olympic hockey & athletic medals.`,
+        mainDrill: `25 min History & Values Lecture: The 5 interlaced Olympic rings representing 5 inhabited continents; Olympic values (Excellence, Friendship, Respect); Paralympic and Special Olympic values; role of IOA in Indian athlete selection.`,
+        cooldown: `10 min Board Review: Diagram of Olympic rings with exact color alignment (Blue, Yellow, Black, Green, Red) and past exam questions.`,
+        assessment: `Historical & Value Recall: Accurate breakdown of Olympic charter values and IOA governance.`,
+        equipment: `Olympic charts, multimedia presentation, worksheets.`,
+        safety: `Standard classroom safety.`
+      };
+    }
+
+    // --- PRACTICAL ON-FIELD SPORTS DETECTORS ---
     if (t.includes('foot') || t.includes('soccer') || f.includes('foot')) {
       return {
         sport: 'Football',
@@ -149,7 +322,7 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
       };
     }
 
-    if (t.includes('yoga') || t.includes('asana') || t.includes('fit') || t.includes('test') || f.includes('yoga')) {
+    if (t.includes('yoga') || t.includes('asana')) {
       return {
         sport: 'Yoga & Fitness',
         objectives: `Improve posture balance, structural flexibility, and core abdominal endurance tracking via Khelo India fitness tests.`,
@@ -168,9 +341,9 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
       warmup: `10 min active warm-up: Intermittent jogging loops, dynamic flexibility stretches, and lateral skip runs.`,
       mainDrill: `25 min core drills: Specific target coordination exercises, partner passing speed trails, and cooperative active team mini-game drills.`,
       cooldown: `10 min recovery: Restorative static stretching, slow-paced recovery breathing, and skill feedback session.`,
-      assessment: `Skill metrics: Technique form, physical energy retention, peer team compliance.`,
-      equipment: `Marker cones, whistles, team colored jerseys, general sport balls.`,
-      safety: `Maintain spacious safety borders, alert coach if feeling fatigued, keep hydrated.`
+      assessment: `Formative observation: Motor coordination, spatial awareness, and peer cooperation.`,
+      equipment: `Marker cones, relay batons, soft foam balls, whistle.`,
+      safety: `Maintain designated operating zones, encourage regular hydration, inspect playing ground for hazards.`
     };
   };
 
@@ -364,7 +537,7 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await generateYearlyPlan(grade, board, frequency, calendarText, term1Focus, term2Focus, startDate, duration, language);
+      const result = await generateYearlyPlan(grade, board, frequency, calendarText, term1Focus, term2Focus, startDate, duration, language, planTrack);
       setPlan(result);
       localStorage.setItem('peYearlyPlan', JSON.stringify(result));
       setStep(4);
@@ -545,37 +718,141 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
 
         <div className="mt-8">
           {step === 1 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">
-              <div className="space-y-6">
-                <div>
-                   <label className="block text-xs font-black text-slate-400 uppercase mb-2">Target Grade</label>
-                   <input type="text" value={grade} onChange={e => setGrade(e.target.value)} className="w-full p-4 bg-slate-50 border rounded-xl font-bold" />
-                </div>
-                <div>
-                   <label className="block text-xs font-black text-slate-400 uppercase mb-2">Board</label>
-                   <select value={board} onChange={e => setBoard(e.target.value as BoardType)} className="w-full p-4 bg-slate-50 border rounded-xl font-bold">
-                     {Object.values(BoardType).map(b => <option key={b} value={b}>{b}</option>)}
-                   </select>
+            <div className="space-y-8 animate-in fade-in">
+              {/* Curriculum Track Selector */}
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-3">
+                  Curriculum Plan Track (CBSE & Indian Schools)
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlanTrack('integrated');
+                      applyCbsesyllabusDefaults(grade, 'integrated');
+                    }}
+                    className={`p-4 rounded-2xl border-2 text-left transition-all ${
+                      planTrack === 'integrated'
+                        ? 'border-indigo-600 bg-indigo-50/70 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-black uppercase text-indigo-950">Integrated Track</span>
+                      <span className="text-[9px] px-2 py-0.5 bg-indigo-600 text-white rounded font-bold">Recommended</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                      Theory Units + Practical Assessments (Standard for Classes 9, 10, 11 & 12).
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlanTrack('theory');
+                      applyCbsesyllabusDefaults(grade, 'theory');
+                    }}
+                    className={`p-4 rounded-2xl border-2 text-left transition-all ${
+                      planTrack === 'theory'
+                        ? 'border-indigo-600 bg-indigo-50/70 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-black uppercase text-indigo-950">Theory Syllabus Only</span>
+                      <span className="text-[9px] px-2 py-0.5 bg-slate-900 text-white rounded font-bold">70 Marks</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                      CBSE Code 048 textbook units, classroom pedagogy, and board exam pacing.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlanTrack('practical');
+                      applyCbsesyllabusDefaults(grade, 'practical');
+                    }}
+                    className={`p-4 rounded-2xl border-2 text-left transition-all ${
+                      planTrack === 'practical'
+                        ? 'border-indigo-600 bg-indigo-50/70 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-black uppercase text-indigo-950">Practical & Sports Only</span>
+                      <span className="text-[9px] px-2 py-0.5 bg-emerald-600 text-white rounded font-bold">On-Field</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                      Field sport drills, motor skills, and Khelo India fitness tests (Grades 1-8).
+                    </p>
+                  </button>
                 </div>
               </div>
-              <div className="space-y-6">
-                <div><label className="block text-xs font-black text-slate-400 uppercase mb-2">Duration</label>
-                <input type="text" value={duration} onChange={e => setDuration(e.target.value)} className="w-full p-4 bg-slate-50 border rounded-xl font-bold" /></div>
-                <div><label className="block text-xs font-black text-slate-400 uppercase mb-2">Start Date</label>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-4 bg-slate-50 border rounded-xl font-bold" /></div>
-                
-                {/* Language Selector */}
-                <div>
-                   <label className="block text-xs font-black text-slate-400 uppercase mb-2 flex items-center">
-                     <Languages size={14} className="mr-1" /> Language
-                   </label>
-                   <select value={language} onChange={e => setLanguage(e.target.value as Language)} className="w-full p-4 bg-slate-50 border rounded-xl font-bold">
-                     <option value="English">English</option>
-                     <option value="Hindi">Hindi</option>
-                     <option value="Marathi">Marathi</option>
-                     <option value="Tamil">Tamil</option>
-                     <option value="Bengali">Bengali</option>
-                   </select>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <div>
+                     <label className="block text-xs font-black text-slate-400 uppercase mb-2">Target Grade / Class</label>
+                     <div className="flex gap-2">
+                       <input 
+                         type="text" 
+                         value={grade} 
+                         onChange={e => {
+                           const val = e.target.value;
+                           setGrade(val);
+                           applyCbsesyllabusDefaults(val, planTrack);
+                         }} 
+                         className="flex-1 p-4 bg-slate-50 border rounded-xl font-bold" 
+                         placeholder="e.g., 12, 11, 10, 9, 8"
+                       />
+                       <select 
+                         onChange={e => {
+                           if (e.target.value) {
+                             setGrade(e.target.value);
+                             applyCbsesyllabusDefaults(e.target.value, planTrack);
+                           }
+                         }} 
+                         className="p-4 bg-slate-100 border rounded-xl font-bold text-xs"
+                         value={['9','10','11','12'].includes(grade) ? grade : ''}
+                       >
+                         <option value="">Quick Select</option>
+                         <option value="12">Class 12 (Board)</option>
+                         <option value="11">Class 11</option>
+                         <option value="10">Class 10 (HPE)</option>
+                         <option value="9">Class 9 (HPE)</option>
+                         <option value="8">Grade 8</option>
+                         <option value="7">Grade 7</option>
+                         <option value="6">Grade 6</option>
+                       </select>
+                     </div>
+                  </div>
+                  <div>
+                     <label className="block text-xs font-black text-slate-400 uppercase mb-2">Board</label>
+                     <select value={board} onChange={e => setBoard(e.target.value as BoardType)} className="w-full p-4 bg-slate-50 border rounded-xl font-bold">
+                       {Object.values(BoardType).map(b => <option key={b} value={b}>{b}</option>)}
+                     </select>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div><label className="block text-xs font-black text-slate-400 uppercase mb-2">Duration</label>
+                  <input type="text" value={duration} onChange={e => setDuration(e.target.value)} className="w-full p-4 bg-slate-50 border rounded-xl font-bold" /></div>
+                  <div><label className="block text-xs font-black text-slate-400 uppercase mb-2">Start Date</label>
+                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-4 bg-slate-50 border rounded-xl font-bold" /></div>
+                  
+                  {/* Language Selector */}
+                  <div>
+                     <label className="block text-xs font-black text-slate-400 uppercase mb-2 flex items-center">
+                       <Languages size={14} className="mr-1" /> Language
+                     </label>
+                     <select value={language} onChange={e => setLanguage(e.target.value as Language)} className="w-full p-4 bg-slate-50 border rounded-xl font-bold">
+                       <option value="English">English</option>
+                       <option value="Hindi">Hindi</option>
+                       <option value="Marathi">Marathi</option>
+                       <option value="Tamil">Tamil</option>
+                       <option value="Bengali">Bengali</option>
+                     </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -590,14 +867,61 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
 
           {step === 3 && (
             <div className="animate-in fade-in space-y-8">
+              {/* Syllabus Presets Header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-[#FF6B00]" />
+                  <span>Curriculum Auto-Presets for Grade {grade}:</span>
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => applyCbsesyllabusDefaults('12', planTrack)}
+                    className="px-3 py-1.5 bg-white border border-slate-300 hover:border-indigo-500 rounded-lg text-[10px] font-black uppercase text-slate-700 hover:text-indigo-600 transition-colors"
+                  >
+                    Class 12 Units (048)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyCbsesyllabusDefaults('11', planTrack)}
+                    className="px-3 py-1.5 bg-white border border-slate-300 hover:border-indigo-500 rounded-lg text-[10px] font-black uppercase text-slate-700 hover:text-indigo-600 transition-colors"
+                  >
+                    Class 11 Units (048)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyCbsesyllabusDefaults('10', planTrack)}
+                    className="px-3 py-1.5 bg-white border border-slate-300 hover:border-indigo-500 rounded-lg text-[10px] font-black uppercase text-slate-700 hover:text-indigo-600 transition-colors"
+                  >
+                    Class 9/10 HPE
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                  <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100">
-                    <h4 className="font-bold text-indigo-900 mb-4">Term 1 Focus</h4>
-                    <input type="text" value={term1Focus} onChange={e => setTerm1Focus(e.target.value)} className="w-full p-4 bg-white border rounded-xl font-bold" />
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-bold text-indigo-900">Term 1 Focus / Syllabus Units (Apr - Sep)</h4>
+                      <span className="text-[10px] font-bold uppercase text-indigo-500 bg-white px-2 py-0.5 rounded">6 Months</span>
+                    </div>
+                    <textarea 
+                      rows={3}
+                      value={term1Focus} 
+                      onChange={e => setTerm1Focus(e.target.value)} 
+                      className="w-full p-4 bg-white border rounded-xl font-bold text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y" 
+                    />
                  </div>
                  <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100">
-                    <h4 className="font-bold text-emerald-900 mb-4">Term 2 Focus</h4>
-                    <input type="text" value={term2Focus} onChange={e => setTerm2Focus(e.target.value)} className="w-full p-4 bg-white border rounded-xl font-bold" />
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-bold text-emerald-900">Term 2 Focus / Syllabus Units (Oct - Mar)</h4>
+                      <span className="text-[10px] font-bold uppercase text-emerald-600 bg-white px-2 py-0.5 rounded">6 Months</span>
+                    </div>
+                    <textarea 
+                      rows={3}
+                      value={term2Focus} 
+                      onChange={e => setTerm2Focus(e.target.value)} 
+                      className="w-full p-4 bg-white border rounded-xl font-bold text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-300 resize-y" 
+                    />
                  </div>
               </div>
               <div className="flex justify-center">

@@ -49,6 +49,7 @@ import { isBrandSuperAdmin } from '../types';
 import { auth, db } from '../services/firebase.ts';
 import { SEOConfig, DEFAULT_SEO_CONFIG, loadSEOConfig, saveSEOConfig, RouteSEOOverride } from '../services/seoService.ts';
 import { DataPrivacyTab } from './privacy/DataPrivacyTab.tsx';
+import { userActivityService, LoginActivityRecord } from '../services/userActivityService.ts';
 
 const SchoolAdmin: React.FC = () => {
   const [members, setMembers] = useState<SchoolMember[]>([]);
@@ -66,7 +67,13 @@ const SchoolAdmin: React.FC = () => {
   const [teacherSearchQuery, setTeacherSearchQuery] = useState<string>('');
 
   // Tab & Timetable Doc Ingest States
-  const [activeAdminTab, setActiveAdminTab] = useState<'profile' | 'access' | 'ocr' | 'seo' | 'directory' | 'privacy'>('profile');
+  const [activeAdminTab, setActiveAdminTab] = useState<'profile' | 'access' | 'ocr' | 'seo' | 'directory' | 'privacy'>(() => {
+    const saved = localStorage.getItem('smartpe_admin_active_tab');
+    if (saved && ['profile', 'access', 'ocr', 'seo', 'directory', 'privacy'].includes(saved)) {
+      return saved as any;
+    }
+    return 'profile';
+  });
   const [currentSchool, setCurrentSchool] = useState<any>(null);
   const [schoolNameInput, setSchoolNameInput] = useState<string>(() => localStorage.getItem('smartpe_school_name') || '');
   const [schoolLogoInput, setSchoolLogoInput] = useState<string>(() => localStorage.getItem('smartpe_school_logo') || '');
@@ -76,6 +83,8 @@ const SchoolAdmin: React.FC = () => {
   // Super Admin Directory States
   const [registeredUsers, setRegisteredUsers] = useState<any[]>([]);
   const [academicPrograms, setAcademicPrograms] = useState<any[]>([]);
+  const [recentLogins, setRecentLogins] = useState<LoginActivityRecord[]>([]);
+  const [superAdminViewMode, setSuperAdminViewMode] = useState<'users' | 'logins'>('users');
   const [userSearchQuery, setUserSearchQuery] = useState<string>('');
   const [userTypeFilter, setUserTypeFilter] = useState<'all' | 'school' | 'academy' | 'personal'>('all');
   const [loadingDirectory, setLoadingDirectory] = useState<boolean>(false);
@@ -171,6 +180,24 @@ const SchoolAdmin: React.FC = () => {
 
     fetchData().catch(err => console.error("Unhandled error in SchoolAdmin fetch:", err));
   }, [auth.currentUser?.uid]);
+
+  // Real-time login activity subscription for Super Admin
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    const unsub = userActivityService.subscribeToRecentLogins(50, (records) => {
+      setRecentLogins(records);
+    });
+    return () => unsub();
+  }, [isSuperAdmin]);
+
+  // Listen to open super admin directory event
+  useEffect(() => {
+    const handleOpenDir = () => {
+      setActiveAdminTab('directory');
+    };
+    window.addEventListener('open_superadmin_directory', handleOpenDir);
+    return () => window.removeEventListener('open_superadmin_directory', handleOpenDir);
+  }, []);
 
   const compressImage = (dataUrl: string, maxDim = 300): Promise<string> => {
     return new Promise((resolve) => {
@@ -2329,10 +2356,10 @@ Friday Period 3: Grade 7B - Fitness`;
                   <button
                     onClick={() => {
                       if (registeredUsers.length === 0) return;
-                      const csvHeader = "UID,Name,Email,Role,Workspace,Organization,RegisteredAt\n";
+                      const csvHeader = "UID,Name,Email,Role,Workspace,Organization,RegisteredAt,LastLoginAt,LastActiveAt,LoginCount\n";
                       const rows = registeredUsers.map(u => {
                         const org = u.schoolName || u.academyName || (u.workspaceType === 'academy' ? 'Sports Academy' : 'School');
-                        return `"${u.uid || ''}","${u.displayName || ''}","${u.email || ''}","${u.role || 'teacher'}","${u.workspaceType || 'school'}","${org}","${u.registrationDate || u.createdAt || ''}"`;
+                        return `"${u.uid || ''}","${u.displayName || ''}","${u.email || ''}","${u.role || 'teacher'}","${u.workspaceType || 'school'}","${org}","${u.registrationDate || u.createdAt || ''}","${u.lastLoginAt || ''}","${u.lastActiveAt || ''}","${u.loginCount || 1}"`;
                       }).join('\n');
                       const blob = new Blob([csvHeader + rows], { type: 'text/csv;charset=utf-8;' });
                       const url = URL.createObjectURL(blob);
@@ -2342,7 +2369,7 @@ Friday Period 3: Grade 7B - Fitness`;
                       document.body.appendChild(link);
                       link.click();
                       document.body.removeChild(link);
-                      toast.success("User directory exported to CSV!");
+                      toast.success("User directory & login stats exported to CSV!");
                     }}
                     className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm cursor-pointer"
                   >
@@ -2353,7 +2380,7 @@ Friday Period 3: Grade 7B - Fitness`;
               </div>
 
               {/* Metric Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-white/10">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t border-white/10">
                 <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Users</span>
@@ -2361,6 +2388,18 @@ Friday Period 3: Grade 7B - Fitness`;
                   </div>
                   <div className="text-2xl font-black text-white mt-1">{registeredUsers.length}</div>
                   <span className="text-[10px] text-emerald-400 font-bold">Registered Accounts</span>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Live Logins</span>
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-emerald-300 mt-1">{recentLogins.length}</div>
+                  <span className="text-[10px] text-emerald-400 font-bold">Recorded Sessions</span>
                 </div>
 
                 <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
@@ -2381,19 +2420,144 @@ Friday Period 3: Grade 7B - Fitness`;
                   <span className="text-[10px] text-amber-400 font-bold">Coaching Programs</span>
                 </div>
 
-                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
+                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl col-span-2 md:col-span-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Super Admin</span>
                     <Shield size={16} className="text-rose-400" />
                   </div>
-                  <div className="text-sm font-black text-white mt-2 truncate">{auth.currentUser?.email || 'Super Admin'}</div>
-                  <span className="text-[10px] text-rose-400 font-bold">Full Oversight Active</span>
+                  <div className="text-xs font-black text-white mt-2 truncate">{auth.currentUser?.email || 'Super Admin'}</div>
+                  <span className="text-[10px] text-rose-400 font-bold">Live Oversight Active</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Filter & Search Bar */}
+          {/* Sub-view switcher: All Accounts vs Live Recent Logins */}
+          <div className="flex items-center gap-3 bg-white p-2 border-2 border-slate-900 rounded-2xl shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+            <button
+              onClick={() => setSuperAdminViewMode('users')}
+              className={`flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                superAdminViewMode === 'users'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Users size={16} />
+              <span>All Registered Accounts ({registeredUsers.length})</span>
+            </button>
+            <button
+              onClick={() => setSuperAdminViewMode('logins')}
+              className={`flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                superAdminViewMode === 'logins'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Clock size={16} />
+              <span className="flex items-center gap-1.5">
+                <span>Live Recent Logins Feed ({recentLogins.length})</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span>
+              </span>
+            </button>
+          </div>
+
+          {/* LIVE LOGINS VIEW */}
+          {superAdminViewMode === 'logins' && (
+            <div className="bg-white border-2 border-slate-900 p-6 rounded-[2rem] shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                    <span>Real-Time User Sign-In Activity</span>
+                  </h4>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Every teacher or coach login is logged here in real-time so you know exactly who is active on SmartPE.
+                  </p>
+                </div>
+                <div className="text-xs font-bold text-slate-500">
+                  Showing latest {recentLogins.length} login events
+                </div>
+              </div>
+
+              {recentLogins.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">
+                  <Clock size={32} className="mx-auto mb-2 opacity-50 text-slate-400" />
+                  <p className="font-bold">No login events captured yet.</p>
+                  <p className="text-xs text-slate-400">When teachers sign in via Email or Google, their sessions will appear here live.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recentLogins.map((entry, idx) => {
+                    const isAcad = entry.workspaceType === 'academy';
+                    const timeStr = entry.timestamp ? new Date(entry.timestamp).toLocaleString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    }) : 'Just now';
+
+                    return (
+                      <div 
+                        key={entry.id || idx}
+                        className="p-4 bg-slate-50 hover:bg-indigo-50/50 border-2 border-slate-200 hover:border-indigo-300 rounded-2xl transition-all flex flex-col md:flex-row md:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm text-white uppercase shadow-sm ${
+                            isAcad ? 'bg-amber-600' : 'bg-indigo-600'
+                          }`}>
+                            {(entry.displayName || entry.email || 'T').charAt(0)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-black text-slate-900 text-sm">{entry.displayName || 'Teacher'}</span>
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${
+                                isAcad 
+                                  ? 'bg-amber-50 border-amber-300 text-amber-800' 
+                                  : 'bg-indigo-50 border-indigo-300 text-indigo-800'
+                              }`}>
+                                {isAcad ? <Trophy size={10} /> : <School size={10} />}
+                                <span>{isAcad ? 'Academy' : 'School'}</span>
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-600 font-mono flex items-center gap-2 mt-0.5">
+                              <span>{entry.email}</span>
+                              <span className="text-slate-300">•</span>
+                              <span className="font-bold text-slate-700">{entry.schoolName || 'Partner School'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 text-right">
+                          <div className="text-right">
+                            <div className="text-xs font-black text-emerald-700 flex items-center justify-end gap-1">
+                              <Clock size={12} />
+                              <span>{timeStr}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 truncate max-w-[200px]" title={entry.userAgent}>
+                              {entry.platform || 'Web Browser'}
+                            </div>
+                          </div>
+                          {entry.email && (
+                            <a
+                              href={`mailto:${entry.email}`}
+                              title={`Email ${entry.displayName || entry.email}`}
+                              className="p-2 bg-white hover:bg-indigo-100 text-indigo-600 border border-slate-200 rounded-xl transition-colors"
+                            >
+                              <Mail size={14} />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* REGISTERED USERS TABLE VIEW */}
+          {superAdminViewMode === 'users' && (
           <div className="bg-white border-2 border-slate-900 p-6 rounded-[2rem] shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               {/* Search Bar */}
@@ -2448,6 +2612,8 @@ Friday Period 3: Grade 7B - Fitness`;
                     <th className="p-4">Account Type</th>
                     <th className="p-4">School / Club Name</th>
                     <th className="p-4">Role</th>
+                    <th className="p-4">Last Active</th>
+                    <th className="p-4">Logins</th>
                     <th className="p-4">Registered Date</th>
                     <th className="p-4 text-right">Actions</th>
                   </tr>
@@ -2473,6 +2639,9 @@ Friday Period 3: Grade 7B - Fitness`;
                       const orgName = user.schoolName || user.academyName || (isAcademy ? 'Sports Academy Club' : 'Independent PE Teacher');
                       const regDate = user.registrationDate || user.createdAt;
                       const formattedDate = regDate ? new Date(regDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Earlier User';
+                      const lastActive = user.lastActiveAt || user.lastLoginAt;
+                      const formattedLastActive = lastActive ? new Date(lastActive).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Registered';
+                      const loginCount = user.loginCount || 1;
 
                       return (
                         <tr key={user.uid || idx} className="hover:bg-indigo-50/50 transition-colors">
@@ -2512,6 +2681,17 @@ Friday Period 3: Grade 7B - Fitness`;
                                 : 'bg-slate-100 text-slate-700'
                             }`}>
                               {user.role || 'teacher'}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                              <span className={`w-2 h-2 rounded-full ${user.lastActiveAt ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                              <span>{formattedLastActive}</span>
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className="px-2 py-1 bg-slate-100 rounded-lg text-[11px] font-black text-slate-700">
+                              {loginCount} {loginCount === 1 ? 'visit' : 'visits'}
                             </span>
                           </td>
                           <td className="p-4 text-slate-500 text-[11px]">
@@ -2555,6 +2735,7 @@ Friday Period 3: Grade 7B - Fitness`;
               )}
             </div>
           </div>
+          )}
 
           {/* Academic Clubs & Programs Section */}
           {academicPrograms.length > 0 && (

@@ -405,7 +405,14 @@ service cloud.firestore {
       allow read, write: if isSuperAdmin();
     }
 
-    // 18. Default fallback: Deny all by default unless super admin
+    // 18. Login Activity & App Usage Logs: Authenticated users can record logins; Super Admin can monitor all
+    match /login_activity/{logId} {
+      allow create: if isAuthenticated();
+      allow read: if isSuperAdmin() || (isAuthenticated() && resource.data.uid == request.auth.uid);
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // 19. Default fallback: Deny all by default unless super admin
     match /{document=**} {
       allow read, write: if isSuperAdmin();
     }

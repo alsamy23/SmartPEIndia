@@ -34,9 +34,8 @@ export async function generateAiCoachingRecommendations(
   const prompt = `You are a professional youth sports development director and master academy coach for SmartPE India.
 Analyze the following player assessment and generate constructive, positive, coach-centered development suggestions.
 
-PLAYER DETAILS:
-- Name: ${player.name}
-- Age: ${player.age} | Gender: ${player.gender}
+PLAYER DETAILS (Anonymized for Youth Privacy):
+- Athlete: Student Athlete (Age: ${player.age} | Gender: ${player.gender})
 - Sport: ${template.name}
 - Playing Position / Role: ${position}
 - Assessment Cycle: ${assessmentType}
