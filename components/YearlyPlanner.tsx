@@ -24,7 +24,7 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { BoardType, YearlyPlan, Language, LessonPlan } from '../types.ts';
-import { generateYearlyPlan, generateLessonPlan } from '../services/geminiService.ts';
+import { generateYearlyPlan, generateLessonPlan, buildComprehensiveYearlyPlanFallback } from '../services/geminiService.ts';
 import { exportToPdf, exportToWord, exportYearlyPlanToIcs } from '../lib/exportUtils.ts';
 
 declare var html2pdf: any;
@@ -53,14 +53,18 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
   const [language, setLanguage] = useState<Language>('English');
   const [calendarText, setCalendarText] = useState(SAMPLE_CALENDAR_TEXT);
   const [planTrack, setPlanTrack] = useState<'integrated' | 'theory' | 'practical'>('integrated');
+  const [term1Game, setTerm1Game] = useState('Football & Athletics Track');
+  const [term2Game, setTerm2Game] = useState('Basketball & Volleyball');
   const [term1Focus, setTerm1Focus] = useState('CBSE Units 1-5: Management of Sporting Events, Children & Women in Sports, Lifestyle Disease Yoga, CWSN, Sports & Nutrition + Term 1 Fitness Tests');
   const [term2Focus, setTerm2Focus] = useState('CBSE Units 6-10: Test & Measurement, Physiology & Injuries, Biomechanics, Psychology, Training in Sports + Board Practical File & Revision');
   
   const [plan, setPlan] = useState<YearlyPlan | null>(null);
 
   const applyCbsesyllabusDefaults = (selectedGrade: string, track: 'integrated' | 'theory' | 'practical') => {
-    const cleanGrade = selectedGrade.trim();
-    if (cleanGrade === '12' || cleanGrade === 'Class 12' || cleanGrade === 'Grade 12') {
+    const cleanGrade = (selectedGrade || '12').trim().toLowerCase();
+    if (cleanGrade.includes('12') || cleanGrade.includes('xii')) {
+      setTerm1Game('Football & Athletics Track');
+      setTerm2Game('Basketball & Volleyball');
       if (track === 'practical') {
         setTerm1Focus('Basketball & Football Advanced Match Tactics + SAI Khelo India Fitness Battery');
         setTerm2Focus('Volleyball / Badminton Match Proficiency + 30-Mark CBSE Practical Assessment File & Viva');
@@ -68,7 +72,9 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
         setTerm1Focus('CBSE Units 1-5: Management of Sporting Events, Children & Women, Lifestyle Disease Yoga, CWSN, Sports & Nutrition + Fitness Tests');
         setTerm2Focus('CBSE Units 6-10: Test & Measurement, Physiology & Injuries, Biomechanics, Sports Psychology, Training in Sports + Board Practical File & Revision');
       }
-    } else if (cleanGrade === '11' || cleanGrade === 'Class 11' || cleanGrade === 'Grade 11') {
+    } else if (cleanGrade.includes('11') || cleanGrade.includes('xi')) {
+      setTerm1Game('Athletics (Sprints & Relay)');
+      setTerm2Game('Cricket & Basketball');
       if (track === 'practical') {
         setTerm1Focus('Athletics (Sprints & Relay) + SAI Khelo India Fitness Battery');
         setTerm2Focus('Team Games (Cricket / Basketball) + Practical Assessment Records');
@@ -76,10 +82,14 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
         setTerm1Focus('CBSE Units 1-5: Changing Trends & Career, Olympic Values, Yoga, CWSN, Physical Fitness & Wellness + Khelo India Battery');
         setTerm2Focus('CBSE Units 6-10: Test & Measurement, Anatomy & Physiology, Biomechanics, Psychology, Training & Doping + Practical Assessment & Revision');
       }
-    } else if (cleanGrade === '9' || cleanGrade === '10' || cleanGrade === 'Class 9' || cleanGrade === 'Class 10') {
+    } else if (cleanGrade.includes('9') || cleanGrade.includes('10')) {
+      setTerm1Game('Football & Kho-Kho');
+      setTerm2Game('Badminton & Table Tennis');
       setTerm1Focus('CBSE HPE Strand 1 (Team Sports & Athletics) & Strand 2 (Health, Postural Deformities & Balanced Diet)');
       setTerm2Focus('CBSE HPE Strand 2 (First Aid & Injury Protocols) & Strand 3 & 4 (SEWA Community Action, Yoga & Health Card)');
     } else {
+      setTerm1Game('Fundamental Agility & Tag Games');
+      setTerm2Game('Team Sports Fundamentals (Football, Kho-Kho)');
       setTerm1Focus('Locomotor & Manipulative Agility, Fundamental Motor Skills & Khelo India Fitness Battery');
       setTerm2Focus('Team Sports Fundamentals (Football, Basketball, Kho-Kho) & Cooperative Games');
     }
@@ -90,8 +100,16 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     if (savedPlan) {
       try {
         const parsed = JSON.parse(savedPlan);
-        setPlan(parsed);
-        setStep(4);
+        if (parsed && Array.isArray(parsed.terms) && parsed.terms.length > 0 && parsed.terms.some((t: any) => Array.isArray(t.months) && t.months.length > 0)) {
+          setPlan(parsed);
+          setStep(4);
+        } else {
+          // If saved plan is empty or corrupted (e.g. image_f995d5fd.png scenario), auto-populate with the complete 48-week plan!
+          const fallback = buildComprehensiveYearlyPlanFallback(grade || '12', board, duration, term1Focus, term2Focus, planTrack, term1Game, term2Game);
+          setPlan(fallback);
+          localStorage.setItem('peYearlyPlan', JSON.stringify(fallback));
+          setStep(4);
+        }
       } catch (e) {
         console.error("Failed to load saved yearly plan", e);
       }
@@ -537,12 +555,32 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await generateYearlyPlan(grade, board, frequency, calendarText, term1Focus, term2Focus, startDate, duration, language, planTrack);
+      let result = await generateYearlyPlan(
+        grade, 
+        board, 
+        frequency, 
+        calendarText, 
+        term1Focus, 
+        term2Focus, 
+        startDate, 
+        duration, 
+        language, 
+        planTrack,
+        term1Game,
+        term2Game
+      );
+      if (!result || !Array.isArray(result.terms) || result.terms.length === 0 || !result.terms.some((t: any) => Array.isArray(t.months) && t.months.length > 0)) {
+        result = buildComprehensiveYearlyPlanFallback(grade, board, duration, term1Focus, term2Focus, planTrack, term1Game, term2Game);
+      }
       setPlan(result);
       localStorage.setItem('peYearlyPlan', JSON.stringify(result));
       setStep(4);
     } catch (err: any) {
-      setError(err.message || "Failed to generate plan.");
+      console.warn("AI generation failed, deploying full CBSE yearly plan fallback:", err);
+      const fallback = buildComprehensiveYearlyPlanFallback(grade, board, duration, term1Focus, term2Focus, planTrack, term1Game, term2Game);
+      setPlan(fallback);
+      localStorage.setItem('peYearlyPlan', JSON.stringify(fallback));
+      setStep(4);
     } finally {
       setLoading(false);
     }
@@ -868,66 +906,163 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
           {step === 3 && (
             <div className="animate-in fade-in space-y-8">
               {/* Syllabus Presets Header */}
-              <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles size={14} className="text-[#FF6B00]" />
-                  <span>Curriculum Auto-Presets for Grade {grade}:</span>
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-3 p-5 bg-indigo-50/60 rounded-3xl border border-indigo-150">
+                <div>
+                  <span className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center gap-2">
+                    <Sparkles size={16} className="text-[#FF6B00]" />
+                    <span>Curriculum Auto-Presets for Grade {grade}:</span>
+                  </span>
+                  <p className="text-[11px] text-slate-600 font-medium mt-0.5">
+                    Click any preset to automatically populate syllabus-aligned theory chapters and term sport games.
+                  </p>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => applyCbsesyllabusDefaults('12', planTrack)}
-                    className="px-3 py-1.5 bg-white border border-slate-300 hover:border-indigo-500 rounded-lg text-[10px] font-black uppercase text-slate-700 hover:text-indigo-600 transition-colors"
+                    className="px-3.5 py-2 bg-white border border-slate-300 hover:border-indigo-500 rounded-xl text-[10px] font-black uppercase text-slate-700 hover:text-indigo-600 transition-colors shadow-sm"
                   >
                     Class 12 Units (048)
                   </button>
                   <button
                     type="button"
                     onClick={() => applyCbsesyllabusDefaults('11', planTrack)}
-                    className="px-3 py-1.5 bg-white border border-slate-300 hover:border-indigo-500 rounded-lg text-[10px] font-black uppercase text-slate-700 hover:text-indigo-600 transition-colors"
+                    className="px-3.5 py-2 bg-white border border-slate-300 hover:border-indigo-500 rounded-xl text-[10px] font-black uppercase text-slate-700 hover:text-indigo-600 transition-colors shadow-sm"
                   >
                     Class 11 Units (048)
                   </button>
                   <button
                     type="button"
                     onClick={() => applyCbsesyllabusDefaults('10', planTrack)}
-                    className="px-3 py-1.5 bg-white border border-slate-300 hover:border-indigo-500 rounded-lg text-[10px] font-black uppercase text-slate-700 hover:text-indigo-600 transition-colors"
+                    className="px-3.5 py-2 bg-white border border-slate-300 hover:border-indigo-500 rounded-xl text-[10px] font-black uppercase text-slate-700 hover:text-indigo-600 transition-colors shadow-sm"
                   >
                     Class 9/10 HPE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyCbsesyllabusDefaults('8', planTrack)}
+                    className="px-3.5 py-2 bg-white border border-slate-300 hover:border-indigo-500 rounded-xl text-[10px] font-black uppercase text-slate-700 hover:text-indigo-600 transition-colors shadow-sm"
+                  >
+                    Grades 1-8 Literacy
                   </button>
                 </div>
               </div>
 
+              {/* Term 1 & Term 2 Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                 <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-bold text-indigo-900">Term 1 Focus / Syllabus Units (Apr - Sep)</h4>
-                      <span className="text-[10px] font-bold uppercase text-indigo-500 bg-white px-2 py-0.5 rounded">6 Months</span>
+                 {/* Term 1 Configuration */}
+                 <div className="bg-indigo-50/70 p-6 rounded-[2rem] border-2 border-indigo-200/80 space-y-4">
+                    <div className="flex items-center justify-between border-b border-indigo-200/60 pb-3">
+                      <div>
+                        <h4 className="font-black text-indigo-950 uppercase text-sm">Term 1 (Apr to Sep)</h4>
+                        <span className="text-[10px] font-bold text-indigo-600 uppercase">First 6 Months &bull; 24 Weeks</span>
+                      </div>
+                      <span className="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[9px] font-black uppercase tracking-wider">
+                        Theory + Sports
+                      </span>
                     </div>
-                    <textarea 
-                      rows={3}
-                      value={term1Focus} 
-                      onChange={e => setTerm1Focus(e.target.value)} 
-                      className="w-full p-4 bg-white border rounded-xl font-bold text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y" 
-                    />
+
+                    {/* Term 1 Sport / Game Input */}
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                        <span>Chosen Sport / Game Focus</span>
+                        <span className="text-[9px] text-indigo-600 font-bold lowercase">on-field practical</span>
+                      </label>
+                      <input 
+                        type="text"
+                        value={term1Game}
+                        onChange={e => setTerm1Game(e.target.value)}
+                        placeholder="e.g. Football & Athletics Track"
+                        className="w-full p-3 bg-white border border-indigo-200 rounded-xl font-bold text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      />
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {['Football', 'Basketball', 'Athletics', 'Volleyball', 'Yoga', 'Kho-Kho'].map(g => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setTerm1Game(prev => prev.includes(g) ? prev : `${g} & Athletics`)}
+                            className="px-2 py-0.5 bg-white/80 hover:bg-white text-[9px] font-bold text-slate-600 rounded-md border border-indigo-150 transition-colors"
+                          >
+                            + {g}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Term 1 Theory Focus */}
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                        <span>CBSE Theory Units / Health Syllabus</span>
+                        <span className="text-[9px] text-indigo-600 font-bold lowercase">classroom syllabus</span>
+                      </label>
+                      <textarea 
+                        rows={3}
+                        value={term1Focus} 
+                        onChange={e => setTerm1Focus(e.target.value)} 
+                        className="w-full p-3.5 bg-white border border-indigo-200 rounded-xl font-bold text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y" 
+                      />
+                    </div>
                  </div>
-                 <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-bold text-emerald-900">Term 2 Focus / Syllabus Units (Oct - Mar)</h4>
-                      <span className="text-[10px] font-bold uppercase text-emerald-600 bg-white px-2 py-0.5 rounded">6 Months</span>
+
+                 {/* Term 2 Configuration */}
+                 <div className="bg-emerald-50/70 p-6 rounded-[2rem] border-2 border-emerald-200/80 space-y-4">
+                    <div className="flex items-center justify-between border-b border-emerald-200/60 pb-3">
+                      <div>
+                        <h4 className="font-black text-emerald-950 uppercase text-sm">Term 2 (Oct to Mar)</h4>
+                        <span className="text-[10px] font-bold text-emerald-700 uppercase">Second 6 Months &bull; 24 Weeks</span>
+                      </div>
+                      <span className="px-2.5 py-1 bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider">
+                        Theory + Board Prep
+                      </span>
                     </div>
-                    <textarea 
-                      rows={3}
-                      value={term2Focus} 
-                      onChange={e => setTerm2Focus(e.target.value)} 
-                      className="w-full p-4 bg-white border rounded-xl font-bold text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-300 resize-y" 
-                    />
+
+                    {/* Term 2 Sport / Game Input */}
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                        <span>Chosen Sport / Game Focus</span>
+                        <span className="text-[9px] text-emerald-700 font-bold lowercase">on-field practical</span>
+                      </label>
+                      <input 
+                        type="text"
+                        value={term2Game}
+                        onChange={e => setTerm2Game(e.target.value)}
+                        placeholder="e.g. Basketball & Volleyball"
+                        className="w-full p-3 bg-white border border-emerald-200 rounded-xl font-bold text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      />
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {['Basketball', 'Volleyball', 'Cricket', 'Badminton', 'Table Tennis', 'Kabaddi'].map(g => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setTerm2Game(prev => prev.includes(g) ? prev : `${g} & Match Tactics`)}
+                            className="px-2 py-0.5 bg-white/80 hover:bg-white text-[9px] font-bold text-slate-600 rounded-md border border-emerald-150 transition-colors"
+                          >
+                            + {g}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Term 2 Theory Focus */}
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                        <span>CBSE Theory Units / Board Practical Prep</span>
+                        <span className="text-[9px] text-emerald-700 font-bold lowercase">classroom syllabus</span>
+                      </label>
+                      <textarea 
+                        rows={3}
+                        value={term2Focus} 
+                        onChange={e => setTerm2Focus(e.target.value)} 
+                        className="w-full p-3.5 bg-white border border-emerald-200 rounded-xl font-bold text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-y" 
+                      />
+                    </div>
                  </div>
               </div>
+
               <div className="flex justify-center">
                  <button onClick={handleGenerate} disabled={loading} className="bg-slate-900 text-white px-12 py-5 rounded-2xl font-black text-lg flex items-center space-x-3 shadow-xl hover:scale-105 active:scale-95 transition-all">
                    {loading ? <Loader2 className="animate-spin" /> : <Sparkles size={20} />}
-                   <span>{loading ? 'Designing Master Plan...' : 'Generate Plan'}</span>
+                   <span>{loading ? 'Designing Master Plan...' : 'Generate Full Year Plan (48 Weeks)'}</span>
                  </button>
               </div>
             </div>
@@ -966,10 +1101,24 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                     <p className="font-bold text-slate-500">{plan.board} | Academic Year: {plan.academicYear}</p>
                   </div>
 
-                  {plan.terms?.length === 0 ? (
-                    <div className="p-12 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-                      <AlertCircle className="mx-auto text-slate-300 mb-4" size={48} />
-                      <p className="text-slate-400 font-bold uppercase tracking-widest">No plan data generated. Please try again.</p>
+                  {!plan.terms || plan.terms.length === 0 ? (
+                    <div className="p-12 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 space-y-4">
+                      <AlertCircle className="mx-auto text-amber-500 mb-2" size={48} />
+                      <h4 className="text-xl font-black uppercase text-slate-800">No Plan Data Found in Session</h4>
+                      <p className="text-slate-500 text-xs font-semibold max-w-md mx-auto">
+                        Your yearly plan data was reset or incomplete. Click below to instantly generate the full 48-week Grade {plan.grade || grade} CBSE syllabus plan with integrated theory and sports.
+                      </p>
+                      <button
+                        onClick={() => {
+                          const recovered = buildComprehensiveYearlyPlanFallback(plan.grade || grade || '12', board, duration, term1Focus, term2Focus, planTrack, term1Game, term2Game);
+                          setPlan(recovered);
+                          localStorage.setItem('peYearlyPlan', JSON.stringify(recovered));
+                        }}
+                        className="px-8 py-4 bg-[#0D2B52] hover:bg-[#164077] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center gap-2 mx-auto transition-all"
+                      >
+                        <Sparkles size={16} className="text-[#D4A017]" />
+                        <span>Generate Complete 48-Week Grade {plan.grade || grade} Master Plan</span>
+                      </button>
                     </div>
                   ) : (
                     plan.terms?.map((term, tIdx) => (

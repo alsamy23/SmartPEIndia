@@ -1,6 +1,8 @@
-
 import { BoardType, LessonPlan, YearlyPlan, TheoryContent, Language, FitnessAssessment, BiomechanicsConcept, TestPaper } from "../types.ts";
 import { auth } from "./firebase.ts";
+import { reportAIFailure } from "./telemetryService.ts";
+import { getComprehensiveMindMapFallback, getComprehensiveTheoryFallback } from "./cbseTheoryDatabase.ts";
+import { buildGamesRubricFallback, buildUnitPlanFallback, buildAIToolContentFallback, buildTestPaperFallback } from "./toolFallbacks.ts";
 
 export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
   // Check for internet connection first
@@ -12,10 +14,10 @@ export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
   const m = (payload.model || "").toLowerCase();
   if (m.includes("3.1-pro") || m.includes("pro-preview") || m.includes("pro")) {
     payload.model = "gemini-3.1-pro-preview";
-  } else if (m.includes("flash-lite") || m.includes("lite")) {
-    payload.model = "gemini-3.1-flash-lite";
-  } else {
+  } else if (m.includes("3.8-flash") || m.includes("flash-large")) {
     payload.model = "gemini-3.8-flash";
+  } else {
+    payload.model = "gemini-3.1-flash-lite";
   }
   
   // Add ThinkingLevel.LOW to config to minimize latency for speed (ONLY for Gemini 3 models that support it)
@@ -110,6 +112,13 @@ export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
     if (retries > 0) {
       return callAIBase(payload, retries - 1);
     }
+
+    // Report failure to server telemetry (alerts admin via email & WhatsApp)
+    reportAIFailure(error, 'AI Core Service', {
+      model: payload?.model,
+      promptSnippet: typeof payload?.prompt === 'string' ? payload.prompt.slice(0, 150) : undefined
+    }).catch(() => {});
+
     throw error;
   }
 };
@@ -471,6 +480,687 @@ export const generateLessonPlan = async (
   throw new Error("AI returned an unexpected response format.");
 };
 
+export const buildComprehensiveYearlyPlanFallback = (
+  grade: string,
+  board: BoardType | string = BoardType.CBSE,
+  duration: string = '40 min',
+  term1Focus: string = '',
+  term2Focus: string = '',
+  planTrack: 'integrated' | 'theory' | 'practical' = 'integrated',
+  term1Game: string = 'Football & Athletics',
+  term2Game: string = 'Basketball & Volleyball'
+): YearlyPlan => {
+  const cleanGrade = (grade || '12').trim();
+  const lowerGrade = cleanGrade.toLowerCase();
+  const isSenior12 = lowerGrade.includes('12') || lowerGrade.includes('xii');
+  const isSenior11 = lowerGrade.includes('11') || lowerGrade.includes('xi');
+
+  let terms: YearlyPlan['terms'] = [];
+
+  if (isSenior12) {
+    terms = [
+      {
+        termName: 'Term 1 (April to September)',
+        months: [
+          {
+            monthName: 'April',
+            weeks: [
+              {
+                weekNumber: 1,
+                status: 'Instructional',
+                dates: '01 Apr - 07 Apr',
+                topic: 'Unit 1: Management of Sporting Events — Planning & Committees',
+                details: 'Core concepts of sports administration; objectives of planning; formation of organizational, technical, ground, and reception committees + Athletic track stance.'
+              },
+              {
+                weekNumber: 2,
+                status: 'Instructional',
+                dates: '08 Apr - 14 Apr',
+                topic: 'Unit 1: Tournaments & Knock-Out Fixture Calculations',
+                details: 'Classifying tournaments (Knock-out, League, Combination); mathematical calculation of byes ((N+1)/2, next power of 2 minus N) + Basketball ball-handling & stance.'
+              },
+              {
+                weekNumber: 3,
+                status: 'Instructional',
+                dates: '15 Apr - 21 Apr',
+                topic: 'Unit 1: League Fixtures (Cyclic & Staircase) & Intramurals',
+                details: 'Drawing league tournament fixtures using cyclic and staircase methods; organizing school intramural vs extramural events + Basketball chest & bounce passes.'
+              },
+              {
+                weekNumber: 4,
+                status: 'Instructional',
+                dates: '22 Apr - 30 Apr',
+                topic: 'Unit 2: Children & Women in Sports — Motor Development',
+                details: 'Stages of motor development in early, middle, and late childhood; WHO daily physical activity guidelines + Basketball shooting & layup footwork.'
+              }
+            ]
+          },
+          {
+            monthName: 'May',
+            weeks: [
+              {
+                weekNumber: 5,
+                status: 'Instructional',
+                dates: '01 May - 07 May',
+                topic: 'Unit 2: Common Postural Deformities & Corrective Exercises',
+                details: 'Diagnosing Kyphosis, Lordosis, Scoliosis, Knock Knees, Flat Foot, Bow Legs; therapeutic corrective asanas (Tadasana, Gomukhasana, Chakrasana).'
+              },
+              {
+                weekNumber: 6,
+                status: 'Holiday',
+                dates: '08 May - 15 May',
+                topic: 'Summer Vacation Break — Personal Fitness & Posture Log',
+                details: 'School summer recess begins. Students record baseline self-assessment posture logs and maintain a home hydration diary.'
+              },
+              {
+                weekNumber: 7,
+                status: 'Holiday',
+                dates: '16 May - 23 May',
+                topic: 'Summer Vacation Break — Aerobic Conditioning Routine',
+                details: 'Independent home physical activity: 30 minutes daily aerobic movement (skipping, jogging, Surya Namaskar) for cardiovascular stamina.'
+              },
+              {
+                weekNumber: 8,
+                status: 'Holiday',
+                dates: '24 May - 31 May',
+                topic: 'Summer Vacation Break — Sports History & Rules Project',
+                details: 'Vacation project: Documenting rules and field dimensions of one chosen CBSE game (Football/Basketball/Volleyball).'
+              }
+            ]
+          },
+          {
+            monthName: 'June',
+            weeks: [
+              {
+                weekNumber: 9,
+                status: 'Instructional',
+                dates: '01 Jun - 07 Jun',
+                topic: 'Unit 2: Female Athlete Triad & Special Considerations',
+                details: 'School reopens; analyzing Menarche, Menstrual Dysfunction, Osteoporosis, Amenorrhea, and Eating Disorders in sports performance.'
+              },
+              {
+                weekNumber: 10,
+                status: 'Instructional',
+                dates: '08 Jun - 14 Jun',
+                topic: 'Unit 3: Yoga as Preventive Measure for Obesity',
+                details: 'Obesity etiology and BMI standards; procedures, benefits, and contraindications of Tadasana, Katichakrasana, Pavanmuktasana, Matsyasana + Football inside-foot passing.'
+              },
+              {
+                weekNumber: 11,
+                status: 'Instructional',
+                dates: '15 Jun - 21 Jun',
+                topic: 'Unit 3: Yoga for Diabetes & Asthma (International Yoga Day)',
+                details: 'Asanas for Diabetes (Bhujangasana, Paschimottanasana) and Asthma (Sukhasana, Matsyasana); executing 21st June International Yoga Day protocol.'
+              },
+              {
+                weekNumber: 12,
+                status: 'Instructional',
+                dates: '22 Jun - 30 Jun',
+                topic: 'Unit 3: Yoga for Hypertension & Back Pain Relief',
+                details: 'Contraindications for high blood pressure; executing Vakrasana, Bhujangasana, Shalabhasana for spinal alignment + Football control & instep drive.'
+              }
+            ]
+          },
+          {
+            monthName: 'July',
+            weeks: [
+              {
+                weekNumber: 13,
+                status: 'Instructional',
+                dates: '01 Jul - 07 Jul',
+                topic: 'Unit 4: PE & Sports for CWSN (Children with Special Needs)',
+                details: 'Aims and objectives of Adaptive Physical Education; inclusion concepts (TREE framework) in mainstream physical education + Volleyball service.'
+              },
+              {
+                weekNumber: 14,
+                status: 'Instructional',
+                dates: '08 Jul - 14 Jul',
+                topic: 'Unit 4: Disability Sports Organizations & Classifications',
+                details: 'History, divisioning, and governance of Special Olympics Bharat, Paralympics, and Deaflympics + Volleyball underhand & overhead passing.'
+              },
+              {
+                weekNumber: 15,
+                status: 'Instructional',
+                dates: '15 Jul - 21 Jul',
+                topic: 'Unit 4: Roles of Professionals for CWSN & IEP Creation',
+                details: 'Functions of Counselor, Occupational Therapist, Physiotherapist, Physical Educator, and Speech Therapist in multi-disciplinary student support.'
+              },
+              {
+                weekNumber: 16,
+                status: 'Instructional',
+                dates: '22 Jul - 31 Jul',
+                topic: 'Unit 5: Sports & Nutrition — Balanced Diet & Nutrients',
+                details: 'Macro nutrients (Carbohydrates, Fats, Proteins) vs Micro nutrients (Vitamins, Minerals); nutritive vs non-nutritive dietary components + Badminton high clear.'
+              }
+            ]
+          },
+          {
+            monthName: 'August',
+            weeks: [
+              {
+                weekNumber: 17,
+                status: 'Instructional',
+                dates: '01 Aug - 07 Aug',
+                topic: 'Unit 5: Eating for Weight Control, Diet Pitfalls & Food Myths',
+                details: 'Calculating healthy BMI; debunking common food myths and crash dieting hazards; food intolerance vs food allergy + Badminton drop shot & net play.'
+              },
+              {
+                weekNumber: 18,
+                status: 'Event',
+                dates: '08 Aug - 15 Aug',
+                topic: '15.08 Independence Day Celebrations & Inter-House March Past',
+                details: 'National day celebrations, parade drill coordination, patriotic sports events, and school fitness awareness rallies.'
+              },
+              {
+                weekNumber: 19,
+                status: 'Instructional',
+                dates: '16 Aug - 23 Aug',
+                topic: 'SAI Khelo India National Fitness Assessment Battery (Term 1)',
+                details: 'Administering mandatory battery: BMI, 50m Sprint, 600m Run/Walk, Sit & Reach Flexibility, Standing Broad Jump, Partial Curl-ups; recording scorecards.'
+              },
+              {
+                weekNumber: 20,
+                status: 'Instructional',
+                dates: '24 Aug - 31 Aug',
+                topic: 'Term 1 Theory Comprehensive Revision (Units 1 to 5)',
+                details: 'Board exam model answer writing: 3-mark & 5-mark fixture calculations, postural deformities diagnosis, and yoga contraindications review.'
+              }
+            ]
+          },
+          {
+            monthName: 'September',
+            weeks: [
+              {
+                weekNumber: 21,
+                status: 'Exam',
+                dates: '01 Sep - 07 Sep',
+                topic: 'Term 1 Mid-Term Examination (Theory Units 1-5)',
+                details: '70-Mark CBSE patterned written examination covering Units 1 to 5; evaluating fixture diagrams and case-study responses.'
+              },
+              {
+                weekNumber: 22,
+                status: 'Exam',
+                dates: '08 Sep - 15 Sep',
+                topic: 'Mid-Term Exam Evaluation & Answer Sheet Discussion',
+                details: 'Distributing evaluated papers, error rectification workshops, and marking scheme explanations.'
+              },
+              {
+                weekNumber: 23,
+                status: 'Instructional',
+                dates: '16 Sep - 22 Sep',
+                topic: 'Term 1 Practical Assessment & On-Field Match Play',
+                details: 'Compiling Term 1 fitness scores, conducting inter-section basketball and football tournament matches.'
+              },
+              {
+                weekNumber: 24,
+                status: 'Instructional',
+                dates: '23 Sep - 30 Sep',
+                topic: 'Term 1 Consolidation, Feedback & Portfolio Upload',
+                details: 'Uploading Term 1 assessment scores to student portals; remedial planning for students needing physical intervention.'
+              }
+            ]
+          }
+        ]
+      },
+      {
+        termName: 'Term 2 (October to March)',
+        months: [
+          {
+            monthName: 'October',
+            weeks: [
+              {
+                weekNumber: 25,
+                status: 'Holiday',
+                dates: '01 Oct - 07 Oct',
+                topic: 'Gandhi Jayanti & Pooja Holidays',
+                details: 'School closed for autumn/Pooja holidays; students encourage community outdoor games and walking.'
+              },
+              {
+                weekNumber: 26,
+                status: 'Instructional',
+                dates: '08 Oct - 14 Oct',
+                topic: 'Unit 6: Test & Measurement in Sports — Harvard Step Test',
+                details: 'Cardiovascular endurance evaluation; calculating Fitness Index via 5-min step test formula: (100 x Duration) / (2 x Pulse sum) + Cricket bowling & batting basics.'
+              },
+              {
+                weekNumber: 27,
+                status: 'Instructional',
+                dates: '15 Oct - 21 Oct',
+                topic: 'Unit 6: Barrow 3-Item Motor Ability & Rikli-Jones Senior Tests',
+                details: 'Administering Standing Broad Jump, Zig-Zag Run, Medicine Ball Put; analyzing senior fitness tests (Chair Stand, Arm Curl, 6-Min Walk) + Cricket fielding drills.'
+              },
+              {
+                weekNumber: 28,
+                status: 'Instructional',
+                dates: '22 Oct - 31 Oct',
+                topic: 'Unit 7: Physiology & Injuries — Determinants of Physical Fitness',
+                details: 'Physiological determinants of Strength, Speed, Endurance, Flexibility; muscle fiber types (Fast-twitch vs Slow-twitch).'
+              }
+            ]
+          },
+          {
+            monthName: 'November',
+            weeks: [
+              {
+                weekNumber: 29,
+                status: 'Instructional',
+                dates: '01 Nov - 07 Nov',
+                topic: 'Unit 7: Effects of Exercise on Cardiorespiratory & Muscular Systems',
+                details: 'Long-term cardiac hypertrophy, stroke volume, vital capacity, VO2 max changes, and lactic acid tolerance + Track & field sprint relay exchanges.'
+              },
+              {
+                weekNumber: 30,
+                status: 'Instructional',
+                dates: '08 Nov - 14 Nov',
+                topic: 'Unit 7: Sports Injuries (Soft Tissue, Bone, Joint) & PRICE Protocol',
+                details: 'Differentiating Sprain vs Strain; Contusion, Abrasion, Laceration; fractures & dislocations; practical demonstration of PRICE first aid wrap.'
+              },
+              {
+                weekNumber: 31,
+                status: 'Event',
+                dates: '15 Nov - 21 Nov',
+                topic: 'Annual Athletic Meet Trials & Sports Day Preparation',
+                details: 'Heats for 100m, 200m, 400m, 4x100m relays; long jump and shot put qualifying rounds; house march-past rehearsals.'
+              },
+              {
+                weekNumber: 32,
+                status: 'Event',
+                dates: '22 Nov - 30 Nov',
+                topic: 'Annual Sports Day & Inter-House Athletic Championship',
+                details: 'Final track & field races, prize distribution, physical fitness demonstrations, and overall house championship awards.'
+              }
+            ]
+          },
+          {
+            monthName: 'December',
+            weeks: [
+              {
+                weekNumber: 33,
+                status: 'Instructional',
+                dates: '01 Dec - 07 Dec',
+                topic: 'Unit 8: Biomechanics and Sports — Newton’s Laws in Action',
+                details: 'Inertia in sprint starts, Acceleration in javelin throwing, Action-Reaction in high jump and swimming flip turns + Kho-Kho running & dodging.'
+              },
+              {
+                weekNumber: 34,
+                status: 'Instructional',
+                dates: '08 Dec - 14 Dec',
+                topic: 'Unit 8: Levers (Class 1, 2, 3), Equilibrium, Centre of Gravity & Projectiles',
+                details: 'Anatomical lever examples in human body joints; stability base of support; optimal release angles for projectile trajectory.'
+              },
+              {
+                weekNumber: 35,
+                status: 'Instructional',
+                dates: '15 Dec - 21 Dec',
+                topic: 'Unit 9: Psychology and Sports — Personality & Motivation',
+                details: 'Carl Jung classification (Extrovert, Introvert, Ambivert); Big Five personality traits (OCEAN); Intrinsic vs Extrinsic motivational techniques.'
+              },
+              {
+                weekNumber: 36,
+                status: 'Holiday',
+                dates: '22 Dec - 31 Dec',
+                topic: 'Christmas & Winter Vacation Break',
+                details: 'Winter recess. Students prepare official CBSE Class 12 Physical Education Practical File with chosen game diagram and asanas.'
+              }
+            ]
+          },
+          {
+            monthName: 'January',
+            weeks: [
+              {
+                weekNumber: 37,
+                status: 'Instructional',
+                dates: '01 Jan - 07 Jan',
+                topic: 'Unit 9: Aggression in Sports (Hostile vs Instrumental vs Assertive)',
+                details: 'School reopens; studying types of athletic aggression; self-talk and mental imagery techniques for pre-competition stress management.'
+              },
+              {
+                weekNumber: 38,
+                status: 'Instructional',
+                dates: '08 Jan - 14 Jan',
+                topic: 'Unit 10: Training in Sports — Strength, Endurance & Speed Methods',
+                details: 'Hettinger & Muller isometric methods, isotonic resistance, Fartlek training, Continuous running, interval pacing, and circuit training.'
+              },
+              {
+                weekNumber: 39,
+                status: 'Instructional',
+                dates: '15 Jan - 21 Jan',
+                topic: 'Unit 10: Anti-Doping Regulations & WADA/NADA Prohibited List',
+                details: 'Classification of prohibited substances (Anabolic steroids, Stimulants, Peptide hormones, Blood doping) and health hazards + WADA testing process.'
+              },
+              {
+                weekNumber: 40,
+                status: 'Exam',
+                dates: '22 Jan - 31 Jan',
+                topic: 'CBSE Class 12 Pre-Board Practical Examination (30 Marks)',
+                details: 'Conducting official board practical trial: Physical Fitness Test (SAI Khelo India), Chosen Game Proficiency, Practical Record File & Viva Voce.'
+              }
+            ]
+          },
+          {
+            monthName: 'February',
+            weeks: [
+              {
+                weekNumber: 41,
+                status: 'Exam',
+                dates: '01 Feb - 07 Feb',
+                topic: 'CBSE Pre-Board Theory Examination (70 Marks Full Syllabus)',
+                details: 'Comprehensive 3-hour written examination covering Units 1 to 10 strictly following latest CBSE blueprint and sample question paper.'
+              },
+              {
+                weekNumber: 42,
+                status: 'Exam',
+                dates: '08 Feb - 14 Feb',
+                topic: 'Pre-Board Examination Paper Discussion & Remedial Workshops',
+                details: 'Diagnostic feedback on case studies, fixture diagrams, and assertion-reason questions; individual target scoring guidance.'
+              },
+              {
+                weekNumber: 43,
+                status: 'Instructional',
+                dates: '15 Feb - 21 Feb',
+                topic: 'High-Yield Blueprint Review, Mind Maps & Previous 5-Year Questions',
+                details: 'Unit-by-unit memory review: 5-mark long answers, fixture drawing precision drills, and WADA prohibited substances recall.'
+              },
+              {
+                weekNumber: 44,
+                status: 'Instructional',
+                dates: '22 Feb - 28 Feb',
+                topic: 'Final Board Practical Review & End-of-Year Fitness Verification',
+                details: 'Final certification of practical award lists (30M), verification of internal marks submission to CBSE portal.'
+              }
+            ]
+          },
+          {
+            monthName: 'March',
+            weeks: [
+              {
+                weekNumber: 45,
+                status: 'Exam',
+                dates: '01 Mar - 07 Mar',
+                topic: 'CBSE All India Senior School Certificate Examination (AISSCE)',
+                details: 'CBSE Board Examinations commence. Final revision doubt clearance sessions and student psychological readiness.'
+              },
+              {
+                weekNumber: 46,
+                status: 'Exam',
+                dates: '08 Mar - 15 Mar',
+                topic: 'CBSE Board Examination Session',
+                details: 'Official Board theory examination schedule.'
+              },
+              {
+                weekNumber: 47,
+                status: 'Exam',
+                dates: '16 Mar - 23 Mar',
+                topic: 'CBSE Board Examination Session',
+                details: 'Completion of Board examinations and student transition support.'
+              },
+              {
+                weekNumber: 48,
+                status: 'Event',
+                dates: '24 Mar - 31 Mar',
+                topic: 'Academic Year Review, Curriculum Audit & Next Session Planning',
+                details: 'Physical Education department review meeting, inventory audit of sports equipment, and planning for upcoming academic year.'
+              }
+            ]
+          }
+        ]
+      }
+    ];
+  } else if (isSenior11) {
+    terms = [
+      {
+        termName: 'Term 1 (April to September)',
+        months: [
+          {
+            monthName: 'April',
+            weeks: [
+              { weekNumber: 1, status: 'Instructional', dates: '01 Apr - 07 Apr', topic: 'Unit 1: Changing Trends & Career in Physical Education', details: 'Meaning, aims, objectives of PE; development of sports in post-independence India + Athletics track warmups.' },
+              { weekNumber: 2, status: 'Instructional', dates: '08 Apr - 14 Apr', topic: 'Unit 1: Khelo India Programme & Fit India Movement', details: 'Verticals of Khelo India programme; career options in physical education & coaching + Sprint acceleration drills.' },
+              { weekNumber: 3, status: 'Instructional', dates: '15 Apr - 21 Apr', topic: 'Unit 2: Olympic Value Education — Ancient & Modern Olympics', details: 'Origin of ancient Olympics; modern Olympic revival by Pierre de Coubertin; Olympic symbols & motto + Basketball handling.' },
+              { weekNumber: 4, status: 'Instructional', dates: '22 Apr - 30 Apr', topic: 'Unit 2: Olympic Values & Indian Olympic Association (IOA)', details: 'Values of Excellence, Friendship, Respect; governance and role of IOA in national athlete selection.' }
+            ]
+          },
+          {
+            monthName: 'May',
+            weeks: [
+              { weekNumber: 5, status: 'Instructional', dates: '01 May - 07 May', topic: 'Unit 3: Yoga — Meaning, Importance & Elements (Ashtanga Yoga)', details: '8 limbs of Ashtanga Yoga (Yama, Niyama, Asana, Pranayama, Pratyahara, Dharana, Dhyana, Samadhi).' },
+              { weekNumber: 6, status: 'Holiday', dates: '08 May - 15 May', topic: 'Summer Vacation Break — Personal Asana Practice Diary', details: 'Students maintain independent daily yogic breathing and Surya Namaskar routines.' },
+              { weekNumber: 7, status: 'Holiday', dates: '16 May - 23 May', topic: 'Summer Vacation Break — Aerobic Conditioning', details: 'Home physical conditioning routine: 30 minutes continuous brisk jogging, skipping, and agility.' },
+              { weekNumber: 8, status: 'Holiday', dates: '24 May - 31 May', topic: 'Summer Vacation Break — Sports Rules Review', details: 'Vacation assignment: Analyzing ground dimensions and technical fouls for one team sport.' }
+            ]
+          },
+          {
+            monthName: 'June',
+            weeks: [
+              { weekNumber: 9, status: 'Instructional', dates: '01 Jun - 07 Jun', topic: 'Unit 3: Shatkarmas (Kriyas) & Pranayama Techniques', details: 'Yogic cleansing processes (Neti, Dhauti, Nauli, Basti, Kapalbhati, Trataka); cooling vs heating pranayamas.' },
+              { weekNumber: 10, status: 'Instructional', dates: '08 Jun - 14 Jun', topic: 'Unit 4: Physical Education & Sports for CWSN (Inclusion)', details: 'Concept of disability vs impairment; aims of adaptive physical education; inclusive PE strategies + Football passing.' },
+              { weekNumber: 11, status: 'Instructional', dates: '15 Jun - 21 Jun', topic: 'Unit 4: Adaptive PE Sports & International Yoga Day', details: 'Celebrating 21st June Yoga Day; Special Olympics Bharat and Paralympic games history + Football shooting.' },
+              { weekNumber: 12, status: 'Instructional', dates: '22 Jun - 30 Jun', topic: 'Unit 4: Role of Inclusive Educators for CWSN', details: 'Special educators, physiotherapists, and PE teachers in designing Individualized Education Plans (IEP).' }
+            ]
+          },
+          {
+            monthName: 'July',
+            weeks: [
+              { weekNumber: 13, status: 'Instructional', dates: '01 Jul - 07 Jul', topic: 'Unit 5: Physical Fitness, Wellness and Lifestyle', details: 'Components of health-related and skill-related physical fitness; meaning of positive wellness.' },
+              { weekNumber: 14, status: 'Instructional', dates: '08 Jul - 14 Jul', topic: 'Unit 5: Principles of Physical Fitness Development', details: 'Overload, progression, specificity, reversibility; developing cardiovascular endurance + Volleyball service.' },
+              { weekNumber: 15, status: 'Instructional', dates: '15 Jul - 21 Jul', topic: 'Unit 5: Lifestyle Management & Stress Reduction', details: 'Role of regular physical activity and balanced diet in stress mitigation + Volleyball match setting.' },
+              { weekNumber: 16, status: 'Instructional', dates: '22 Jul - 31 Jul', topic: 'SAI Khelo India National Fitness Assessment (Term 1)', details: 'Administering battery: BMI, 50m sprint, 600m run, sit and reach, curl-ups, push-ups.' }
+            ]
+          },
+          {
+            monthName: 'August',
+            weeks: [
+              { weekNumber: 17, status: 'Instructional', dates: '01 Aug - 07 Aug', topic: 'Term 1 Syllabus Review: Units 1 to 5 Key Concept Mapping', details: 'Review of Olympic charter, Ashtanga yoga, adaptive physical education, and fitness principles.' },
+              { weekNumber: 18, status: 'Event', dates: '08 Aug - 15 Aug', topic: 'Independence Day Celebrations & Inter-House Marching', details: 'School celebrations, marching drills, patriotic games and physical fitness awareness.' },
+              { weekNumber: 19, status: 'Instructional', dates: '16 Aug - 23 Aug', topic: 'On-Field Games Assessment (Cricket / Basketball / Football)', details: 'Evaluating motor skills, tactical positioning, and rules compliance under competitive play.' },
+              { weekNumber: 20, status: 'Instructional', dates: '24 Aug - 31 Aug', topic: 'Mid-Term Exam Blueprint Practice & Problem Solving', details: 'Solving previous CBSE Class 11 sample papers and 3-mark analytical questions.' }
+            ]
+          },
+          {
+            monthName: 'September',
+            weeks: [
+              { weekNumber: 21, status: 'Exam', dates: '01 Sep - 07 Sep', topic: 'Term 1 Mid-Term Examination (Theory Units 1-5)', details: 'Formal written examination covering Units 1 to 5; assessing conceptual clarity.' },
+              { weekNumber: 22, status: 'Exam', dates: '08 Sep - 15 Sep', topic: 'Mid-Term Paper Evaluation & Feedback Session', details: 'Reviewing student answer scripts, rectifying common syllabus misconceptions.' },
+              { weekNumber: 23, status: 'Instructional', dates: '16 Sep - 22 Sep', topic: 'Term 1 Practical Skill Validation & Games Tournament', details: 'Compiling fitness battery marks, inter-house league tournament matches.' },
+              { weekNumber: 24, status: 'Instructional', dates: '23 Sep - 30 Sep', topic: 'Term 1 Academic Wrap-up & Transition Planning', details: 'Entering marks into school portal; preparing for Term 2 anatomy and kinesiology units.' }
+            ]
+          }
+        ]
+      },
+      {
+        termName: 'Term 2 (October to March)',
+        months: [
+          {
+            monthName: 'October',
+            weeks: [
+              { weekNumber: 25, status: 'Holiday', dates: '01 Oct - 07 Oct', topic: 'Gandhi Jayanti & Autumn Pooja Holidays', details: 'School recess for autumn festivities.' },
+              { weekNumber: 26, status: 'Instructional', dates: '08 Oct - 14 Oct', topic: 'Unit 6: Test, Measurement & Evaluation in Sports', details: 'Defining test, measurement, evaluation; importance of classification and norms + Badminton footwork.' },
+              { weekNumber: 27, status: 'Instructional', dates: '15 Oct - 21 Oct', topic: 'Unit 6: Anthropometric & BMI Measurements', details: 'Calculating BMI, waist-hip ratio, somatotypes (Endomorph, Mesomorph, Ectomorph) + Badminton strokes.' },
+              { weekNumber: 28, status: 'Instructional', dates: '22 Oct - 31 Oct', topic: 'Unit 7: Fundamentals of Anatomy & Physiology in Sports', details: 'Structure and functions of skeletal system (axial vs appendicular); types of bones and joints.' }
+            ]
+          },
+          {
+            monthName: 'November',
+            weeks: [
+              { weekNumber: 29, status: 'Instructional', dates: '01 Nov - 07 Nov', topic: 'Unit 7: Muscular System & Respiratory System Mechanics', details: 'Properties of muscles; muscle contraction mechanisms; vital capacity and tidal volume.' },
+              { weekNumber: 30, status: 'Instructional', dates: '08 Nov - 14 Nov', topic: 'Unit 7: Circulatory System & Second Wind Concept', details: 'Heart structure, cardiac output, blood pressure response during exercise; oxygen debt and second wind.' },
+              { weekNumber: 31, status: 'Event', dates: '15 Nov - 21 Nov', topic: 'Annual Sports Day Heats & Track Trials', details: 'Qualifying rounds for sprints, relays, jumps, and throws; field preparation.' },
+              { weekNumber: 32, status: 'Event', dates: '22 Nov - 30 Nov', topic: 'Annual Sports Day & Athletic Meet Championship', details: 'Final athletic events, prize distribution, and house championship honors.' }
+            ]
+          },
+          {
+            monthName: 'December',
+            weeks: [
+              { weekNumber: 33, status: 'Instructional', dates: '01 Dec - 07 Dec', topic: 'Unit 8: Fundamentals of Kinesiology & Biomechanics in Sports', details: 'Introduction to kinesiology; planes (Sagittal, Frontal, Transverse) and axes of movement.' },
+              { weekNumber: 34, status: 'Instructional', dates: '08 Dec - 14 Dec', topic: 'Unit 8: Anatomical Movements (Flexion, Extension, Abduction)', details: 'Analyzing athletic body movements in sprinting, throwing, and jumping.' },
+              { weekNumber: 35, status: 'Instructional', dates: '15 Dec - 21 Dec', topic: 'Unit 9: Psychology and Sports — Growth & Development', details: 'Developmental characteristics across adolescent stages; psychological issues and motor learning.' },
+              { weekNumber: 36, status: 'Holiday', dates: '22 Dec - 31 Dec', topic: 'Winter & Christmas Holidays', details: 'Winter vacation. Students compile Class 11 Practical Assessment Record Files.' }
+            ]
+          },
+          {
+            monthName: 'January',
+            weeks: [
+              { weekNumber: 37, status: 'Instructional', dates: '01 Jan - 07 Jan', topic: 'Unit 9: Team Cohesion & Psychological Preparation', details: 'School reopens; team dynamics, goal setting, and mental focus techniques for sports.' },
+              { weekNumber: 38, status: 'Instructional', dates: '08 Jan - 14 Jan', topic: 'Unit 10: Training & Doping in Sports — Principles of Sports Training', details: 'Concept of sports training; warming up and cooling down physiological rationale.' },
+              { weekNumber: 39, status: 'Instructional', dates: '15 Jan - 21 Jan', topic: 'Unit 10: Training Methods & Anti-Doping Regulations', details: 'Continuous, interval, Fartlek methods; WADA & NADA anti-doping awareness and banned substances.' },
+              { weekNumber: 40, status: 'Exam', dates: '22 Jan - 31 Jan', topic: 'Class 11 Annual Practical Assessment Examination (30 Marks)', details: 'Official practical trials: Physical fitness battery, game proficiency, and viva voce.' }
+            ]
+          },
+          {
+            monthName: 'February',
+            weeks: [
+              { weekNumber: 41, status: 'Instructional', dates: '01 Feb - 07 Feb', topic: 'Full Syllabus Revision (Units 1 to 10 Comprehensive Blueprint)', details: 'Solving 5-mark and case-study questions across all 10 chapters.' },
+              { weekNumber: 42, status: 'Exam', dates: '08 Feb - 14 Feb', topic: 'Class 11 Annual Pre-Final Theory Examination', details: 'Comprehensive written paper simulating CBSE final examination structure.' },
+              { weekNumber: 43, status: 'Exam', dates: '15 Feb - 21 Feb', topic: 'Paper Discussion, Weak Area Diagnosis & Remedials', details: 'Individual feedback, error correction in biomechanics and anatomy diagrams.' },
+              { weekNumber: 44, status: 'Instructional', dates: '22 Feb - 28 Feb', topic: 'Final Preparation & Senior Secondary Transition Guidance', details: 'Transition roadmap from Class 11 to Class 12 board curriculum.' }
+            ]
+          },
+          {
+            monthName: 'March',
+            weeks: [
+              { weekNumber: 45, status: 'Exam', dates: '01 Mar - 07 Mar', topic: 'Class 11 Annual Final Examination Session', details: 'Final academic examinations.' },
+              { weekNumber: 46, status: 'Exam', dates: '08 Mar - 15 Mar', topic: 'Class 11 Annual Final Examination Session', details: 'Final academic examinations.' },
+              { weekNumber: 47, status: 'Exam', dates: '16 Mar - 23 Mar', topic: 'Result Compilation & Evaluation', details: 'Compilation of marks and performance report generation.' },
+              { weekNumber: 48, status: 'Event', dates: '24 Mar - 31 Mar', topic: 'Annual Review, Sports Stock Audit & New Session Orientation', details: 'Physical Education department audit and equipment maintenance.' }
+            ]
+          }
+        ]
+      }
+    ];
+  } else {
+    // Classes 1 to 10: Integrated HPE & Physical Literacy
+    terms = [
+      {
+        termName: 'Term 1 (April to September)',
+        months: [
+          {
+            monthName: 'April',
+            weeks: [
+              { weekNumber: 1, status: 'Instructional', dates: '01 Apr - 07 Apr', topic: 'Physical Literacy Foundations & Locomotor Skills', details: 'Running mechanics, bounding, hopping, spatial balance, and fundamental movement patterns.' },
+              { weekNumber: 2, status: 'Instructional', dates: '08 Apr - 14 Apr', topic: 'Agility & Coordination Drills', details: 'Cone ladders, shuttle runs, lateral reaction drills + Basketball ball handling.' },
+              { weekNumber: 3, status: 'Instructional', dates: '15 Apr - 21 Apr', topic: 'Team Sports Fundamentals — Basketball & Hand-Eye Coordination', details: 'Chest passes, bounce passes, pivoting, and protective dribbling.' },
+              { weekNumber: 4, status: 'Instructional', dates: '22 Apr - 30 Apr', topic: 'Health & Hygiene — Balanced Nutrition & Posture Awareness', details: 'Understanding daily water intake, balanced diet portions, and proper sitting/standing posture.' }
+            ]
+          },
+          {
+            monthName: 'May',
+            weeks: [
+              { weekNumber: 5, status: 'Instructional', dates: '01 May - 07 May', topic: 'Yoga & Flexibility Basics (Surya Namaskar & Asanas)', details: 'Gentle joint mobilizations, basic standing asanas (Tadasana, Vrikshasana), breathing control.' },
+              { weekNumber: 6, status: 'Holiday', dates: '08 May - 15 May', topic: 'Summer Vacation — Active Play & Fitness Journal', details: 'Students log 45 minutes of daily outdoor recreational play.' },
+              { weekNumber: 7, status: 'Holiday', dates: '16 May - 23 May', topic: 'Summer Vacation — Aerobic Games & Skipping Routine', details: 'Home physical conditioning: skipping rope challenges and core stability.' },
+              { weekNumber: 8, status: 'Holiday', dates: '24 May - 31 May', topic: 'Summer Vacation — Traditional Indian Games Exploration', details: 'Learning rules of traditional outdoor games (Kho-Kho, Kabaddi, Gilli-Danda).' }
+            ]
+          },
+          {
+            monthName: 'June',
+            weeks: [
+              { weekNumber: 9, status: 'Instructional', dates: '01 Jun - 07 Jun', topic: 'School Reopening & Fitness Readiness Evaluation', details: 'Pulse check, light jog, dynamic stretching, hydration guidelines review.' },
+              { weekNumber: 10, status: 'Instructional', dates: '08 Jun - 14 Jun', topic: 'Football Fundamentals — Passing & Ball Control', details: 'Inside-foot push passing, trapping rolling balls, short sprint accelerations.' },
+              { weekNumber: 11, status: 'Instructional', dates: '15 Jun - 21 Jun', topic: 'International Day of Yoga (21st June) Celebrations', details: 'Practicing common yoga protocol: Tadasana, Vrikshasana, Bhujangasana, Pranayama.' },
+              { weekNumber: 12, status: 'Instructional', dates: '22 Jun - 30 Jun', topic: 'Football Match Play & Team Sportsmanship', details: 'Small-sided 4v4 games focusing on fair play, communication, and positional balance.' }
+            ]
+          },
+          {
+            monthName: 'July',
+            weeks: [
+              { weekNumber: 13, status: 'Instructional', dates: '01 Jul - 07 Jul', topic: 'Athletics Track Foundations — Sprinting Technique', details: 'Arm swing mechanics, high knee drive, starting block posture (On your mark, set, go).' },
+              { weekNumber: 14, status: 'Instructional', dates: '08 Jul - 14 Jul', topic: 'Athletics Field Foundations — Standing Broad Jump & Agility', details: 'Two-foot take-off, explosive hip extension, controlled landing mechanics.' },
+              { weekNumber: 15, status: 'Instructional', dates: '15 Jul - 21 Jul', topic: 'Volleyball Basics — Underhand Pass & Service', details: 'Ready stance, forearm platform formation, contact point, low-to-high arm drive.' },
+              { weekNumber: 16, status: 'Instructional', dates: '22 Jul - 31 Jul', topic: 'First Aid & Safety Awareness in Physical Education', details: 'Treating minor scrapes, muscle sprains (PRICE concept), playground safety guidelines.' }
+            ]
+          },
+          {
+            monthName: 'August',
+            weeks: [
+              { weekNumber: 17, status: 'Instructional', dates: '01 Aug - 07 Aug', topic: 'SAI Khelo India National Fitness Battery Administration (Term 1)', details: 'Administering standard tests: BMI, 50m dash, 600m run/walk, sit & reach, partial curl-ups.' },
+              { weekNumber: 18, status: 'Event', dates: '08 Aug - 15 Aug', topic: 'Independence Day Sports Drills & March Past', details: 'Patriotic parade march-past rehearsals, ceremonial sports demonstrations.' },
+              { weekNumber: 19, status: 'Instructional', dates: '16 Aug - 23 Aug', topic: 'Badminton Basics — Grip, Footwork & Underarm Clears', details: 'Forehand vs backhand grip, scissor-step lateral footwork, shuttlecock eye-tracking.' },
+              { weekNumber: 20, status: 'Instructional', dates: '24 Aug - 31 Aug', topic: 'Term 1 Physical Education Revision & Skill Consolidation', details: 'Review of team game rules, fitness score verification, and self-assessment checklists.' }
+            ]
+          },
+          {
+            monthName: 'September',
+            weeks: [
+              { weekNumber: 21, status: 'Exam', dates: '01 Sep - 07 Sep', topic: 'Term 1 Mid-Term Assessments (PE Theory & Health Concepts)', details: 'Evaluating knowledge of rules, nutrition, yoga asanas, and hygiene.' },
+              { weekNumber: 22, status: 'Exam', dates: '08 Sep - 15 Sep', topic: 'Mid-Term Assessment Evaluation & Individual Feedback', details: 'Sharing evaluated feedback and encouragement for physical motor development.' },
+              { weekNumber: 23, status: 'Instructional', dates: '16 Sep - 22 Sep', topic: 'Inter-House Sports Competitions (Football / Basketball)', details: 'Organized intramural matches focusing on leadership, teamwork, and tactical awareness.' },
+              { weekNumber: 24, status: 'Instructional', dates: '23 Sep - 30 Sep', topic: 'Term 1 Student Health & Fitness Card Updates', details: 'Recording scores on CBSE / State Health and Activity Cards.' }
+            ]
+          }
+        ]
+      },
+      {
+        termName: 'Term 2 (October to March)',
+        months: [
+          {
+            monthName: 'October',
+            weeks: [
+              { weekNumber: 25, status: 'Holiday', dates: '01 Oct - 07 Oct', topic: 'Gandhi Jayanti & Autumn Holidays', details: 'School recess; promoting outdoor community fitness.' },
+              { weekNumber: 26, status: 'Instructional', dates: '08 Oct - 14 Oct', topic: 'Cricket & Batting-Bowling Coordination', details: 'Grip, stance, backlift, straight drive mechanics + basic bowling grip and run-up.' },
+              { weekNumber: 27, status: 'Instructional', dates: '15 Oct - 21 Oct', topic: 'Cricket Fielding & Catching Drills', details: 'Underhand and overhand throws, long barrier fielding technique, high catches.' },
+              { weekNumber: 28, status: 'Instructional', dates: '22 Oct - 31 Oct', topic: 'Kho-Kho & Traditional Tag Games', details: 'Dodging, zigzag running, sudden direction changes, tapping, and team cooperation.' }
+            ]
+          },
+          {
+            monthName: 'November',
+            weeks: [
+              { weekNumber: 29, status: 'Instructional', dates: '01 Nov - 07 Nov', topic: 'Annual Athletic Meet Trials — Track Races (100m, 200m, Relays)', details: 'Baton exchange practice (visual vs non-visual pass), acceleration lanes.' },
+              { weekNumber: 30, status: 'Instructional', dates: '08 Nov - 14 Nov', topic: 'Annual Athletic Meet Trials — Jumps & Throws', details: 'Long jump approach and landing, ball throw / shot put coordination.' },
+              { weekNumber: 31, status: 'Event', dates: '15 Nov - 21 Nov', topic: 'Sports Day Rehearsals & House Marching Drills', details: 'Inter-house synchronized march past, sports pledge, opening ceremony layout.' },
+              { weekNumber: 32, status: 'Event', dates: '22 Nov - 30 Nov', topic: 'Annual School Sports Day & Championship Celebrations', details: 'Track and field finals, medal presentations, celebrating sporting excellence.' }
+            ]
+          },
+          {
+            monthName: 'December',
+            weeks: [
+              { weekNumber: 33, status: 'Instructional', dates: '01 Dec - 07 Dec', topic: 'Table Tennis & Reflex Training', details: 'Pen-hold vs shake-hand grip, forehand counter-hit, table positioning.' },
+              { weekNumber: 34, status: 'Instructional', dates: '08 Dec - 14 Dec', topic: 'Aerobic Circuit Training & Fun Fitness Challenges', details: '6-station circuit: skipping, jumping jacks, squat holds, medicine ball passes.' },
+              { weekNumber: 35, status: 'Instructional', dates: '15 Dec - 21 Dec', topic: 'Sports Psychology Basics — Confidence, Motivation & Team Spirit', details: 'Positive self-talk, overcoming fear of failure in sports, leadership roles.' },
+              { weekNumber: 36, status: 'Holiday', dates: '22 Dec - 31 Dec', topic: 'Winter & Christmas Holidays', details: 'School winter break; encourage active family outdoor walks.' }
+            ]
+          },
+          {
+            monthName: 'January',
+            weeks: [
+              { weekNumber: 37, status: 'Instructional', dates: '01 Jan - 07 Jan', topic: 'Winter Health & Warming Up Physiology', details: 'School reopens; importance of extended warm-ups in cold weather to prevent muscle strain.' },
+              { weekNumber: 38, status: 'Instructional', dates: '08 Jan - 14 Jan', topic: 'Basketball — Fast Break & Defensive Strategies', details: 'Man-to-man defense, boxing out for rebounds, fast-break outlet passing.' },
+              { weekNumber: 39, status: 'Instructional', dates: '15 Jan - 21 Jan', topic: 'Gymnastics & Core Body Control', details: 'Forward roll, backward roll, cartwheel basics, balance beam walking.' },
+              { weekNumber: 40, status: 'Instructional', dates: '22 Jan - 31 Jan', topic: 'End-of-Year SAI Khelo India Fitness Re-Assessment (Term 2)', details: 'Administering second battery tests to measure longitudinal improvement from baseline.' }
+            ]
+          },
+          {
+            monthName: 'February',
+            weeks: [
+              { weekNumber: 41, status: 'Instructional', dates: '01 Feb - 07 Feb', topic: 'Full Year PE Concepts Review & Written Quiz', details: 'Reviewing sports rules, health components, nutrition, and Olympic history.' },
+              { weekNumber: 42, status: 'Exam', dates: '08 Feb - 14 Feb', topic: 'Annual PE Assessment & Physical Practical Evaluation', details: 'Evaluating motor fitness, skills proficiency in preferred game.' },
+              { weekNumber: 43, status: 'Instructional', dates: '15 Feb - 21 Feb', topic: 'Fun Games & Inclusive Cooperative Play', details: 'Tug of war, cooperative relays, student-led physical games.' },
+              { weekNumber: 44, status: 'Instructional', dates: '22 Feb - 28 Feb', topic: 'Final Physical Fitness Report Card Generation', details: 'Compiling annual growth charts, BMI changes, and fitness awards.' }
+            ]
+          },
+          {
+            monthName: 'March',
+            weeks: [
+              { weekNumber: 45, status: 'Exam', dates: '01 Mar - 07 Mar', topic: 'Annual School Examinations Period', details: 'Academic exam schedule.' },
+              { weekNumber: 46, status: 'Exam', dates: '08 Mar - 15 Mar', topic: 'Annual School Examinations Period', details: 'Academic exam schedule.' },
+              { weekNumber: 47, status: 'Exam', dates: '16 Mar - 23 Mar', topic: 'Annual Academic Wrap-up & Results Compilation', details: 'Compiling annual report cards.' },
+              { weekNumber: 48, status: 'Event', dates: '24 Mar - 31 Mar', topic: 'Curriculum Audit, Equipment Maintenance & Next Session Planning', details: 'PE department annual audit and upcoming session calendar prep.' }
+            ]
+          }
+        ]
+      }
+    ];
+  }
+
+  return {
+    grade: cleanGrade,
+    board: String(board),
+    academicYear: '2025-2026',
+    duration: duration || '40 min',
+    generatedDate: new Date().toLocaleDateString(),
+    terms
+  };
+};
+
 export const generateYearlyPlan = async (
   grade: string,
   board: BoardType,
@@ -481,114 +1171,138 @@ export const generateYearlyPlan = async (
   startDate: string,
   duration: string,
   language: Language,
-  planTrack: 'integrated' | 'theory' | 'practical' = 'integrated'
+  planTrack: 'integrated' | 'theory' | 'practical' = 'integrated',
+  term1Game: string = 'Football & Athletics',
+  term2Game: string = 'Basketball & Volleyball'
 ): Promise<YearlyPlan> => {
-  const safeCalendarText = calendarText ? calendarText.substring(0, 1500) : "No calendar.";
-  
-  const schema = {
-    type: "OBJECT",
-    properties: {
-      grade: { type: "STRING" },
-      board: { type: "STRING" },
-      academicYear: { type: "STRING" },
-      terms: {
-        type: "ARRAY",
-        items: {
-          type: "OBJECT",
-          properties: {
-            termName: { type: "STRING" },
-            months: {
-              type: "ARRAY",
-              items: {
-                type: "OBJECT",
-                properties: {
-                  monthName: { type: "STRING" },
-                  weeks: {
-                    type: "ARRAY",
-                    items: {
-                      type: "OBJECT",
-                      properties: {
-                        weekNumber: { type: "NUMBER" },
-                        status: { type: "STRING", enum: ['Instructional', 'Holiday', 'Exam', 'Event'] },
-                        dates: { type: "STRING" },
-                        topic: { type: "STRING" },
-                        details: { type: "STRING" }
-                      },
-                      required: ["weekNumber", "status", "topic", "details"]
+  try {
+    const safeCalendarText = calendarText ? calendarText.substring(0, 1500) : "No calendar.";
+    
+    const schema = {
+      type: "OBJECT",
+      properties: {
+        grade: { type: "STRING" },
+        board: { type: "STRING" },
+        academicYear: { type: "STRING" },
+        terms: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              termName: { type: "STRING" },
+              months: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    monthName: { type: "STRING" },
+                    weeks: {
+                      type: "ARRAY",
+                      items: {
+                        type: "OBJECT",
+                        properties: {
+                          weekNumber: { type: "NUMBER" },
+                          status: { type: "STRING", enum: ['Instructional', 'Holiday', 'Exam', 'Event'] },
+                          dates: { type: "STRING" },
+                          topic: { type: "STRING" },
+                          details: { type: "STRING" }
+                        },
+                        required: ["weekNumber", "status", "topic", "details"]
+                      }
                     }
-                  }
-                },
-                required: ["monthName", "weeks"]
+                  },
+                  required: ["monthName", "weeks"]
+                }
               }
-            }
-          },
-          required: ["termName", "months"]
+            },
+            required: ["termName", "months"]
+          }
         }
+      },
+      required: ["terms", "academicYear"]
+    };
+
+    const response = await callAIBase({
+      model: 'gemini-3.7-flash',
+      contents: `Yearly Physical Education Curriculum Plan (Full Year 48-Week Master Plan). 
+      Grade: ${grade}, Board: ${board}, Language: ${language}. 
+      Cycle: Indian Academic Session (April to March - 12 Months).
+      Plan Track: ${planTrack}.
+      Term 1 Chosen Practical Game/Sport: "${term1Game || 'Football & Athletics'}".
+      Term 1 Theory Syllabus / Units: "${term1Focus}".
+      Term 2 Chosen Practical Game/Sport: "${term2Game || 'Basketball & Volleyball'}".
+      Term 2 Theory Syllabus / Units: "${term2Focus}".
+      Additional Holidays/Calendar: ${safeCalendarText}`,
+      config: {
+        thinkingConfig: { thinkingLevel: "LOW" },
+        systemInstruction: `You are a Senior Physical Education Director in a premier Indian school adhering strictly to the CBSE / NCERT / National Curriculum Framework (NCF).
+        Generate a strictly valid JSON containing the COMPLETE FULL YEAR (Term 1 & Term 2, all 12 months, 48 weeks from April to March).
+        
+        STRUCTURE:
+        - Term 1: April to September (April, May, June, July, August, September).
+        - Term 2: October to March (October, November, December, January, February, March).
+        
+        CRITICAL REQUIREMENT - INTEGRATE THEORY WITH PRACTICAL GAMES:
+        Every instructional week MUST integrate BOTH:
+        1. The CBSE Theory Unit / Health Syllabus concept (e.g., Unit 1 Planning/Fixtures, Unit 2 Postural Deformities/Female Athlete Triad, Unit 3 Yoga, Unit 4 CWSN, Unit 5 Nutrition, Unit 6 Tests, Unit 7 Physiology/Injuries, Unit 8 Biomechanics/Levers, Unit 9 Psychology, Unit 10 Training/Doping).
+        2. The chosen Term Sport / Game practical drills (Term 1: ${term1Game || 'Football & Athletics'}, Term 2: ${term2Game || 'Basketball & Volleyball'}).
+        
+        Format each instructional week's 'topic' like:
+        "[Theory Unit/Concept] + [Practical Sport/Game Skill]"
+        e.g., "Unit 1: Management of Sporting Events (Fixtures) + Football Push Passing & Trapping"
+        or "Unit 7: Physiology & Injuries (PRICE Protocol) + Basketball Fast Break & Defense"
+        
+        CURRICULUM TRACK GUIDANCE:
+        1. If Grade is 11 or 12 or if Track is "theory" or "integrated":
+           - For Class 12 CBSE (Code 048):
+             * Term 1 (April to September): Units 1 to 5: Unit 1 (Management of Sporting Events - Planning, Committees, Tournaments Fixtures Knockout/League), Unit 2 (Children & Women in Sports - Postural deformities, Female athlete triad), Unit 3 (Yoga as Preventive measure for Lifestyle Disease - Asanas for Obesity, Diabetes, Asthma, Hypertension), Unit 4 (PE & Sports for CWSN - Special Olympics, Paralympics, Deaflympics, Inclusion), Unit 5 (Sports & Nutrition - Macronutrients, Micronutrients, BMI) + Term 1 Physical Fitness Tests (SAI Khelo India Battery) & Mid-Term Exam Revision.
+             * Term 2 (October to March): Units 6 to 10: Unit 6 (Test & Measurement in Sports - SAI Khelo India, Barrow Motor Ability, Harvard Step Test), Unit 7 (Physiology & Injuries in Sports - Fitness physiology, PRICE protocol, Injuries), Unit 8 (Biomechanics & Sports - Newton's Laws, Levers, Equilibrium, Friction, Projectiles), Unit 9 (Psychology & Sports - Personality, Motivation, Aggression), Unit 10 (Training in Sports - Periodization, Strength/Speed/Endurance methods, Circuit Training) + CBSE Board Practical File preparation, Viva Voce practice, Pre-Board exams & Final revision.
+           - For Class 11 CBSE (Code 048):
+             * Term 1 (April to September): Units 1 to 5: Unit 1 (Changing Trends & Career in PE), Unit 2 (Olympic Value Education), Unit 3 (Yoga), Unit 4 (PE for CWSN), Unit 5 (Physical Fitness, Wellness & Lifestyle) + Khelo India Fitness Test battery.
+             * Term 2 (October to March): Units 6 to 10: Unit 6 (Test, Measurement & Evaluation), Unit 7 (Fundamentals of Anatomy & Physiology), Unit 8 (Fundamentals of Kinesiology & Biomechanics), Unit 9 (Psychology & Sports), Unit 10 (Training & Doping in Sports) + Practical Assessment & Final Revision.
+        2. If Track is "practical" or for Classes 1 to 10:
+           - Term 1 focuses on "${term1Game}" and core physical fitness motor skills.
+           - Term 2 focuses on "${term2Game}" and tactical gameplay/assessments.
+        
+        CALENDAR CONSTRAINTS:
+        - May: Mark as 'Holiday' for at least 3-4 weeks (Summer Break).
+        - December: Mark as 'Holiday' for at least 1-2 weeks (Winter Break).
+        - March: Focus on revision and 'Exam'.
+        
+        WEEKLY CONTENT:
+        - Each month MUST have exactly 4 weeks.
+        - 'topic': Clean, descriptive academic topic integrating theory + practical sport skill.
+        - 'details': Include specific learning objectives, coaching cues, chalk-talk/lab points, or physical technical details. Make it highly professional and syllabus-aligned.
+        
+        TRANSFERS: Translate all Topic and Details to ${language}.`,
+        responseMimeType: "application/json",
+        responseSchema: schema
       }
-    },
-    required: ["terms", "academicYear"]
-  };
+    });
 
-  const response = await callAIBase({
-    model: 'gemini-3.7-flash',
-    contents: `Yearly Physical Education Curriculum Plan. 
-    Grade: ${grade}, Board: ${board}, Language: ${language}. 
-    Cycle: Indian Academic Session (April to March).
-    Start Month: April. End Month: March.
-    Plan Track: ${planTrack}.
-    Term 1 Focus / Syllabus Units: "${term1Focus}".
-    Term 2 Focus / Syllabus Units: "${term2Focus}".
-    Additional Holidays/Calendar: ${safeCalendarText}`,
-    config: {
-      thinkingConfig: { thinkingLevel: "LOW" },
-      systemInstruction: `You are a Senior Physical Education Director in a premier Indian school adhering strictly to the CBSE / NCERT / National Curriculum Framework (NCF).
-      Generate a strictly valid JSON following the Indian academic cycle (APRIL to MARCH).
-      
-      STRUCTURE:
-      - Term 1: April to September.
-      - Term 2: October to March.
-      
-      CURRICULUM TRACK GUIDANCE:
-      1. If Grade is 11 or 12 or if Track is "theory" or "integrated":
-         - For Class 12 CBSE (Code 048):
-           * Term 1 (April to September): Must progress through Units 1 to 5: Unit 1 (Management of Sporting Events - Planning, Committees, Tournaments Fixtures Knockout/League), Unit 2 (Children & Women in Sports - Postural deformities, Female athlete triad), Unit 3 (Yoga as Preventive measure for Lifestyle Disease - Asanas for Obesity, Diabetes, Asthma, Hypertension), Unit 4 (PE & Sports for CWSN - Special Olympics, Paralympics, Deaflympics, Inclusion), Unit 5 (Sports & Nutrition - Macronutrients, Micronutrients, BMI) + Term 1 Physical Fitness Tests (SAI Khelo India Battery) & Mid-Term Exam Revision.
-           * Term 2 (October to March): Must progress through Units 6 to 10: Unit 6 (Test & Measurement in Sports - SAI Khelo India, Barrow Motor Ability, Harvard Step Test), Unit 7 (Physiology & Injuries in Sports - Fitness physiology, PRICE protocol, Injuries), Unit 8 (Biomechanics & Sports - Newton's Laws, Levers, Equilibrium, Friction, Projectiles), Unit 9 (Psychology & Sports - Personality, Motivation, Aggression), Unit 10 (Training in Sports - Periodization, Strength/Speed/Endurance methods, Circuit Training) + CBSE Board Practical File preparation, Viva Voce practice, Pre-Board exams & Final revision.
-         - For Class 11 CBSE (Code 048):
-           * Term 1 (April to September): Units 1 to 5: Unit 1 (Changing Trends & Career in PE), Unit 2 (Olympic Value Education), Unit 3 (Yoga), Unit 4 (PE for CWSN), Unit 5 (Physical Fitness, Wellness & Lifestyle) + Khelo India Fitness Test battery.
-           * Term 2 (October to March): Units 6 to 10: Unit 6 (Test, Measurement & Evaluation), Unit 7 (Fundamentals of Anatomy & Physiology), Unit 8 (Fundamentals of Kinesiology & Biomechanics), Unit 9 (Psychology & Sports), Unit 10 (Training & Doping in Sports) + Practical Assessment & Final Revision.
-      2. If Track is "practical" or for Classes 1 to 10:
-         - Term 1 focuses on "${term1Focus}" and core physical fitness motor skills.
-         - Term 2 focuses on "${term2Focus}" and tactical gameplay/assessments.
-         - Ensure progressive skill acquisition (Foundations -> Intermediate drills -> Game situations -> Tournaments & Testing).
-      
-      CALENDAR CONSTRAINTS:
-      - May: Mark as 'Holiday' for at least 3-4 weeks (Summer Break).
-      - December: Mark as 'Holiday' for at least 1-2 weeks (Winter Break).
-      - March: Focus on revision and 'Exam'.
-      
-      WEEKLY CONTENT:
-      - Each month MUST have exactly 4 weeks.
-      - 'topic': Clean, descriptive academic topic or sport skill.
-      - 'details': Include specific learning objectives, coaching cues, chalk-talk/lab points, or physical technical details. Make it highly professional and syllabus-aligned.
-      
-      TRANSFERS: Translate all Topic and Details to ${language}.`,
-      responseMimeType: "application/json",
-      responseSchema: schema
+    const parsed = safeParseJson(response.text || response);
+    if (parsed && Array.isArray(parsed.terms) && parsed.terms.length > 0) {
+      const hasValidWeeks = parsed.terms.some((t: any) => 
+        Array.isArray(t.months) && t.months.some((m: any) => Array.isArray(m.weeks) && m.weeks.length > 0)
+      );
+      if (hasValidWeeks) {
+        return { 
+          ...parsed, 
+          grade: parsed.grade || grade, 
+          board: parsed.board || board,
+          duration: duration,
+          terms: parsed.terms,
+          generatedDate: new Date().toLocaleDateString(),
+          academicYear: parsed.academicYear || "2025-2026"
+        };
+      }
     }
-  });
+  } catch (err) {
+    console.warn("AI generation for yearly plan failed, activating comprehensive syllabus fallback:", err);
+  }
 
-  const parsed = safeParseJson(response.text || response);
-  const terms = Array.isArray(parsed.terms) ? parsed.terms : [];
-
-  return { 
-    ...parsed, 
-    grade: parsed.grade || grade, 
-    board: parsed.board || board,
-    duration: duration,
-    terms: terms,
-    generatedDate: new Date().toLocaleDateString(),
-    academicYear: parsed.academicYear || "2025-2026"
-  };
+  // Guaranteed fallback ensures no teacher ever receives an empty plan
+  return buildComprehensiveYearlyPlanFallback(grade, board, duration, term1Focus, term2Focus, planTrack, term1Game, term2Game);
 };
 
 export const generateMindMap = async (grade: string, chapter: string, board: BoardType): Promise<{
@@ -619,30 +1333,36 @@ export const generateMindMap = async (grade: string, chapter: string, board: Boa
     required: ["center", "branches"]
   };
 
-  const response = await callAIBase({
-    model: 'gemini-3.7-flash',
-    contents: `Generate a comprehensive mind map structure for CBSE Physical Education Grade ${grade} Chapter/Unit: "${chapter}". 
-    Include ALL major topics and sub-topics from the latest 2025-2026 CBSE curriculum and NCERT textbook.
-    Provide exactly 6 to 8 main branches with clear, academic titles and brief descriptions.
-    Each branch should have 3-5 sub-topics.`,
-    config: {
-      thinkingConfig: { thinkingLevel: "LOW" },
-      systemInstruction: `You are a CBSE Physical Education Subject Matter Expert and Chief Examiner for Subject Code 048. 
-      Generate a structured, hierarchical mind map in JSON format strictly grounded in the official CBSE NCERT Physical Education syllabus.
-      CRITICAL: Content MUST strictly be Physical Education & Sports Science. Under NO circumstance should you output business management, accounting, or non-PE concepts.
-      Ensure 'center' is a string and 'branches' is an array of objects.
-      Each branch object MUST have 'title', 'description', and 'subTopics' (array of strings).
-      Ensure full coverage of the specified chapter according to the 2025-2026 syllabus.`,
-      responseMimeType: "application/json",
-      responseSchema: schema
+  try {
+    const response = await callAIBase({
+      model: 'gemini-3.1-flash-lite',
+      contents: `Generate a comprehensive mind map structure for CBSE Physical Education Grade ${grade} Chapter/Unit: "${chapter}". 
+      Include ALL major topics and sub-topics from the latest 2025-2026 CBSE curriculum and NCERT textbook.
+      Provide exactly 6 to 8 main branches with clear, academic titles and brief descriptions.
+      Each branch should have 3-5 sub-topics.`,
+      config: {
+        thinkingConfig: { thinkingLevel: "LOW" },
+        systemInstruction: `You are a CBSE Physical Education Subject Matter Expert and Chief Examiner for Subject Code 048. 
+        Generate a structured, hierarchical mind map in JSON format strictly grounded in the official CBSE NCERT Physical Education syllabus.
+        CRITICAL: Content MUST strictly be Physical Education & Sports Science. Under NO circumstance should you output business management, accounting, or non-PE concepts.
+        Ensure 'center' is a string and 'branches' is an array of objects.
+        Each branch object MUST have 'title', 'description', and 'subTopics' (array of strings).
+        Ensure full coverage of the specified chapter according to the 2025-2026 syllabus.`,
+        responseMimeType: "application/json",
+        responseSchema: schema
+      }
+    });
+    
+    const parsed = safeParseJson(response.text || response);
+    if (parsed && Array.isArray(parsed.branches) && parsed.branches.length > 0) {
+      return parsed;
     }
-  });
-  
-  const parsed = safeParseJson(response.text || response);
-  if (!parsed || !parsed.branches) {
-    throw new Error("The AI failed to generate segments for this chapter. Please try again.");
+  } catch (err) {
+    console.warn("AI generation for mind map failed, activating official CBSE syllabus fallback:", err);
   }
-  return parsed;
+
+  // Guaranteed fallback ensures no teacher ever receives a blank screen or generation failure
+  return getComprehensiveMindMapFallback(grade, chapter);
 };
 
 export const generateTheoryContent = async (grade: string, topic: string, board: BoardType, contentType: string, language: Language): Promise<TheoryContent> => {
@@ -668,12 +1388,13 @@ export const generateTheoryContent = async (grade: string, topic: string, board:
     required: ["title", "content", "questions"]
   };
 
-  const response = await callAIBase({
-    model: 'gemini-3.7-flash',
-    contents: `CBSE Physical Education Theory Content. Grade: ${grade}, Board: ${board}. Topic/Unit: "${topic}". Content Type: ${contentType}. Language: ${language}.`,
-    config: { 
-      thinkingConfig: { thinkingLevel: "LOW" },
-      systemInstruction: `You are an expert CBSE Physical Education Senior Faculty Member and Chief Examiner for Subject Code 048 and CBSE Health & Physical Education.
+  try {
+    const response = await callAIBase({
+      model: 'gemini-3.1-flash-lite',
+      contents: `CBSE Physical Education Theory Content. Grade: ${grade}, Board: ${board}. Topic/Unit: "${topic}". Content Type: ${contentType}. Language: ${language}.`,
+      config: { 
+        thinkingConfig: { thinkingLevel: "LOW" },
+        systemInstruction: `You are an expert CBSE Physical Education Senior Faculty Member and Chief Examiner for Subject Code 048 and CBSE Health & Physical Education.
 Output valid JSON. Content Language: ${language}.
 
 CRITICAL SYLLABUS INTEGRITY (MANDATORY):
@@ -700,11 +1421,20 @@ FORMATTING GUIDELINES BY CONTENT TYPE:
 - For 'Notes': Highly structured, clear headings, concise bullet points, definitions, classifications, and exam-focused mnemonic summaries. Avoid filler.
 - For 'MCQ': 5 to 8 challenging CBSE board-standard MCQs with 4 options (A, B, C, D), correct answer, and clear rationale.
 - For 'CaseStudy': 2 realistic sports scenarios (e.g., student undergoing Khelo India fitness test, athlete recovering from ligament sprain, coach planning tournament fixtures, sprinter applying Newton's third law) followed by analytical questions and model answers.`,
-      responseMimeType: "application/json",
-      responseSchema: schema
+        responseMimeType: "application/json",
+        responseSchema: schema
+      }
+    });
+    const parsed = safeParseJson(response.text || response);
+    if (parsed && parsed.content && parsed.title) {
+      return parsed;
     }
-  });
-  return safeParseJson(response.text || response);
+  } catch (err) {
+    console.warn("AI generation for theory content failed, activating official CBSE syllabus fallback:", err);
+  }
+
+  // Guaranteed fallback ensures instant high-yield notes, MCQs, or case studies
+  return getComprehensiveTheoryFallback(grade, topic, contentType as any, language);
 };
 
 export const generateGamesRubric = async (
@@ -756,17 +1486,26 @@ Include the following additional assessment components with standard nominal mar
 
 Provide a structured output matching the schema:`;
 
-  const response = await callAIBase({
-    model: 'gemini-3.7-flash',
-    contents: prompt,
-    config: {
-      thinkingConfig: { thinkingLevel: "LOW" },
-      responseMimeType: "application/json",
-      responseSchema: schema
-    }
-  });
+  try {
+    const response = await callAIBase({
+      model: 'gemini-3.1-flash-lite',
+      contents: prompt,
+      config: {
+        thinkingConfig: { thinkingLevel: "LOW" },
+        responseMimeType: "application/json",
+        responseSchema: schema
+      }
+    });
 
-  return safeParseJson(response.text || response);
+    const parsed = safeParseJson(response.text || response);
+    if (parsed && Array.isArray(parsed.skills) && parsed.skills.length > 0) {
+      return parsed;
+    }
+  } catch (err) {
+    console.warn("AI rubric generation failed, deploying official CBSE sports rubric fallback:", err);
+  }
+
+  return buildGamesRubricFallback(sport, totalMarks, numSkills, components);
 };
 
 export const generateUnitPlan = async (
@@ -820,9 +1559,10 @@ export const generateUnitPlan = async (
     required: ["unitTitle", "overview", "learningObjectives", "weeklyBreakdown"]
   };
 
-  const response = await callAIBase({
-    model: 'gemini-3.7-flash',
-    contents: `Generate a comprehensive Physical Education Unit Plan.
+  try {
+    const response = await callAIBase({
+      model: 'gemini-3.1-flash-lite',
+      contents: `Generate a comprehensive Physical Education Unit Plan.
 Topic/Unit: "${topic}".
 Grade/Level: "${grade}".
 Number of Lessons: ${numberOfLessons}.
@@ -831,18 +1571,26 @@ Curriculum Standards: "${curriculum}".
 User Objectives: "${learningObjectives || 'Standard grade-appropriate physical competence and cognitive understanding'}".
 User Assessments: "${assessmentStrategies || 'Formative observation, skill checks, and peer evaluations'}".
 Available Equipment: "${availableEquipment || 'Standard school sports facilities and equipment'}".`,
-    config: {
-      thinkingConfig: { thinkingLevel: "LOW" },
-      systemInstruction: `You are an expert Physical Education Curriculum Director specializing in Indian and international PE curricula (${curriculum}, CBSE, ICSE, National Framework).
+      config: {
+        thinkingConfig: { thinkingLevel: "LOW" },
+        systemInstruction: `You are an expert Physical Education Curriculum Director specializing in Indian and international PE curricula (${curriculum}, CBSE, ICSE, National Framework).
 Generate a complete, highly practical, and syllabus-aligned Unit Plan.
 Break the unit down into exactly ${numberOfLessons} progressive lessons, with clear skill progressions, coaching cues, starter warm-ups, core drills, cool-downs, differentiation, safety, and assessment checkpoints.
 Output strictly valid JSON matching the schema.`,
-      responseMimeType: "application/json",
-      responseSchema: schema
-    }
-  });
+        responseMimeType: "application/json",
+        responseSchema: schema
+      }
+    });
 
-  return safeParseJson(response.text || response);
+    const parsed = safeParseJson(response.text || response);
+    if (parsed && parsed.unitTitle && Array.isArray(parsed.weeklyBreakdown) && parsed.weeklyBreakdown.length > 0) {
+      return parsed;
+    }
+  } catch (err) {
+    console.warn("AI unit plan failed, deploying comprehensive fallback:", err);
+  }
+
+  return buildUnitPlanFallback(topic, grade, numberOfLessons, duration, curriculum);
 };
 
 export const generateAIToolContent = async (toolId: string, params: any) => {
@@ -876,17 +1624,26 @@ export const generateAIToolContent = async (toolId: string, params: any) => {
 
   const selectedInstruction = toolPrompts[toolId] || "You are a PE Expert. Be decisive and do not ask for clarification. Generate high-quality, actionable content. Do not return empty fields.";
 
-  const response = await callAIBase({
-    model: 'gemini-3.7-flash',
-    contents: `PE Tool: ${toolId}. User Input Parameters: ${JSON.stringify(params)}. Generate an exhaustive, professional, and syllabus-aligned resource.`,
-    config: { 
-      thinkingConfig: { thinkingLevel: "LOW" },
-      systemInstruction: `${selectedInstruction} Ensure the content is relevant to school physical education, actionable, and formatted cleanly into title, content, items array, and summary.`,
-      responseMimeType: "application/json",
-      responseSchema: schema
+  try {
+    const response = await callAIBase({
+      model: 'gemini-3.1-flash-lite',
+      contents: `PE Tool: ${toolId}. User Input Parameters: ${JSON.stringify(params)}. Generate an exhaustive, professional, and syllabus-aligned resource.`,
+      config: { 
+        thinkingConfig: { thinkingLevel: "LOW" },
+        systemInstruction: `${selectedInstruction} Ensure the content is relevant to school physical education, actionable, and formatted cleanly into title, content, items array, and summary.`,
+        responseMimeType: "application/json",
+        responseSchema: schema
+      }
+    });
+    const parsed = safeParseJson(response.text || response);
+    if (parsed && parsed.title && parsed.content) {
+      return parsed;
     }
-  });
-  return safeParseJson(response.text || response);
+  } catch (err) {
+    console.warn(`AI tool generation failed for ${toolId}, deploying dedicated fallback:`, err);
+  }
+
+  return buildAIToolContentFallback(toolId, params);
 };
 
 export const generateLessonDiagram = async (prompt: string, context: string = 'general') => {
@@ -1157,18 +1914,19 @@ export const generateTestPaper = async (
     required: ["title", "grade", "maxMarks", "sections", "generalInstructions", "markingScheme"]
   };
 
-  const isCBSE12 = (grade === '12' || grade === 'Class 12') && (topic.toLowerCase().includes('cbse') || true); // Assuming CBSE if 70 marks or grade 12 for this context
+  const isCBSE12 = (grade === '12' || grade === 'Class 12') && (topic.toLowerCase().includes('cbse') || true);
 
-  const response = await callAIBase({
-    model: 'gemini-3.7-flash',
-    contents: `Generate a Physical Education Question Paper (CBSE). 
+  try {
+    const response = await callAIBase({
+      model: 'gemini-3.1-flash-lite',
+      contents: `Generate a Physical Education Question Paper (CBSE). 
     Grade: ${grade}, Topic: ${topic}, 
     Type: ${testType}, Time: ${timeAllowed}, Marks: ${maxMarks}, 
     Language: ${language}.`,
-    config: {
-      thinkingConfig: { thinkingLevel: "LOW" },
-      maxOutputTokens: 8192,
-      systemInstruction: `You are an expert CBSE Physical Education Examiner for Subject Code 048. 
+      config: {
+        thinkingConfig: { thinkingLevel: "LOW" },
+        maxOutputTokens: 8192,
+        systemInstruction: `You are an expert CBSE Physical Education Examiner for Subject Code 048. 
       Be decisive and do not ask for clarification.
       Create a professional question paper following standard CBSE 2025-26 educational patterns for Code 048.
       
@@ -1213,11 +1971,19 @@ export const generateTestPaper = async (
       - For Short and Long Answers: Provide exhaustive point-wise answers and a clear marking breakdown.
       - The Marking Scheme must be 100% complete and match the Question Paper numbers exactly.
       `,
-      responseMimeType: "application/json",
-      responseSchema: schema
+        responseMimeType: "application/json",
+        responseSchema: schema
+      }
+    });
+    const parsed = safeParseJson(response.text || response);
+    if (parsed && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
+      return parsed;
     }
-  });
-  return safeParseJson(response.text || response);
+  } catch (err) {
+    console.warn("AI test paper generation failed, deploying official CBSE test paper fallback:", err);
+  }
+
+  return buildTestPaperFallback(grade, topic, testType, timeAllowed, maxMarks, language);
 };
 
 export const explainBiomechanics = async (

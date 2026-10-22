@@ -15,7 +15,9 @@ import {
   buildLessonPlannerNurtureEmail,
   buildFitnessTestsNurtureEmail,
   getNurtureEmailTemplate,
-  dispatchEmail 
+  dispatchEmail,
+  buildAdminIncidentAlertEmail,
+  type IncidentEmailData
 } from "./email.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -293,7 +295,7 @@ apiRouter.get("/email/brevo/status", async (req, res) => {
     const status = await checkBrevoStatus();
     res.json(status);
   } catch (err: any) {
-    console.error("Brevo status error:", err);
+    console.warn("Brevo status inspection warning:", err.message);
     res.status(500).json({ 
       configured: false, 
       connected: false, 
@@ -366,8 +368,248 @@ apiRouter.post("/email/test", async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error("Test email dispatch error:", error);
+    console.warn("Test email dispatch warning:", error.message);
     res.status(500).json({ success: false, error: error.message || "Failed to dispatch test email" });
+  }
+});
+
+// =========================================================================
+// Real-time System Telemetry, Incident Logging & WhatsApp / Email Alerts
+// =========================================================================
+interface TelemetryConfig {
+  adminAlertEmail: string;
+  adminWhatsAppNumber: string;
+  emailAlertsEnabled: boolean;
+}
+
+const telemetryConfig: TelemetryConfig = {
+  adminAlertEmail: process.env.ADMIN_ALERT_EMAIL || "alsamy36@gmail.com",
+  adminWhatsAppNumber: process.env.ADMIN_WHATSAPP_NUMBER || "919443389025",
+  emailAlertsEnabled: true
+};
+
+const storedIncidents: IncidentEmailData[] = [];
+const recentAlertTimestamps = new Map<string, number>();
+
+// POST /api/telemetry/incident - Ingest error from visitor/user, alert via Email & generate WhatsApp link
+apiRouter.post("/telemetry/incident", async (req, res) => {
+  try {
+    const ip = req.ip || "unknown";
+    const rl = checkRateLimit(`telemetry_${ip}`, 50, 60 * 1000);
+    if (!rl.allowed) {
+      return res.status(429).json({ error: "Rate limit exceeded for telemetry" });
+    }
+
+    const {
+      category = "SYSTEM_INCIDENT",
+      title = "Unexpected Error",
+      message = "No message provided",
+      module = "General",
+      details,
+      userContext = {},
+      userContact,
+      userNote
+    } = req.body;
+
+    const incidentId = "inc_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const timestamp = new Date().toISOString();
+
+    // Filter out benign / transient dev environment noise (e.g. Vite HMR WebSocket disconnects in iframe/proxy)
+    const combinedErrorText = `${category} ${title} ${message} ${typeof details === 'object' ? JSON.stringify(details) : String(details || '')}`.toLowerCase();
+    const isBenign = [
+      'websocket',
+      '@vite/client',
+      'vite',
+      'hmr',
+      'resizeobserver',
+      'aborterror',
+      'canceled',
+      'cancelled'
+    ].some(pat => combinedErrorText.includes(pat));
+
+    if (isBenign) {
+      return res.json({
+        success: true,
+        ignored: true,
+        incidentId,
+        message: "Benign environment event ignored"
+      });
+    }
+
+    const incidentData: IncidentEmailData = {
+      incidentId,
+      category,
+      title,
+      message,
+      module,
+      details,
+      userContext,
+      userContact,
+      userNote,
+      timestamp
+    };
+
+    // Store in-memory (max 100)
+    storedIncidents.unshift(incidentData);
+    if (storedIncidents.length > 100) {
+      storedIncidents.pop();
+    }
+
+    // Build WhatsApp Intimation Link
+    const cleanPhone = telemetryConfig.adminWhatsAppNumber.replace(/[^0-9]/g, "");
+    const waText = `🚨 *SmartPE Alert: ${category}*\n\n` +
+      `*Module:* ${module}\n` +
+      `*Issue:* ${title}\n` +
+      `*Error:* ${message ? String(message).slice(0, 140) : "Unknown error"}\n` +
+      `*Reporter:* ${userContext?.email || userContact || "Guest Visitor"}\n` +
+      `*Time:* ${new Date().toLocaleTimeString()} IST\n\n` +
+      `*AI Studio Prompt:* "In SmartPE India, fix error: ${category} in ${module}: ${message ? String(message).slice(0, 90) : ""}"`;
+    const whatsappAlertUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(waText)}`;
+
+    // Email alert with 2-minute deduplication throttle to prevent email flood
+    let emailDispatched = false;
+    let emailMessage = "Email alerts disabled";
+
+    if (telemetryConfig.emailAlertsEnabled && telemetryConfig.adminAlertEmail) {
+      const dedupKey = `${category}:${module}:${message ? String(message).slice(0, 60) : ""}`;
+      const lastAlertTime = recentAlertTimestamps.get(dedupKey) || 0;
+      const now = Date.now();
+
+      if (now - lastAlertTime > 2 * 60 * 1000) {
+        recentAlertTimestamps.set(dedupKey, now);
+        try {
+          const emailTpl = buildAdminIncidentAlertEmail(incidentData);
+          const dispatchRes = await dispatchEmail(
+            telemetryConfig.adminAlertEmail,
+            emailTpl.subject,
+            emailTpl.html,
+            emailTpl.text
+          );
+          emailDispatched = dispatchRes.success;
+          emailMessage = dispatchRes.message;
+        } catch (emailErr: any) {
+          console.warn("Failed to dispatch incident email alert:", emailErr);
+          emailMessage = emailErr.message;
+        }
+      } else {
+        emailMessage = "Throttled (similar alert sent within last 2 minutes)";
+      }
+    }
+
+    res.json({
+      success: true,
+      incidentId,
+      whatsappAlertUrl,
+      emailDispatched,
+      emailMessage,
+      timestamp
+    });
+  } catch (err: any) {
+    console.error("Telemetry ingestion error:", err);
+    res.status(500).json({ success: false, error: err.message || "Failed to ingest telemetry" });
+  }
+});
+
+// GET /api/telemetry/incidents - Retrieve captured incidents for System Health dashboard
+apiRouter.get("/telemetry/incidents", (req, res) => {
+  try {
+    const stats = {
+      total: storedIncidents.length,
+      aiQuota: storedIncidents.filter(i => i.category === 'AI_GENERATION_FAILED').length,
+      auth: storedIncidents.filter(i => i.category === 'AUTH_LOGIN_FAILED').length,
+      fitness: storedIncidents.filter(i => i.category === 'FITNESS_TEST_FAILED').length,
+      tournament: storedIncidents.filter(i => i.category === 'TOURNAMENT_CHECKIN_FAILED').length,
+      userReports: storedIncidents.filter(i => !!i.userNote || !!i.userContact).length
+    };
+    res.json({ success: true, incidents: storedIncidents, stats });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: "Failed to retrieve incidents" });
+  }
+});
+
+// DELETE /api/telemetry/incidents - Clear captured incident logs
+apiRouter.delete("/telemetry/incidents", (req, res) => {
+  try {
+    storedIncidents.length = 0;
+    res.json({ success: true, message: "Incident logs cleared" });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: "Failed to clear incidents" });
+  }
+});
+
+// GET /api/telemetry/config - Read alert config
+apiRouter.get("/telemetry/config", (req, res) => {
+  res.json({
+    success: true,
+    config: telemetryConfig
+  });
+});
+
+// POST /api/telemetry/config - Update alert config
+apiRouter.post("/telemetry/config", (req, res) => {
+  try {
+    const { adminAlertEmail, adminWhatsAppNumber, emailAlertsEnabled } = req.body;
+    if (adminAlertEmail && typeof adminAlertEmail === 'string') {
+      telemetryConfig.adminAlertEmail = adminAlertEmail.trim();
+    }
+    if (adminWhatsAppNumber && typeof adminWhatsAppNumber === 'string') {
+      telemetryConfig.adminWhatsAppNumber = adminWhatsAppNumber.replace(/[^0-9]/g, "");
+    }
+    if (typeof emailAlertsEnabled === 'boolean') {
+      telemetryConfig.emailAlertsEnabled = emailAlertsEnabled;
+    }
+    res.json({ success: true, config: telemetryConfig });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: "Failed to update telemetry config" });
+  }
+});
+
+// POST /api/telemetry/test-alert - Trigger verification test alert
+apiRouter.post("/telemetry/test-alert", async (req, res) => {
+  try {
+    const { targetEmail, targetPhone } = req.body;
+    const emailToUse = targetEmail || telemetryConfig.adminAlertEmail;
+    const phoneToUse = (targetPhone || telemetryConfig.adminWhatsAppNumber).replace(/[^0-9]/g, "");
+
+    const testIncident: IncidentEmailData = {
+      incidentId: "test_" + Date.now().toString(36),
+      category: "AI_GENERATION_FAILED",
+      title: "Test Alert: API Quota / Model Verification",
+      message: "This is a simulated verification alert to ensure your email & WhatsApp notifications are functioning properly.",
+      module: "AI PE Lesson Planner & Telemetry Hub",
+      details: {
+        testMode: true,
+        testedBy: "Admin Health Dashboard",
+        serverTime: new Date().toISOString()
+      },
+      userContext: {
+        email: emailToUse,
+        role: "System Administrator",
+        isGuest: false,
+        pageUrl: "https://smartpeindia.app/#logs"
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    const emailTpl = buildAdminIncidentAlertEmail(testIncident);
+    const emailRes = await dispatchEmail(emailToUse, emailTpl.subject, emailTpl.html, emailTpl.text);
+
+    const waText = `🚨 *SmartPE Test Alert: Notifications Working!*\n\n` +
+      `*System Status:* Active & Ready\n` +
+      `*Alert Email:* ${emailToUse}\n` +
+      `*Time:* ${new Date().toLocaleTimeString()} IST\n\n` +
+      `If you received this message, your SmartPE incident intimation is configured correctly!`;
+    const whatsappAlertUrl = `https://api.whatsapp.com/send?phone=${phoneToUse}&text=${encodeURIComponent(waText)}`;
+
+    res.json({
+      success: true,
+      emailResult: emailRes,
+      whatsappAlertUrl,
+      recipientEmail: emailToUse,
+      recipientPhone: phoneToUse
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to trigger test alert" });
   }
 });
 
@@ -694,10 +936,10 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
       if (m.includes("3.1-pro") || m.includes("pro-preview") || m.includes("pro")) {
         return "gemini-3.1-pro-preview";
       }
-      if (m.includes("flash-lite") || m.includes("lite")) {
-        return "gemini-3.1-flash-lite";
+      if (m.includes("3.8-flash") || m.includes("flash-large")) {
+        return "gemini-3.8-flash";
       }
-      return "gemini-3.8-flash";
+      return "gemini-3.1-flash-lite";
     };
 
     const resolvedModel = resolveModel(model);
@@ -719,7 +961,6 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
       const modelsToTry = [
         resolvedModel,
         "gemini-3.1-flash-lite",
-        "gemini-2.5-flash",
         "gemini-3.8-flash"
       ];
       const uniqueModels = [...new Set(modelsToTry)];
@@ -731,6 +972,8 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
         });
         
         for (const currentModel of uniqueModels) {
+          const perModelAbort = new AbortController();
+          const timeoutTimer = setTimeout(() => perModelAbort.abort(), 18000);
           try {
             const formattedContents = Array.isArray(contents) 
               ? contents 
@@ -748,15 +991,20 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
             const response = await ai.models.generateContent({
               model: currentModel,
               contents: formattedContents,
-              config: finalConfig
+              config: {
+                ...finalConfig,
+                abortSignal: perModelAbort.signal
+              }
             });
             
+            clearTimeout(timeoutTimer);
             return res.json({ 
               text: response.text, 
               provider: "gemini",
               model: currentModel 
             });
           } catch (modelErr: any) {
+            clearTimeout(timeoutTimer);
             console.warn(`Model ${currentModel} failed:`, modelErr?.message || modelErr);
             lastError = modelErr;
             continue;

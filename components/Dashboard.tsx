@@ -1768,7 +1768,6 @@ const Dashboard: React.FC<{
                 <div className="space-y-4">
                   <div className="inline-flex px-3 py-1 bg-white/10 text-[#D4A017] rounded-full text-[9px] font-black uppercase tracking-widest mb-2">Primary Module</div>
                   <h3 className="text-3xl font-black text-white uppercase tracking-tight font-display">School Fitness Ledger</h3>
-                  <p className="text-slate-200 font-medium">Store and organize student health records, daily fitness test results, and Khelo India battery scores in a centralized ledger.</p>
                 </div>
                 <div className="flex items-center space-x-3 text-[#D4A017] font-black text-[10px] uppercase tracking-[0.2em]">
                   <span>Access Fitness Ledger</span>

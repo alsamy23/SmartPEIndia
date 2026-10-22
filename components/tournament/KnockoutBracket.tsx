@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from '../../services/toast.ts';
 import { trackEvent } from '../../services/analytics.ts';
+import { reportTournamentFailure } from '../../services/telemetryService.ts';
 import ClassicSheetBracket from './ClassicSheetBracket.tsx';
 
 export interface Match {
@@ -523,10 +524,30 @@ export const KnockoutBracket: React.FC<KnockoutBracketProps> = ({
   };
 
   const handleGenerate = () => {
-    buildKnockoutBrackets();
-    setHasConfirmed(true);
-    toast.success("Knockout fixture generated successfully!");
-    trackEvent('tool_used', { tool_name: 'Knockout Bracket Generator' });
+    try {
+      if (teamsList.length < 2) {
+        toast.error("Please add at least 2 teams to generate a tournament fixture.");
+        reportTournamentFailure(
+          new Error("Tried to generate fixture with fewer than 2 teams"),
+          "Knockout Fixture Generator",
+          { teamsCount: teamsList.length }
+        ).catch(() => {});
+        return;
+      }
+      buildKnockoutBrackets();
+      setHasConfirmed(true);
+      toast.success("Knockout fixture generated successfully!");
+      trackEvent('tool_used', { tool_name: 'Knockout Bracket Generator' });
+    } catch (err: any) {
+      console.error("Fixture generation error:", err);
+      toast.error("Failed to generate fixture. Please check your team names and timings.");
+      reportTournamentFailure(err, "Knockout Bracket Generator", {
+        teamsCount: teamsList.length,
+        numDays,
+        startTime,
+        startDate
+      }).catch(() => {});
+    }
   };
 
   useEffect(() => {

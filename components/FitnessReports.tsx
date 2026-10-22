@@ -187,6 +187,12 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
             (data) => {
               setStudents(data);
               setLoading(false);
+              setSelectedId(prev => {
+                if (!prev && data.length > 0) {
+                  return data[0].id;
+                }
+                return prev;
+              });
             }
           );
         } else {
@@ -402,7 +408,16 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
   };
 
   const generateReport = React.useCallback(() => {
-    if (!selectedId && selectedType !== 'school') return;
+    let targetId = selectedId;
+    if (!targetId && selectedType !== 'school') {
+      if (students.length > 0) {
+        targetId = students[0].id;
+        setSelectedId(students[0].id);
+      } else {
+        toast.info("No students found. Click '⚡ Generate Dummy Student Data' below to test reports.");
+        return;
+      }
+    }
     
     setIsGenerating(true);
     
@@ -411,11 +426,11 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
       let data: any = {};
       
       if (selectedType === 'individual') {
-        const student = students.find(s => s.id === selectedId);
+        const student = students.find(s => s.id === targetId);
         // Use studentSpecificResults if available, fallback to general results filter
         const studentResults = studentSpecificResults.length > 0 
           ? studentSpecificResults 
-          : results.filter(r => r.studentId === selectedId);
+          : results.filter(r => r.studentId === targetId);
         
         // Group by term
         const byTerm: Record<string, FitnessResult[]> = {};
@@ -664,10 +679,11 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
         }
 
         data = {
-          title: `Fitness Report: ${student?.name}`,
-          subtitle: `Roll No: ${student?.rollNumber} | Grade: ${student?.grade}-${student?.section}`,
+          title: `Fitness Report: ${student?.name || 'Selected Student'}`,
+          subtitle: `Roll No: ${student?.rollNumber || '--'} | Grade: ${student?.grade || '--'}-${student?.section || '--'}`,
           student,
           studentResults, // Store filtered results directly
+          hasNoTestResults: studentResults.length === 0,
           byTerm,
           terms: ['Baseline', 'Term 1', 'Term 2', 'Final'].filter(t => byTerm[t]),
           overallSummary: computedSummary,
@@ -826,25 +842,21 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
     }, 1000);
   }, [selectedId, selectedType, students, results, teams, studentSpecificResults, dynamicClassOptions]);
 
-  useEffect(() => {
-    if (initialStudentId && students.length > 0 && results.length > 0) {
-      generateReport();
-    }
-  }, [initialStudentId, students.length, results.length, generateReport]);
-
-  // Auto generate report when scope is changed to 'school'
+  // Auto-generate report when a student or scope is selected
   useEffect(() => {
     if (selectedType === 'school' && students.length > 0) {
       generateReport();
+    } else if (selectedId && students.length > 0) {
+      generateReport();
     }
-  }, [selectedType, students.length, generateReport]);
+  }, [selectedId, selectedType, students.length, generateReport]);
 
-  // Also trigger if student results subscription updates for the selected student
+  // Also trigger when student results subscription updates for the selected student
   useEffect(() => {
     if (selectedType === 'individual' && selectedId && studentSpecificResults.length > 0) {
       generateReport();
     }
-  }, [studentSpecificResults.length, selectedId, selectedType]);
+  }, [studentSpecificResults.length, selectedId, selectedType, generateReport]);
 
   const handleGenerateDummyData = async () => {
     if (generatingDemo) return;
@@ -963,6 +975,68 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
       toast.error('Failed to create demo database entry in Firestore.');
     } finally {
       setGeneratingDemo(false);
+    }
+  };
+
+  const [seedingSingleStudent, setSeedingSingleStudent] = useState(false);
+
+  const handleSeedScoresForStudent = async (studentToSeed?: Student) => {
+    const student = studentToSeed || students.find(s => s.id === selectedId);
+    if (!student || seedingSingleStudent) return;
+
+    setSeedingSingleStudent(true);
+    try {
+      const teacherId = auth.currentUser?.uid || 'temp_teacher_id';
+      const schoolId = student.schoolId || userProfile?.schoolId || `personal_${teacherId}`;
+
+      const testsToSeed = [
+        { testId: 'bmi', testName: 'BMI (Height & Weight)', unit: 'kg/m²', valB: '18.4', valT1: '18.7' },
+        { testId: 'sprint_50m', testName: '50m Sprint Speed', unit: 'sec', valB: '9.3', valT1: '8.7' },
+        { testId: 'run_600m', testName: '600m Endurance Run', unit: 'min:sec', valB: '3:08', valT1: '2:52' },
+        { testId: 'broad_jump', testName: 'Standing Broad Jump', unit: 'cm', valB: '144', valT1: '158' },
+        { testId: 'sit_reach', testName: 'Sit & Reach Flexibility', unit: 'cm', valB: '14', valT1: '18' },
+        { testId: 'shuttle_4x10', testName: '4×10m Shuttle Run', unit: 'sec', valB: '13.4', valT1: '12.4' },
+      ];
+
+      const newResults: FitnessResult[] = [];
+      for (const t of testsToSeed) {
+        newResults.push({
+          id: `${student.id}_${t.testId}_baseline`,
+          teacherId,
+          schoolId,
+          studentId: student.id,
+          testId: t.testId,
+          testName: t.testName,
+          value: t.valB,
+          unit: t.unit,
+          date: '2024-09-15',
+          term: 'Baseline',
+          rating: 'Average'
+        });
+        newResults.push({
+          id: `${student.id}_${t.testId}_term1`,
+          teacherId,
+          schoolId,
+          studentId: student.id,
+          testId: t.testId,
+          testName: t.testName,
+          value: t.valT1,
+          unit: t.unit,
+          date: '2024-12-18',
+          term: 'Term 1',
+          rating: 'Good'
+        });
+      }
+
+      await Promise.all(newResults.map(r => fitnessService.saveResult(r)));
+      toast.success(`Successfully populated baseline and Term 1 fitness scores for ${student.name}!`);
+      setStudentSpecificResults(newResults);
+      generateReport();
+    } catch (err) {
+      console.error('Error generating scores for student:', err);
+      toast.error('Failed to populate test data');
+    } finally {
+      setSeedingSingleStudent(false);
     }
   };
 
@@ -2017,7 +2091,7 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
               <div className="flex flex-col gap-2.5">
                 <button 
                   onClick={generateReport}
-                  disabled={isGenerating || (!selectedId && selectedType !== 'school')}
+                  disabled={isGenerating}
                   className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
                 >
                   {isGenerating ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />}
@@ -2074,9 +2148,32 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
                 exit={{ opacity: 0 }}
                 className="bg-white border-4 border-dashed border-slate-100 rounded-[3rem] h-full flex flex-col items-center justify-center p-12 text-center text-slate-400 min-h-[500px]"
               >
-                <BarChart3 size={64} className="mb-6 text-slate-100" />
-                <h3 className="text-2xl font-black uppercase tracking-tight mb-2">No Report Selected</h3>
-                <p className="max-w-xs font-medium">Select a student or class and click generate to view the fitness analysis.</p>
+                <BarChart3 size={64} className="mb-6 text-slate-200" />
+                <h3 className="text-2xl font-black uppercase tracking-tight mb-2 text-slate-800">No Report Generated Yet</h3>
+                <p className="max-w-xs font-medium text-xs mb-6 text-slate-500">
+                  Select a student or class from the sidebar and click generate, or use the quick actions below.
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  {students.length > 0 ? (
+                    <button
+                      onClick={generateReport}
+                      disabled={isGenerating}
+                      className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-sm transition-all"
+                    >
+                      <Sparkles size={14} />
+                      <span>⚡ Generate Report for {students[0].name}</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleGenerateDummyData}
+                      disabled={generatingDemo}
+                      className="px-5 py-3 bg-[#0D2B52] hover:bg-[#164077] text-[#D4A017] border-2 border-slate-900 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-sm transition-all"
+                    >
+                      <Sparkles size={14} />
+                      <span>{generatingDemo ? 'Populating...' : '⚡ Generate Dummy Student Data'}</span>
+                    </button>
+                  )}
+                </div>
               </motion.div>
             ) : (
               <motion.div 
@@ -2211,6 +2308,33 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
                           </button>
                         </div>
                       </div>
+
+                      {/* Zero Results Prompt & 1-Click Seeder */}
+                      {reportData.hasNoTestResults && (
+                        <div className="p-6 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-amber-900 shadow-sm print:hidden">
+                          <div className="flex items-center gap-3">
+                            <div className="p-3 bg-amber-500 text-white rounded-xl shadow-xs">
+                              <Sparkles size={20} />
+                            </div>
+                            <div>
+                              <p className="font-black text-sm uppercase text-slate-900">
+                                No Fitness Assessment Records Found for {reportData.student?.name || 'Selected Student'}
+                              </p>
+                              <p className="text-xs text-slate-600 mt-0.5">
+                                This student is registered in the roster, but hasn't had test battery measurements logged yet. Auto-populate realistic sample scores across Baseline & Term 1 to test this report immediately.
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleSeedScoresForStudent(reportData.student)}
+                            disabled={seedingSingleStudent}
+                            className="px-5 py-3 bg-[#0D2B52] hover:bg-[#164077] text-[#D4A017] border-2 border-slate-900 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 shrink-0 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            {seedingSingleStudent ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                            <span>{seedingSingleStudent ? 'Populating...' : '⚡ Generate Sample Test Scores'}</span>
+                          </button>
+                        </div>
+                      )}
 
                       {/* Student Fitness Growth vs Class Averages (Recharts Line Chart) */}
                       {reportData.student && (

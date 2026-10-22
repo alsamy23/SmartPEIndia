@@ -82,6 +82,7 @@ import { GlobalSearch } from './components/GlobalSearch.tsx';
 import { VoiceAgentModal } from './components/VoiceAgentModal.tsx';
 import { SpotlightBanner, SpotlightData } from './components/SpotlightBanner.tsx';
 import { FloatingVoiceAgentButton } from './components/FloatingVoiceAgentButton.tsx';
+import { UserSupportModal } from './components/UserSupportModal.tsx';
 import { logError } from './services/logService.ts';
 import { fitnessService } from './services/fitnessService.ts';
 import { auth } from './services/firebase.ts';
@@ -106,9 +107,6 @@ const getInitialTab = (): Tab => {
     'ai-pe-lesson-planner': 'ai-pe-lesson-planner',
     'physical-education-assessment': 'physical-education-assessment',
   };
-
-  if (seoPathMap[path]) return seoPathMap[path];
-  if (seoPathMap[hash]) return seoPathMap[hash];
 
   const hashToTab: Record<string, Tab> = {
     'physical-development': 'physical-development',
@@ -142,6 +140,9 @@ const getInitialTab = (): Tab => {
     'contact': 'contact'
   };
 
+  if (seoPathMap[path]) return seoPathMap[path];
+  if (hashToTab[path]) return hashToTab[path];
+  if (seoPathMap[hash]) return seoPathMap[hash];
   if (hashToTab[hash]) return hashToTab[hash];
 
   const savedWs = localStorage.getItem('smartpe_active_workspace');
@@ -1250,6 +1251,9 @@ const App: React.FC = () => {
               }
             }}
           />
+
+          {/* Instant WhatsApp Support & Automated Problem Reporter */}
+          <UserSupportModal />
 
           {/* Mobile Bottom Navigation - Displayed exclusively for School PE, hidden in Coaching & Academy to avoid layout collision */}
           {activeWorkspace !== 'academy' && activeTab !== 'coaching-academy' && activeTab !== 'coaching-assessment' && (

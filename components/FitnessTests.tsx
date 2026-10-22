@@ -56,6 +56,7 @@ import { fitnessService, Student, KIFT_BATTERIES } from '../services/fitnessServ
 import { calculateExactBMI, parseFitnessValue, getDescriptiveFieldInfo } from '../utils/bmiUtils.ts';
 import { auth } from '../services/firebase.ts';
 import { toast } from '../services/toast.ts';
+import { reportFitnessTestFailure } from '../services/telemetryService.ts';
 import GamesProficiencyGenerator from './GamesProficiencyGenerator.tsx';
 import { TestGuideModal } from './fitness/TestGuideModal.tsx';
 import { TestVideoModal } from './fitness/TestVideoModal.tsx';
@@ -262,8 +263,12 @@ const FitnessTests: React.FC = () => {
           unsubResults = fitnessService.subscribeToResults(auth.currentUser.uid, schoolId, isAdmin, (fetched) => {
             setAllResults(fetched);
           });
-        } catch (err) {
+        } catch (err: any) {
           console.error("Error subscribing to data in FitnessTests:", err);
+          reportFitnessTestFailure(err, "Roster / Test Data Subscription", {
+            uid: auth.currentUser.uid,
+            schoolId: profile?.schoolId
+          }).catch(() => {});
         }
       }
     };

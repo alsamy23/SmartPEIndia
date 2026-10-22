@@ -255,8 +255,8 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate, onOpenVo
         <input
           ref={inputRef}
           type="text"
-          className="block w-full pl-10 pr-28 py-2.5 bg-white/90 backdrop-blur-md border border-slate-200 rounded-xl leading-5 placeholder-slate-400 text-slate-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all text-xs font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
-          placeholder="Search students, tools, or theory (Ctrl+K)..."
+          className="block w-full pl-10 pr-48 sm:pr-52 py-2.5 bg-white/90 backdrop-blur-md border border-slate-200 rounded-xl leading-5 placeholder-slate-400 text-slate-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all text-xs font-bold shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
+          placeholder="Search students, tools, or theory..."
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);

@@ -19,6 +19,7 @@ import { sendAutomatedWelcomeEmail } from '../services/emailService.ts';
 import { academicCoachingCloudService, AcademicCoachingProgram } from '../services/academicCoachingCloudService.ts';
 import { PrivacyNoticeModal } from './privacy/PrivacyNoticeModal.tsx';
 import { userActivityService } from '../services/userActivityService.ts';
+import { reportAuthFailure, buildWhatsAppSupportUrl } from '../services/telemetryService.ts';
 
 interface AuthProps {
   onBack?: () => void;
@@ -443,6 +444,13 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
       }
       
       setError(userFriendlyMessage);
+
+      // Report to telemetry so the admin receives email & WhatsApp intimation
+      reportAuthFailure(err, isLogin ? 'User Sign-In' : 'User Sign-Up', {
+        email: email.trim(),
+        workspaceType,
+        friendlyMessage: userFriendlyMessage
+      }).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -710,7 +718,20 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             )}
 
             {error && (
-              <p className="text-red-500 text-xs font-bold px-2">{error}</p>
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1.5">
+                <p className="text-rose-600 text-xs font-bold">{error}</p>
+                <div className="flex items-center justify-between pt-1 border-t border-rose-100">
+                  <span className="text-[10px] text-slate-500 font-medium">Need help logging in?</span>
+                  <a
+                    href={buildWhatsAppSupportUrl('919443389025', undefined, `Hi SmartPE Support, I am unable to login with email ${email}. Error: ${error}`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-black text-emerald-700 hover:text-emerald-800 flex items-center gap-1 uppercase tracking-wider"
+                  >
+                    <span>WhatsApp Help →</span>
+                  </a>
+                </div>
+              </div>
             )}
 
             {!isLogin && (

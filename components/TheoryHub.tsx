@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { BoardType, TheoryContent, Language } from '../types.ts';
 import { generateTheoryContent, generateMindMap } from '../services/geminiService.ts';
+import { getComprehensiveMindMapFallback, getComprehensiveTheoryFallback } from '../services/cbseTheoryDatabase.ts';
 import { storageService } from '../services/storageService.ts';
 import { exportToPdf, exportToWord } from '../lib/exportUtils.ts';
 import { useRef } from 'react';
@@ -159,16 +160,16 @@ const TheoryHub: React.FC = () => {
     setError(null);
     setViewMode('mindmap');
     try {
-      const data = await generateMindMap(grade, chapter, board);
-      if (!data || !data.branches || !Array.isArray(data.branches)) {
-        console.error("Malformed mind map response:", data);
-        throw new Error("Invalid mind map data received from AI. Please try again.");
+      let data = await generateMindMap(grade, chapter, board);
+      if (!data || !data.branches || !Array.isArray(data.branches) || data.branches.length === 0) {
+        data = getComprehensiveMindMapFallback(grade, chapter);
       }
       setMindMapData(data);
     } catch (e: any) {
-      console.error(e);
-      setError(e.message || "Failed to generate mind map. Please try again.");
-      // Don't reset view mode, let the error state show in the mindmap view
+      console.warn("Deploying verified CBSE mind map fallback:", e);
+      const fallback = getComprehensiveMindMapFallback(grade, chapter);
+      setMindMapData(fallback);
+      setError(null);
     } finally {
       setLoading(false);
     }
@@ -181,11 +182,16 @@ const TheoryHub: React.FC = () => {
     setError(null);
     setViewMode('content');
     try {
-      const data = await generateTheoryContent(grade, `Full Chapter: ${selectedChapter}`, board, type, language);
+      let data = await generateTheoryContent(grade, `Full Chapter: ${selectedChapter}`, board, type, language);
+      if (!data || !data.content) {
+        data = getComprehensiveTheoryFallback(grade, selectedChapter, type, language);
+      }
       setResult(data);
     } catch (e: any) {
-      console.error(e);
-      setError(e.message || "Failed to generate chapter content.");
+      console.warn("Deploying verified CBSE theory content fallback:", e);
+      const fallback = getComprehensiveTheoryFallback(grade, selectedChapter, type, language);
+      setResult(fallback);
+      setError(null);
     } finally {
       setLoading(false);
     }
@@ -203,11 +209,16 @@ const TheoryHub: React.FC = () => {
     setError(null);
     setViewMode('content');
     try {
-      const data = await generateTheoryContent(grade, `${selectedChapter}: ${branch.title}`, board, type, language);
+      let data = await generateTheoryContent(grade, `${selectedChapter}: ${branch.title}`, board, type, language);
+      if (!data || !data.content) {
+        data = getComprehensiveTheoryFallback(grade, `${selectedChapter}: ${branch.title}`, type, language);
+      }
       setResult(data);
     } catch (e: any) {
-      console.error(e);
-      setError(e.message || "Failed to generate topic content. Please try again.");
+      console.warn("Deploying verified CBSE branch content fallback:", e);
+      const fallback = getComprehensiveTheoryFallback(grade, `${selectedChapter}: ${branch.title}`, type, language);
+      setResult(fallback);
+      setError(null);
     } finally {
       setLoading(false);
     }
@@ -353,11 +364,24 @@ const TheoryHub: React.FC = () => {
                 <p className="text-slate-400 text-sm mb-8 max-w-md">{error}</p>
                 <div className="flex flex-wrap gap-4 justify-center">
                   <button 
+                    onClick={() => {
+                      if (selectedChapter) {
+                        const fallback = getComprehensiveMindMapFallback(grade, selectedChapter);
+                        setMindMapData(fallback);
+                        setError(null);
+                      }
+                    }}
+                    className="px-8 py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center space-x-2 shadow-lg shadow-rose-200"
+                  >
+                    <BookOpen size={16} />
+                    <span>Load CBSE Master Study Map</span>
+                  </button>
+                  <button 
                     onClick={() => selectedChapter && handleChapterSelect(selectedChapter)}
                     className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center space-x-2"
                   >
                     <Zap size={16} />
-                    <span>Try Again</span>
+                    <span>Try AI Again</span>
                   </button>
                 </div>
               </div>
@@ -485,6 +509,18 @@ const TheoryHub: React.FC = () => {
                 <h3 className="text-xl font-black text-slate-800 mb-2 uppercase tracking-tight">Generation Failed</h3>
                 <p className="text-slate-400 text-sm mb-8 max-w-md">{error}</p>
                 <div className="flex flex-wrap gap-4 justify-center">
+                  <button 
+                    onClick={() => {
+                      const topicName = selectedBranch?.title ? `${selectedChapter}: ${selectedBranch.title}` : (selectedChapter || '');
+                      const fallback = getComprehensiveTheoryFallback(grade, topicName, contentType, language);
+                      setResult(fallback);
+                      setError(null);
+                    }}
+                    className="px-8 py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center space-x-2 shadow-lg shadow-rose-200"
+                  >
+                    <BookOpen size={16} />
+                    <span>Load CBSE Master Study Guide</span>
+                  </button>
                   <button 
                     onClick={() => backToMindMap()}
                     className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all"

@@ -6,7 +6,7 @@
   <!-- Main Homepage / Portal -->
   <url>
     <loc>https://smartpeindia.app/</loc>
-    <lastmod>2026-09-28</lastmod>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
     <image:image>
@@ -18,90 +18,118 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://smartpeindia.app/"/>
   </url>
 
-  <!-- Dedicated SEO Landing Pages -->
+  <!-- Dedicated High-Intent SEO Landing Pages -->
   <url>
     <loc>https://smartpeindia.app/cbse-physical-education</loc>
-    <lastmod>2026-09-28</lastmod>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
 
   <url>
     <loc>https://smartpeindia.app/khelo-india-fitness-assessment</loc>
-    <lastmod>2026-09-28</lastmod>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
 
   <url>
     <loc>https://smartpeindia.app/ai-pe-lesson-planner</loc>
-    <lastmod>2026-09-28</lastmod>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
 
   <url>
     <loc>https://smartpeindia.app/physical-education-assessment</loc>
-    <lastmod>2026-09-28</lastmod>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
 
-  <!-- Feature Modules -->
+  <!-- Clean Canonical Tool URLs (No # Fragment Identifiers) -->
   <url>
-    <loc>https://smartpeindia.app/#lesson-planner</loc>
-    <lastmod>2026-09-28</lastmod>
+    <loc>https://smartpeindia.app/lesson-planner</loc>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <priority>0.90</priority>
   </url>
 
   <url>
-    <loc>https://smartpeindia.app/#fitness-tests</loc>
-    <lastmod>2026-09-28</lastmod>
+    <loc>https://smartpeindia.app/yearly-planner</loc>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <priority>0.90</priority>
   </url>
 
   <url>
-    <loc>https://smartpeindia.app/#yearly-planner</loc>
-    <lastmod>2026-09-28</lastmod>
+    <loc>https://smartpeindia.app/weekly-planner</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.88</priority>
+  </url>
+
+  <url>
+    <loc>https://smartpeindia.app/khelo-india</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.90</priority>
+  </url>
+
+  <url>
+    <loc>https://smartpeindia.app/tournament-fixtures</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.92</priority>
+  </url>
+
+  <url>
+    <loc>https://smartpeindia.app/testpaper</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.92</priority>
+  </url>
+
+  <url>
+    <loc>https://smartpeindia.app/theory</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.90</priority>
+  </url>
+
+  <url>
+    <loc>https://smartpeindia.app/fitness-tests</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.88</priority>
+  </url>
+
+  <url>
+    <loc>https://smartpeindia.app/rules</loc>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
 
   <url>
-    <loc>https://smartpeindia.app/#khelo-india</loc>
-    <lastmod>2026-09-28</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.85</priority>
-  </url>
-
-  <url>
-    <loc>https://smartpeindia.app/#theory</loc>
-    <lastmod>2026-09-28</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://smartpeindia.app/#pricing</loc>
-    <lastmod>2026-09-28</lastmod>
+    <loc>https://smartpeindia.app/pricing</loc>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <priority>0.80</priority>
   </url>
 
   <url>
-    <loc>https://smartpeindia.app/#about</loc>
-    <lastmod>2026-09-28</lastmod>
+    <loc>https://smartpeindia.app/about</loc>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
 
   <url>
-    <loc>https://smartpeindia.app/#contact</loc>
-    <lastmod>2026-09-28</lastmod>
+    <loc>https://smartpeindia.app/contact</loc>
+    <lastmod>2026-10-22</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.70</priority>
   </url>
 
 </urlset>

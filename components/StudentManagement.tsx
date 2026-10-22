@@ -69,6 +69,7 @@ const StudentManagement: React.FC<StudentManagementProps> = ({ onNavigate, onSel
   const [isBulkPurgeModalOpen, setIsBulkPurgeModalOpen] = useState(false);
   const [deleteProgressText, setDeleteProgressText] = useState('');
   const [seedingGrade12, setSeedingGrade12] = useState(false);
+  const [seedingDemoSchool, setSeedingDemoSchool] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const isSuperAdmin = isBrandSuperAdmin(auth.currentUser?.email);
@@ -91,10 +92,36 @@ const StudentManagement: React.FC<StudentManagementProps> = ({ onNavigate, onSel
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", "student_import_template.csv");
+    link.setAttribute("download", "student_import_template_blank.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleDownloadSampleCsv = () => {
+    const csvContent = 
+`Name,Roll Number,Grade,Section,Gender,Age
+Aarav Patel,501,5,A,Male,10
+Ananya Sharma,502,5,A,Female,10
+Kabir Roy,503,5,B,Male,11
+Diya Iyer,801,8,A,Female,13
+Rohan Gupta,802,8,A,Male,13
+Ishita Sen,803,8,B,Female,14
+Mohammed Farhan,1001,10,A,Male,15
+Sneha Reddy,1002,10,A,Female,15
+Vikram Joshi,1003,10,B,Male,16
+Arjun Malhotra,1201,12,A,Male,17
+Tanvi Nair,1202,12,A,Female,17
+Kabir Dutt,1203,12,B,Male,18`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "smartpe_sample_students_dummy_data.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Downloaded sample CSV with 12 pre-filled students ready to import!");
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -403,6 +430,131 @@ const StudentManagement: React.FC<StudentManagementProps> = ({ onNavigate, onSel
       toast.error('Failed to seed Grade 12 students');
     } finally {
       setSeedingGrade12(false);
+    }
+  };
+
+  const handleSeedDemoSchoolAndStudents = async () => {
+    if (seedingDemoSchool) return;
+    setSeedingDemoSchool(true);
+    try {
+      const currentTeacherId = auth.currentUser?.uid || 'guest_teacher';
+      const schoolId = userProfile?.schoolId || (auth.currentUser ? `personal_${auth.currentUser.uid}` : 'master_registry');
+
+      const demoStudents: Student[] = [
+        // Primary - Class 5
+        { id: `demo_501_${Date.now()}`, rollNumber: '501', name: 'Aarav Patel', grade: '5', section: 'A', gender: 'Male', age: 10, schoolId, teacherId: currentTeacherId, attendance: 95, performance: 'Excellent' },
+        { id: `demo_502_${Date.now()}`, rollNumber: '502', name: 'Ananya Sharma', grade: '5', section: 'A', gender: 'Female', age: 10, schoolId, teacherId: currentTeacherId, attendance: 92, performance: 'Good' },
+        { id: `demo_503_${Date.now()}`, rollNumber: '503', name: 'Kabir Roy', grade: '5', section: 'B', gender: 'Male', age: 11, schoolId, teacherId: currentTeacherId, attendance: 88, performance: 'Good' },
+
+        // Middle - Class 8
+        { id: `demo_801_${Date.now()}`, rollNumber: '801', name: 'Diya Iyer', grade: '8', section: 'A', gender: 'Female', age: 13, schoolId, teacherId: currentTeacherId, attendance: 96, performance: 'Excellent' },
+        { id: `demo_802_${Date.now()}`, rollNumber: '802', name: 'Rohan Gupta', grade: '8', section: 'A', gender: 'Male', age: 13, schoolId, teacherId: currentTeacherId, attendance: 90, performance: 'Good' },
+        { id: `demo_803_${Date.now()}`, rollNumber: '803', name: 'Ishita Sen', grade: '8', section: 'B', gender: 'Female', age: 14, schoolId, teacherId: currentTeacherId, attendance: 94, performance: 'Excellent' },
+
+        // Secondary - Class 10
+        { id: `demo_1001_${Date.now()}`, rollNumber: '1001', name: 'Mohammed Farhan', grade: '10', section: 'A', gender: 'Male', age: 15, schoolId, teacherId: currentTeacherId, attendance: 91, performance: 'Good' },
+        { id: `demo_1002_${Date.now()}`, rollNumber: '1002', name: 'Sneha Reddy', grade: '10', section: 'A', gender: 'Female', age: 15, schoolId, teacherId: currentTeacherId, attendance: 97, performance: 'Excellent' },
+        { id: `demo_1003_${Date.now()}`, rollNumber: '1003', name: 'Vikram Joshi', grade: '10', section: 'B', gender: 'Male', age: 16, schoolId, teacherId: currentTeacherId, attendance: 86, performance: 'Average' },
+
+        // Senior CBSE - Class 12
+        { id: `demo_1201_${Date.now()}`, rollNumber: '1201', name: 'Arjun Malhotra', grade: '12', section: 'A', gender: 'Male', age: 17, schoolId, teacherId: currentTeacherId, attendance: 95, performance: 'Excellent' },
+        { id: `demo_1202_${Date.now()}`, rollNumber: '1202', name: 'Tanvi Nair', grade: '12', section: 'A', gender: 'Female', age: 17, schoolId, teacherId: currentTeacherId, attendance: 98, performance: 'Excellent' },
+        { id: `demo_1203_${Date.now()}`, rollNumber: '1203', name: 'Kabir Dutt', grade: '12', section: 'B', gender: 'Male', age: 18, schoolId, teacherId: currentTeacherId, attendance: 89, performance: 'Good' },
+      ];
+
+      // Save student roster
+      await fitnessService.bulkSaveStudents(demoStudents);
+
+      // Create multi-term test scores for all demo students
+      const demoResults: FitnessResult[] = [];
+      const testBatteries = [
+        { testId: 'bmi', testName: 'BMI (Height & Weight)', unit: 'kg/m²', valB: 18.2, valT1: 18.6 },
+        { testId: 'sprint_50m', testName: '50m Sprint Speed', unit: 'sec', valB: 9.6, valT1: 9.0 },
+        { testId: 'run_600m', testName: '600m Endurance Run', unit: 'min:sec', valB: '3:15', valT1: '2:58' },
+        { testId: 'sit_reach', testName: 'Sit & Reach Flexibility', unit: 'cm', valB: 14, valT1: 17 },
+        { testId: 'broad_jump', testName: 'Standing Broad Jump', unit: 'cm', valB: 142, valT1: 156 },
+        { testId: 'shuttle_4x10', testName: '4×10m Shuttle Run', unit: 'sec', valB: 13.8, valT1: 12.9 },
+      ];
+
+      for (const st of demoStudents) {
+        const ageOffset = (st.age - 10) * 0.1;
+        for (const tb of testBatteries) {
+          let valBStr = String(tb.valB);
+          let valT1Str = String(tb.valT1);
+          if (typeof tb.valB === 'number' && typeof tb.valT1 === 'number') {
+            const numB = (tb.valB + (st.gender === 'Male' ? 0.3 : -0.2) + ageOffset).toFixed(1);
+            const numT1 = (tb.valT1 + (st.gender === 'Male' ? 0.3 : -0.2) + ageOffset).toFixed(1);
+            valBStr = numB;
+            valT1Str = numT1;
+          }
+
+          demoResults.push({
+            id: `${st.id}_${tb.testId}_baseline`,
+            teacherId: currentTeacherId,
+            schoolId,
+            studentId: st.id,
+            testId: tb.testId,
+            testName: tb.testName,
+            value: valBStr,
+            unit: tb.unit,
+            date: '2024-09-12',
+            term: 'Baseline',
+            rating: 'Average'
+          });
+
+          demoResults.push({
+            id: `${st.id}_${tb.testId}_term1`,
+            teacherId: currentTeacherId,
+            schoolId,
+            studentId: st.id,
+            testId: tb.testId,
+            testName: tb.testName,
+            value: valT1Str,
+            unit: tb.unit,
+            date: '2024-12-15',
+            term: 'Term 1',
+            rating: 'Good'
+          });
+        }
+      }
+
+      await Promise.all(demoResults.map(r => fitnessService.saveResult(r)));
+
+      // Save CBSE Practical 30-mark assessments for Class 12 students
+      const grade12Students = demoStudents.filter(s => s.grade === '12');
+      for (const g12 of grade12Students) {
+        await fitnessService.savePracticalAssessment({
+          id: `practical_${g12.id}`,
+          studentId: g12.id,
+          studentName: g12.name,
+          rollNumber: g12.rollNumber,
+          grade: g12.grade,
+          section: g12.section,
+          gender: g12.gender,
+          academicYear: '2024-25',
+          examType: 'CBSE Board Practical Final',
+          schoolId,
+          teacherId: currentTeacherId,
+          date: '2025-01-20',
+          fitnessTestScore: 6,
+          yogicPracticesScore: 6,
+          gameProficiencyScore: 7,
+          recordFileScore: 4,
+          vivaVoceScore: 4,
+          totalMarks: 27,
+          totalMarksInWords: 'Twenty Seven',
+          examinerRemarks: 'Exemplary physical aptitude, consistent leadership in games, and fluent viva responses.',
+          status: 'completed'
+        });
+      }
+
+      setSelectedGrade('all');
+      toast.success('Successfully populated 12 sample students across Classes 5, 8, 10 & 12 with Baseline & Term 1 Fitness Test results & CBSE Practicals!');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to seed demo school data');
+    } finally {
+      setSeedingDemoSchool(false);
     }
   };
 
@@ -889,6 +1041,15 @@ const StudentManagement: React.FC<StudentManagementProps> = ({ onNavigate, onSel
             </button>
           )}
           <button 
+            onClick={handleSeedDemoSchoolAndStudents}
+            disabled={seedingDemoSchool}
+            className="px-5 py-3 bg-[#0D2B52] hover:bg-[#164077] text-[#D4A017] border-2 border-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            title="Populate 12 sample students across Classes 5, 8, 10, 12 with full multi-term fitness results and CBSE practicals"
+          >
+            {seedingDemoSchool ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            <span>⚡ Seed Demo School (12 Students)</span>
+          </button>
+          <button 
             onClick={() => setIsImporting(true)}
             className="px-6 py-3 bg-white border-2 border-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center gap-2"
           >
@@ -1198,14 +1359,23 @@ const StudentManagement: React.FC<StudentManagementProps> = ({ onNavigate, onSel
                     </div>
 
                     <div className="pt-2 flex flex-wrap items-center justify-center gap-2.5">
+                      <button
+                        onClick={handleSeedDemoSchoolAndStudents}
+                        disabled={seedingDemoSchool}
+                        className="px-4 py-2.5 bg-[#0D2B52] hover:bg-[#164077] text-[#D4A017] border-2 border-slate-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                        title="Seed 12 students across Classes 5, 8, 10 & 12 with multi-term fitness scores & practicals"
+                      >
+                        {seedingDemoSchool ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                        <span>⚡ Seed Demo School (12 Students)</span>
+                      </button>
                       {(selectedGrade === '12' || selectedGrade === 'all') && (
                         <button
                           onClick={handleSeedGrade12Batch}
                           disabled={seedingGrade12}
-                          className="px-4 py-2.5 bg-[#0D2B52] hover:bg-[#164077] text-[#D4A017] border-2 border-slate-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white border-2 border-slate-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
                         >
                           {seedingGrade12 ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                          <span>⚡ Quick Add 10 Class 12 Students</span>
+                          <span>⚡ Quick Add 10 Class 12</span>
                         </button>
                       )}
                       <button 
@@ -1978,18 +2148,48 @@ const StudentManagement: React.FC<StudentManagementProps> = ({ onNavigate, onSel
                 </label>
               </div>
 
-              <div className="p-6 bg-indigo-50 rounded-2xl flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Getting Started</p>
-                  <p className="text-xs font-black text-indigo-900 uppercase tracking-tight">Need a template?</p>
+              <div className="p-6 bg-indigo-50 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-0.5">CSV Downloads</p>
+                    <p className="text-xs font-black text-indigo-900 uppercase tracking-tight">Need Starter Data or Template?</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={handleDownloadTemplate}
+                      className="px-3 py-2 bg-white border-2 border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:bg-indigo-100 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                      title="Download blank CSV template"
+                    >
+                      <Download size={13} />
+                      <span>Blank Template</span>
+                    </button>
+                    <button 
+                      onClick={handleDownloadSampleCsv}
+                      className="px-3 py-2 bg-indigo-600 border-2 border-indigo-700 rounded-xl text-[10px] font-black uppercase tracking-widest text-white hover:bg-indigo-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                      title="Download sample CSV populated with 12 dummy students across Classes 5, 8, 10, 12"
+                    >
+                      <Sparkles size={13} />
+                      <span>Sample Dummy CSV</span>
+                    </button>
+                  </div>
                 </div>
-                <button 
-                  onClick={handleDownloadTemplate}
-                  className="px-4 py-2 bg-white border-2 border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:bg-indigo-50 transition-all flex items-center gap-2"
-                >
-                  <Download size={14} />
-                  <span>Template</span>
-                </button>
+
+                <div className="pt-3 border-t border-indigo-200/60 flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-indigo-800">
+                    Or skip CSV upload & seed right now into Firestore:
+                  </span>
+                  <button
+                    onClick={() => {
+                      handleSeedDemoSchoolAndStudents();
+                      setIsImporting(false);
+                    }}
+                    disabled={seedingDemoSchool}
+                    className="px-3 py-1.5 bg-[#0D2B52] hover:bg-[#164077] text-[#D4A017] rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {seedingDemoSchool ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                    <span>⚡ Instant Seed School</span>
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>

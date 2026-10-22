@@ -2,6 +2,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
 import { logError } from '../services/logService';
+import { isBenignError } from '../services/telemetryService';
 
 interface Props {
   children: ReactNode;
@@ -28,20 +29,20 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   private handleGlobalError = (event: ErrorEvent) => {
+    const error = event.error || event.message;
+    const msg = error instanceof Error ? error.message : String(error || '');
+    if (isBenignError(msg, error)) return;
+
     console.error('Caught global error:', event.error);
-    logError(event.error || event.message, 'error');
+    logError(error, 'error');
   };
 
   private handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-    let reason = event.reason;
+    const reason = event.reason;
     if (!reason) return; // Ignore empty rejections
 
     let message = "Unknown promise rejection";
-    
     if (reason instanceof Error) {
-      if (reason.name === 'AbortError' || reason.message.includes('WebSocket') || reason.message.includes('fetch')) {
-        return; // Ignore common network/abort errors
-      }
       message = reason.message;
     } else if (typeof reason === 'string') {
       message = reason;
@@ -51,6 +52,10 @@ class ErrorBoundary extends Component<Props, State> {
       } catch (e) {
         message = "Object rejection (could not stringify)";
       }
+    }
+
+    if (isBenignError(message, reason)) {
+      return; // Ignore benign environment noise
     }
 
     console.warn('Caught unhandled promise rejection:', reason);
