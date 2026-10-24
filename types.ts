@@ -159,6 +159,8 @@ export interface YearlyPlan {
         dates: string;
         topic: string;
         details: string;
+        theoryTopic?: string;
+        gameSkill?: string;
       }[];
     }[];
   }[];

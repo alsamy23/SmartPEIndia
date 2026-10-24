@@ -8,6 +8,7 @@ import {
 import { toast } from '../../services/toast.ts';
 import { trackEvent } from '../../services/analytics.ts';
 import { PRESET_SCHOOLS } from './KnockoutBracket.tsx';
+import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
 
 export interface RoundRobinMatch {
   id: number;
@@ -83,8 +84,27 @@ export const RoundRobinLeague: React.FC<RoundRobinLeagueProps> = ({
   // Generated Matches & Scores State
   const [matches, setMatches] = useState<RoundRobinMatch[]>([]);
   const [hasGenerated, setHasGenerated] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const printAreaRef = useRef<HTMLDivElement>(null);
+
+  const handleWhatsAppQuickShare = () => {
+    const sample = matches.slice(0, 5).map((m, i) => `• *Match ${m.id}* (${m.time}): ${m.team1} vs ${m.team2}`).join('\n');
+    const msg = 
+`🏆 *ROUND ROBIN LEAGUE FIXTURES*
+📌 *Tournament:* ${tournamentName} (${category})
+📅 *Date:* ${startDate} | 👥 *Teams:* ${teamsList.length} Teams
+🔄 *Format:* Round Robin League (${leagueType === 'single' ? 'Single Leg' : 'Double Leg'})
+📊 *Total Matches:* ${matches.length} Matches
+
+📋 *OPENING MATCHES:*
+${sample}
+${matches.length > 5 ? `\n• ... and ${matches.length - 5} more matches.` : ''}
+
+Generated via SmartPE India Official Tournament Studio.`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+    toast.success("Opening WhatsApp with league schedule!");
+  };
 
   // Team roster handlers
   const handleNumTeamsChange = (n: number) => {
@@ -502,41 +522,59 @@ export const RoundRobinLeague: React.FC<RoundRobinLeagueProps> = ({
       {/* Fixture Schedule & Live Table */}
       {hasGenerated && matches.length > 0 && (
         <div className="space-y-6" ref={printAreaRef}>
-          {/* Sub Tab Switcher */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900 text-white p-6 rounded-3xl">
+          {/* Sub Tab Switcher with Brand Palette and Actions */}
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-[#0D2B52] text-white p-4 md:p-6 rounded-3xl border border-[#164077] shadow-lg">
             <div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-[#D4A017] block mb-1">
+                Round Robin League Workspace
+              </span>
               <h3 className="text-xl font-black uppercase tracking-tight">{tournamentName}</h3>
-              <p className="text-xs text-slate-400 font-bold mt-1">{subTitle} • {category} Round Robin</p>
+              <p className="text-xs text-slate-300 font-bold mt-0.5">{subTitle} • {category} Round Robin</p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setActiveSubTab('fixtures')}
-                className={`px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all ${
-                  activeSubTab === 'fixtures' ? 'bg-white text-slate-900' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                <ListFilter size={16} />
-                <span>Fixtures ({matches.length})</span>
-              </button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+              <div className="bg-[#08182D]/90 p-1.5 rounded-2xl border border-white/10 grid grid-cols-2 gap-1 sm:flex sm:items-center">
+                <button 
+                  onClick={() => setActiveSubTab('fixtures')}
+                  className={`px-3 py-2 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+                    activeSubTab === 'fixtures' ? 'bg-[#059669] text-white shadow-md' : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <ListFilter size={15} />
+                  <span>Fixtures ({matches.length})</span>
+                </button>
 
-              <button 
-                onClick={() => setActiveSubTab('table')}
-                className={`px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all ${
-                  activeSubTab === 'table' ? 'bg-white text-slate-900' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                <Table size={16} />
-                <span>Standings Table</span>
-              </button>
+                <button 
+                  onClick={() => setActiveSubTab('table')}
+                  className={`px-3 py-2 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+                    activeSubTab === 'table' ? 'bg-[#059669] text-white shadow-md' : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <Table size={15} />
+                  <span>Standings Table</span>
+                </button>
+              </div>
 
-              <button 
-                onClick={handleTriggerPrint}
-                className="px-4 py-2.5 bg-indigo-500 hover:bg-indigo-400 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2"
-              >
-                <Printer size={16} />
-                <span>Print</span>
-              </button>
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleWhatsAppQuickShare}
+                  className="flex-1 sm:flex-initial px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95"
+                  title="Share league fixtures to WhatsApp"
+                >
+                  <Share2 size={14} />
+                  <span>WhatsApp</span>
+                </button>
+
+                <button 
+                  onClick={() => setIsPrintModalOpen(true)}
+                  className="flex-1 sm:flex-initial px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95"
+                  title="Open interactive print preview with A4/A3 page sizing and Word export"
+                >
+                  <Printer size={14} />
+                  <span>Print Preview</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -673,6 +711,28 @@ export const RoundRobinLeague: React.FC<RoundRobinLeagueProps> = ({
           )}
         </div>
       )}
+
+      {/* Interactive Print Preview Modal with A4/A3 sizing, Word export and WhatsApp share */}
+      <TournamentPrintPreviewModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        tournamentName={tournamentName}
+        subTitle={subTitle}
+        category={category}
+        sport="Football"
+        startDate={startDate}
+        startTime={startTime}
+        format="roundrobin"
+        teamsList={teamsList}
+        matches={matches.map(m => ({
+          name: `Match ${m.id}`,
+          roundName: `Round ${m.roundNumber}`,
+          team1: m.team1,
+          team2: m.team2,
+          date: m.date || startDate,
+          time: m.time
+        }))}
+      />
     </div>
   );
 };

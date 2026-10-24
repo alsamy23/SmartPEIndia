@@ -9,6 +9,7 @@ import { toast } from '../../services/toast.ts';
 import { trackEvent } from '../../services/analytics.ts';
 import { reportTournamentFailure } from '../../services/telemetryService.ts';
 import ClassicSheetBracket from './ClassicSheetBracket.tsx';
+import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
 
 export interface Match {
   id: number;
@@ -188,8 +189,29 @@ export const KnockoutBracket: React.FC<KnockoutBracketProps> = ({
   // Computed Schedule Bracket Data
   const [generatedRounds, setGeneratedRounds] = useState<any[]>([]);
   const [thirdPlaceMatch, setThirdPlaceMatch] = useState<Match | null>(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const printAreaRef = useRef<HTMLDivElement>(null);
+
+  const handleWhatsAppQuickShare = () => {
+    const allMatches = generatedRounds.flatMap((r: any) => r.matches);
+    const sample = allMatches.slice(0, 5).map((m: any, i: number) => `• *${m.name || `Match ${i + 1}`}* (${m.time || startTime}): ${m.team1} vs ${m.team2}`).join('\n');
+    const msg = 
+`🏆 *KNOCKOUT TOURNAMENT FIXTURES*
+📌 *Tournament:* ${tournamentName} (${category})
+⚽ *Sport:* ${sport} | 📅 *Date:* ${startDate}
+👥 *Teams:* ${teamsList.length} | 🎯 *Byes:* ${setup.byesCount}
+⏰ *First Match Time:* ${startTime}
+
+📋 *SCHEDULE PREVIEW:*
+${sample}
+${allMatches.length > 5 ? `\n• ... and ${allMatches.length - 5} more official matches.` : ''}
+
+Official CBSE PE Code 048 format.
+Generated via SmartPE India Official Tournament Studio.`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+    toast.success("Opening WhatsApp with knockout tournament fixtures!");
+  };
 
   // Quick load sample button
   const loadSampleFootballPreset = () => {
@@ -822,10 +844,10 @@ export const KnockoutBracket: React.FC<KnockoutBracketProps> = ({
         </div>
       </div>
 
-      {/* VIEW MODE SELECTION TABS */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900 text-white p-4 md:p-6 rounded-3xl shadow-md">
+      {/* VIEW MODE SELECTION TABS & EXPORT ACTIONS */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-[#0D2B52] text-white p-4 md:p-6 rounded-3xl shadow-lg border border-[#164077]">
         <div>
-          <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 block mb-1">
+          <span className="text-[10px] font-black uppercase tracking-widest text-[#D4A017] block mb-1">
             Choose Preferred Bracket Layout
           </span>
           <h3 className="text-lg md:text-xl font-black uppercase tracking-tight">
@@ -833,44 +855,66 @@ export const KnockoutBracket: React.FC<KnockoutBracketProps> = ({
           </h3>
         </div>
 
-        {/* 3 View Tabs */}
-        <div className="bg-slate-950 p-1.5 rounded-2xl border border-white/10 flex items-center gap-1 w-full md:w-auto">
-          <button
-            onClick={() => setActiveViewMode('classic-sheet')}
-            className={`flex-1 md:flex-initial px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-              activeViewMode === 'classic-sheet'
-                ? 'bg-red-600 text-white shadow-lg shadow-red-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <LayoutTemplate size={15} />
-            <span>Classic Sheet Draw</span>
-            <span className="px-1.5 py-0.5 bg-white/20 text-white rounded text-[8px] font-black uppercase">Sample</span>
-          </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+          {/* 3 View Tabs */}
+          <div className="bg-[#08182D]/90 p-1.5 rounded-2xl border border-white/10 grid grid-cols-3 gap-1 sm:flex sm:items-center">
+            <button
+              onClick={() => setActiveViewMode('classic-sheet')}
+              className={`px-3 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                activeViewMode === 'classic-sheet'
+                  ? 'bg-[#D4A017] text-[#0D2B52] shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <LayoutTemplate size={14} />
+              <span className="truncate">Classic Sheet</span>
+            </button>
 
-          <button
-            onClick={() => setActiveViewMode('cards')}
-            className={`flex-1 md:flex-initial px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-              activeViewMode === 'cards'
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Trophy size={15} />
-            <span>Versus Match Cards</span>
-          </button>
+            <button
+              onClick={() => setActiveViewMode('cards')}
+              className={`px-3 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                activeViewMode === 'cards'
+                  ? 'bg-[#164077] text-white border border-[#D4A017]/40 shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Trophy size={14} />
+              <span className="truncate">Cards</span>
+            </button>
 
-          <button
-            onClick={() => setActiveViewMode('table')}
-            className={`flex-1 md:flex-initial px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-              activeViewMode === 'table'
-                ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/30'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <ListOrdered size={15} />
-            <span>Match Schedule Table</span>
-          </button>
+            <button
+              onClick={() => setActiveViewMode('table')}
+              className={`px-3 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                activeViewMode === 'table'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <ListOrdered size={14} />
+              <span className="truncate">Table</span>
+            </button>
+          </div>
+
+          {/* Quick Action Buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleWhatsAppQuickShare}
+              className="flex-1 sm:flex-initial px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+              title="Share knockout fixtures to WhatsApp"
+            >
+              <Share2 size={14} />
+              <span>WhatsApp</span>
+            </button>
+
+            <button
+              onClick={() => setIsPrintModalOpen(true)}
+              className="flex-1 sm:flex-initial px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
+              title="Open print preview with A4/A3 page sizing recommendations and Word export"
+            >
+              <Printer size={14} />
+              <span>Print Preview</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1037,6 +1081,34 @@ export const KnockoutBracket: React.FC<KnockoutBracketProps> = ({
           </div>
         </div>
       )}
+
+      {/* Interactive Print Preview Modal with A4/A3 sizing, Word export and WhatsApp share */}
+      <TournamentPrintPreviewModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        tournamentName={tournamentName}
+        subTitle={subTitle}
+        category={category}
+        sport={sport}
+        startDate={startDate}
+        startTime={startTime}
+        format="knockout"
+        teamsList={teamsList}
+        rounds={generatedRounds}
+        matches={generatedRounds.flatMap((round: any) => round.matches)}
+        byesCount={setup.byesCount}
+        setupFormula={{
+          totalTeams: setup.N,
+          powerOfTwo: setup.P,
+          byesCount: setup.byesCount,
+          upperHalfTeams: setup.Nu,
+          lowerHalfTeams: setup.Nl,
+          upperHalfByes: Math.floor(setup.byesCount / 2),
+          lowerHalfByes: Math.ceil(setup.byesCount / 2),
+          totalMatches: Math.max(0, setup.N - 1),
+          totalRounds: Math.ceil(Math.log2(setup.P || 2))
+        }}
+      />
     </div>
   );
 };

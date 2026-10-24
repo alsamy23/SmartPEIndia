@@ -37,6 +37,15 @@ export const toast = {
     });
     window.dispatchEvent(event);
   },
+  loading(message: string, _options?: any) {
+    const event = new CustomEvent(SHOW_TOAST_EVENT, {
+      detail: { id: Math.random().toString(), message, type: 'info', duration: 2500 }
+    });
+    window.dispatchEvent(event);
+  },
+  dismiss(_id?: string) {
+    // dismiss helper
+  },
   confirm(message: string, onConfirm: () => void, onCancel?: () => void) {
     const event = new CustomEvent(SHOW_CONFIRM_EVENT, {
       detail: { id: Math.random().toString(), message, onConfirm, onCancel }

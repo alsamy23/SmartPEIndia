@@ -21,7 +21,13 @@ import {
   Award,
   ShieldCheck,
   Dumbbell,
-  GraduationCap
+  GraduationCap,
+  Trophy,
+  Target,
+  Presentation,
+  Eye,
+  Flame,
+  Layers
 } from 'lucide-react';
 import { BoardType, YearlyPlan, Language, LessonPlan } from '../types.ts';
 import { generateYearlyPlan, generateLessonPlan, buildComprehensiveYearlyPlanFallback } from '../services/geminiService.ts';
@@ -57,6 +63,8 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
   const [term2Game, setTerm2Game] = useState('Basketball & Volleyball');
   const [term1Focus, setTerm1Focus] = useState('CBSE Units 1-5: Management of Sporting Events, Children & Women in Sports, Lifestyle Disease Yoga, CWSN, Sports & Nutrition + Term 1 Fitness Tests');
   const [term2Focus, setTerm2Focus] = useState('CBSE Units 6-10: Test & Measurement, Physiology & Injuries, Biomechanics, Psychology, Training in Sports + Board Practical File & Revision');
+  const [viewMode, setViewMode] = useState<'integrated' | 'theory' | 'games'>('integrated');
+  const [modalLessonType, setModalLessonType] = useState<'theory' | 'games'>('theory');
   
   const [plan, setPlan] = useState<YearlyPlan | null>(null);
 
@@ -139,18 +147,37 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     return termFocus || 'General Fitness';
   };
 
-  const getCurriculumPlanLocal = (topic: string, details: string, termFocus: string, currentGrade: string) => {
+  const getCurriculumPlanLocal = (
+    topic: string, 
+    details: string, 
+    termFocus: string, 
+    currentGrade: string,
+    forcedMode?: 'theory' | 'games',
+    sportOverride?: string
+  ) => {
     const t = (topic || '').toLowerCase();
-    const f = (termFocus || '').toLowerCase();
+    const f = (sportOverride || termFocus || '').toLowerCase();
     
     // --- CBSE THEORY UNITS DETECTORS ---
-    if (t.includes('event') || t.includes('fixture') || t.includes('tournament') || t.includes('committee') || t.includes('management') || t.includes('intramural') || t.includes('extramural')) {
+    if (forcedMode !== 'games') {
+      if (t.includes('event') || t.includes('fixture') || t.includes('tournament') || t.includes('committee') || t.includes('management') || t.includes('intramural') || t.includes('extramural')) {
+      const starter = { time: '10 min', title: 'Concept Starter & Real-World Hook', description: 'Discussion on IPL / Olympic organizing committees (Technical, Ground, Reception, Publicity, Logistics) and pre/during/post-event duties.' };
+      const demonstration = { time: '10 min', title: 'Teacher Concept Breakdown & Formula Demonstration', description: 'Step-by-step mathematical demonstration: calculating total matches (N-1), upper/lower half division ((N+1)/2, (N-1)/2), and next power of 2 bye allocation formula (2ⁿ - N).' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Guided Fixture Construction Drills', description: 'Students draw full knockout tournament fixtures for 11, 13, 19, and 21 teams with exact bye allocation rules (1st bye bottom of lower half, 2nd bye top of upper half, etc.).' };
+      const activity2 = { time: '10 min', title: 'Activity 2: CBSE Board Exam PYQ & Case Studies', description: 'Solve 2 CBSE past-year 3-mark case studies on committee responsibilities and 2 numerical MCQs on cyclic/staircase league fixtures.' };
+      const plenary = { time: '10 min', title: 'Plenary & Mind Map Review', description: 'Interactive recap of bye formula rules, common calculation pitfalls, and review of practice homework questions.' };
       return {
+        isTheory: true,
         sport: 'CBSE PE Unit 1: Management of Sporting Events',
         objectives: `Understand planning, organizing, staffing, directing, and controlling; master drawing Knockout & League tournament fixtures with exact bye formulas ((N+1)/2, next power of 2 minus N) for Class ${currentGrade} CBSE exams.`,
-        warmup: `10 min Concept Starter: Discussion on IPL/Olympic organizational committees (Publicity, Ground, Technical, Refreshment) and pre/during/post responsibilities.`,
-        mainDrill: `25 min Theory & Problem Solving: Step-by-step mathematical fixture construction for 11, 13, 19, and 21 teams; calculating total matches (N-1), upper/lower half divisions, and cyclic/staircase league methods.`,
-        cooldown: `10 min Board Practice: Solve 2 CBSE past-year 3-mark case studies and 2 MCQs on bye calculation formulas.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `CBSE Marking Rubric: Fixture diagram accuracy, correct bye placement (lower half bottom, upper half top, etc.), and committee duties recall.`,
         equipment: `Smartboard / Whiteboard, CBSE NCERT PE Textbook, Graph/Chart papers, geometry ruler.`,
         safety: `Ensure students follow structured step-by-step drawing protocols to avoid mathematical fixture calculation errors.`
@@ -158,12 +185,23 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     if (t.includes('women') || t.includes('child') || t.includes('postur') || t.includes('deform') || t.includes('flat foot') || t.includes('knock knee') || t.includes('lordosis') || t.includes('kyphosis') || t.includes('scoliosis') || t.includes('female athlete')) {
+      const starter = { time: '10 min', title: 'Diagnostic Plumb-Line Hook', description: 'Visual posture alignment assessment against plumb lines; observe spine curvature and arch of the foot.' };
+      const demonstration = { time: '10 min', title: 'Teacher Concept Breakdown & Deformity Diagnostics', description: 'Biomechanical causes and symptoms of Kyphosis, Lordosis, Scoliosis, Knock Knees, Bow Legs, Flat Foot, and the Female Athlete Triad (Osteoporosis, Amenorrhea, Eating Disorders).' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Corrective Exercise Practice & Analysis', description: 'Practice and prescribe corrective yoga/physiotherapy movements (Tadasana for Flat Foot, Gomukhasana for Round Shoulders, Chakrasana for Kyphosis, Padmasana for Knock Knees).' };
+      const activity2 = { time: '10 min', title: 'Activity 2: CBSE Board Exam PYQs & Case Studies', description: 'Analyze 5-mark case studies on female athlete triad risk factors and WHO physical activity guidelines for children.' };
+      const plenary = { time: '10 min', title: 'Plenary & Mind Map Review', description: 'Summary table of postural deformity vs corrective protocols and 3 quick board assertion-reason questions.' };
       return {
+        isTheory: true,
         sport: 'CBSE PE Unit 2: Children and Women in Sports',
         objectives: `Examine WHO exercise recommendations; diagnose common postural deformities (Kyphosis, Lordosis, Scoliosis, Knock Knees, Flat Foot) and analyze the Female Athlete Triad (Osteoporosis, Amenorrhea, Eating Disorders) for Class ${currentGrade}.`,
-        warmup: `10 min Physical Demonstration: Visual posture alignment assessment against plumb lines; observe spine curvature and arch of the foot.`,
-        mainDrill: `25 min Corrective Exercises & Theory: Practice corrective yoga/physiotherapy movements (Tadasana for Flat Foot, Gomukhasana for Round Shoulders, Chakrasana for Kyphosis, Padmasana for Knock Knees); analyze physiological factors behind female athlete triad.`,
-        cooldown: `10 min Summary & Board Prep: Tabulate deformity vs corrective measures; solve 3 CBSE board assertion-reason questions.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Diagnostic evaluation: Accurately matching postural deformities with root causes and corrective exercise protocols.`,
         equipment: `Yoga mats, posture grids, NCERT diagrams, demonstration charts.`,
         safety: `Perform corrective spinal extensions gently; avoid forceful hyperextensions on students with existing spinal discomfort.`
@@ -171,12 +209,23 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     if (t.includes('lifestyle') || t.includes('obesity') || t.includes('diabetes') || t.includes('asthma') || t.includes('hypertension') || t.includes('back pain') || (t.includes('yoga') && (t.includes('disease') || t.includes('prevent')))) {
+      const starter = { time: '10 min', title: 'Pranayama & Joint Mobilization Hook', description: 'Sukshma Vyayama, neck rotations, wrist extensions, and gentle diaphragmatic Anulom-Vilom breathing.' };
+      const demonstration = { time: '10 min', title: 'Teacher Asana Demonstration & Pathology Lecture', description: 'Diagnostic justification, benefits, and strict contraindications for Obesity (Tadasana, Katichakrasana), Diabetes (Bhujangasana, Paschimottanasana), and Hypertension.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Therapeutic Asana Execution Lab', description: 'Students practice alignment holds for Asthma (Sukhasana, Matsyasana), Hypertension (Tadasana, Vakrasana), and Back Pain (Shalabhasana, Bhujangasana).' };
+      const activity2 = { time: '10 min', title: 'Activity 2: Contraindications & CBSE Case Questions', description: 'Match pathologies with prohibited asanas (e.g. why hypertensive individuals avoid inversions and Kapalabhati); solve 3-mark therapeutic prescription questions.' };
+      const plenary = { time: '10 min', title: 'Plenary Shavasana & Review', description: 'Shavasana neuromuscular relaxation, physiological recovery check, and summary of exam contraindication keywords.' };
       return {
+        isTheory: true,
         sport: 'CBSE PE Unit 3: Yoga as Preventive Measure for Lifestyle Diseases',
         objectives: `Master therapeutic yoga asanas for 5 lifestyle disorders (Obesity, Diabetes, Asthma, Hypertension, Back Pain/Arthritis) including procedures, benefits, and contraindications.`,
-        warmup: `10 min Gentle Joint Mobilization: Sukshma Vyayama, neck rotations, wrist extensions, and gentle diaphragmatic breathing (Pranayama).`,
-        mainDrill: `25 min Asana Practice & Theory: Step-by-step execution and diagnostic justification: Tadasana, Katichakrasana, Pavanmuktasana (Obesity); Bhujangasana, Paschimottanasana (Diabetes); Sukhasana, Matsyasana (Asthma); Tadasana, Vakrasana (Hypertension); Shalabhasana, Vakrasana (Back Pain).`,
-        cooldown: `10 min Shavasana & Reflection: Progressive neuromuscular relaxation, breath normalization, and Contraindication checklist recap.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Asana Rubric & Board Test: Flawless posture hold, correct breathing rhythm, and reciting contraindications for each condition.`,
         equipment: `Non-slip yoga mats, bolster cushions, textbook asana charts.`,
         safety: `Hypertensive students must NOT perform head-lowering inverted asanas or strenuous breath retentions (Kumbhaka).`
@@ -184,25 +233,47 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     if (t.includes('cwsn') || t.includes('divyang') || t.includes('special olympic') || t.includes('paralympic') || t.includes('deaflympic') || t.includes('adaptive')) {
+      const starter = { time: '10 min', title: 'Sensory Inclusion Empathy Hook', description: 'Blindfolded partner walk or seated balloon tapping to experience sensory and mobility adaptation.' };
+      const demonstration = { time: '10 min', title: 'Teacher Adaptive Principles & TREE Framework', description: 'Instruction on the TREE model (Teaching style, Rules, Equipment, Environment) and professional roles (Physiotherapist, Occupational Therapist, Speech Therapist, Counselor) in IEP.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Disability Sports Comparative Analysis', description: 'Comparative deep-dive: Special Olympics Bharat (intellectual disabilities, divisioning), Paralympics (functional classification), and Deaflympics.' };
+      const activity2 = { time: '10 min', title: 'Activity 2: Inclusive Sports Day Design Challenge', description: 'Students formulate inclusive modifications for a school sports event; solve 2 CBSE past-year 3-mark questions on IEP implementation.' };
+      const plenary = { time: '10 min', title: 'Plenary & Mind Map Review', description: 'Debrief on person-first terminology, Paralympic values, and key takeaways for school accessibility.' };
       return {
+        isTheory: true,
         sport: 'CBSE PE Unit 4: PE & Sports for CWSN (Children with Special Needs)',
         objectives: `Understand adaptive physical education aims, roles of professionals (Counselor, Occupational Therapist, Physiotherapist, PE Teacher, Speech Therapist), and global disability sports organizations.`,
-        warmup: `10 min Sensory Awareness Drill: Blindfolded partner walk or seated balloon tapping to build sensory inclusion empathy.`,
-        mainDrill: `25 min Curriculum Analysis: Deep dive into Special Olympics Bharat, Paralympics (classification and divisioning), Deaflympics, and inclusion strategies in regular physical education classes.`,
-        cooldown: `10 min Group Discussion: Identify 3 inclusive modifications (TREE framework) for school sports day.`,
-        assessment: `Knowledge Verification: Differentiating Special Olympics vs Paralympics; articulating the professional roles in IEP (Individualized Education Plan).`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
+        assessment: `Knowledge Verification: Differentiating Special Olympics vs Paralympics; articulating professional roles in IEP (Individualized Education Plan).`,
         equipment: `Bell-balls, blindfolds, wheelchair/seated equipment, inclusion guideline charts.`,
         safety: `Maintain clear, obstruction-free floor space and clear communication cues for all adaptive drills.`
       };
     }
 
     if (t.includes('nutrition') || t.includes('diet') || t.includes('nutrient') || t.includes('macro') || t.includes('micro') || t.includes('food myth') || t.includes('weight control')) {
+      const starter = { time: '10 min', title: 'Nutrition Log & BMI Computation Hook', description: 'Calculate individual BMI = Weight (kg) / Height (m)², map to WHO categories, and discuss basal metabolic rate.' };
+      const demonstration = { time: '10 min', title: 'Teacher Macronutrient & Micronutrient Breakdown', description: 'Nutritive vs non-nutritive components (Water, Roughage, Flavor); Macro (Carbs, Proteins, Fats) vs Micro (Vitamins, Minerals); Food intolerances vs food allergies.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Athlete Diet Design & Caloric Balance', description: 'Students construct a balanced 2400-calorie athlete meal plan balancing macronutrient ratios (60% Carbs, 15% Protein, 25% Fat) and hydration schedule.' };
+      const activity2 = { time: '10 min', title: 'Activity 2: Food Myths & CBSE Board Case Questions', description: 'Debunking crash dieting pitfalls; solve 2 CBSE 3-mark questions on water-soluble (B, C) vs fat-soluble (A, D, E, K) vitamin deficiency symptoms.' };
+      const plenary = { time: '10 min', title: 'Plenary & Mind Map Review', description: 'Flashcard recap on deficiency diseases (Scurvy, Rickets, Beriberi, Anemia) and daily hydration benchmarks.' };
       return {
+        isTheory: true,
         sport: 'CBSE PE Unit 5: Sports and Nutrition',
         objectives: `Analyze components of a balanced diet, differentiate macro (Carbs, Fats, Proteins) vs micro (Vitamins, Minerals) nutrients, calculate BMI, and debunk dieting pitfalls and food myths for Class ${currentGrade}.`,
-        warmup: `10 min Nutrition Log Review: Calculate personal BMI = Weight (kg) / Height (m)², and categorize into WHO BMI categories.`,
-        mainDrill: `25 min Core Concepts & Case Studies: Daily calorie requirements for athletes, nutritive vs non-nutritive components (Water, Roughage, Color, Flavor), food intolerances vs food allergies, pitfalls of crash dieting.`,
-        cooldown: `10 min Board MCQ Quiz: Review water-soluble (B, C) vs fat-soluble (A, D, E, K) vitamins and their deficiency symptoms.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Problem-Solving Rubric: Designing a balanced athlete meal plan and identifying vitamin/mineral deficiencies.`,
         equipment: `Stadiometer, weighing scale, nutrient flashcards, NCERT nutrition tables.`,
         safety: `Discourage unscientific calorie-restriction habits and emphasize wholesome hydration and balanced nourishment.`
@@ -210,12 +281,23 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     if (t.includes('test') || t.includes('measurement') || t.includes('evaluation') || t.includes('khelo india') || t.includes('barrow') || t.includes('harvard') || t.includes('rikli') || t.includes('fitness battery')) {
+      const starter = { time: '10 min', title: 'Heart Rate & Metric Check Hook', description: 'Learn radial/carotid pulse measurement for 15 seconds; compute resting heart rate and discuss recovery pulse.' };
+      const demonstration = { time: '10 min', title: 'Teacher Test Protocol & Formula Calibration', description: 'Protocols and calibration for SAI Khelo India battery and Harvard Step Test: Fitness Index = (100 × duration in sec) / (2 × sum of recovery pulses).' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Field Testing & Fitness Index Computation', description: 'Administer Harvard Step Test (5-min step up/down on 20-inch bench); log recovery pulses at 1-1.5m, 2-2.5m, 3-3.5m and compute Fitness Index.' };
+      const activity2 = { time: '10 min', title: 'Activity 2: Motor Ability & Senior Citizen Batteries', description: 'Solve CBSE 3-mark questions comparing Barrow 3-item motor ability test vs Rikli & Jones senior citizen test protocols.' };
+      const plenary = { time: '10 min', title: 'Plenary & Score Norms Mapping', description: 'Map student Fitness Index scores to CBSE national percentiles; review test objectivity, reliability, and validity.' };
       return {
+        isTheory: true,
         sport: 'CBSE PE Unit 6: Test and Measurement in Sports',
         objectives: `Conduct SAI Khelo India National Fitness Test battery; compute Fitness Index via Harvard Step Test; administer Barrow 3-item motor ability and Rikli & Jones senior citizen tests.`,
-        warmup: `10 min Pulse Check & Dynamic Warm-up: Learn radial/carotid pulse measurement for 15 seconds; light cardiovascular jog.`,
-        mainDrill: `25 min Field Lab Station Testing: Administer Harvard Step Test (5-minute step up/down on 20-inch bench, measure recovery pulses at 1-1.5m, 2-2.5m, 3-3.5m) using Fitness Index = (100 x test duration in seconds) / (2 x sum of recovery pulse beats).`,
-        cooldown: `10 min Recovery Heart Rate Graphing: Record recovery pulse rates, calculate individual Fitness Index scores, and map to CBSE norms.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Standard Protocol Adherence: Metronome cadence precision (30 steps/min), stopwatch timing, and formula calculation accuracy.`,
         equipment: `20-inch sturdy stepping bench / gymnasium box, metronome/audio cadence, stopwatches, heart rate logs.`,
         safety: `Stop immediately if student exhibits extreme dizziness, hyperventilation, or chest discomfort during aerobic trials.`
@@ -223,12 +305,23 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     if (t.includes('injury') || t.includes('injuries') || t.includes('physiology') || t.includes('first aid') || t.includes('price') || t.includes('fracture') || t.includes('sprain') || t.includes('strain') || t.includes('cardiorespiratory')) {
+      const starter = { time: '10 min', title: 'Physiological Observation Hook', description: 'Compare resting heart rate vs post-1 minute jumping jack heart rate to observe stroke volume and cardiorespiratory response.' };
+      const demonstration = { time: '10 min', title: 'Teacher Injury Classification & PRICE Demonstration', description: 'Categorize Soft tissue (Contusion, Abrasion, Laceration, Sprain vs Strain), Bone fractures (Greenstick, Comminuted), Joint dislocations; hands-on PRICE protocol.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Hands-on Compression & First Aid Lab', description: 'Practice wrapping ankle and wrist joints with crepe compression bandages; position arm slings and review cold compress safety rules.' };
+      const activity2 = { time: '10 min', title: 'Activity 2: CBSE Board Exam PYQs & Case Studies', description: 'Differentiate ligament sprain vs tendon strain; solve 2 CBSE past-year 3-mark scenario-based emergency sports first aid questions.' };
+      const plenary = { time: '10 min', title: 'Plenary & First Aid Protocol Review', description: 'Recap 4-step on-field emergency triage: Protect, Rest, Ice, Compress, Elevate; emergency medical dispatch guidelines.' };
       return {
+        isTheory: true,
         sport: 'CBSE PE Unit 7: Physiology & Injuries in Sports',
         objectives: `Understand physiological factors determining physical fitness components; categorize sports injuries (Soft tissue, Bone, Joint) and demonstrate the PRICE first aid protocol for Class ${currentGrade}.`,
-        warmup: `10 min Physiological Observation: Measure resting heart rate vs post-jumping jack heart rate to observe stroke volume and cardiac output responses.`,
-        mainDrill: `25 min Injury Classification & First Aid Lab: Soft tissue injuries (Contusion, Abrasion, Laceration, Incision, Sprain vs Strain); Bone fractures (Greenstick, Comminuted, Transverse, Oblique, Impacted); Joint dislocations; Hands-on PRICE application (Protect, Rest, Ice, Compression, Elevation).`,
-        cooldown: `10 min Practical Debrief: Wrap a model ankle joint using crepe compression bandage; recite 4-step emergency evaluation.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `First Aid Mastery Rubric: Correct crepe bandage compression pressure, ice pack application duration (15-20 mins), and differentiation between ligament sprain vs muscle strain.`,
         equipment: `First aid medical kit, ice packs/gel wraps, crepe bandages, triangular slings, injury illustration cards.`,
         safety: `Never apply direct ice directly onto bare skin; always wrap ice in a thin towel to prevent cold burn/frostbite.`
@@ -236,12 +329,23 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     if (t.includes('biomechanic') || t.includes('lever') || t.includes('newton') || t.includes('equilibrium') || t.includes('friction') || t.includes('projectile')) {
+      const starter = { time: '10 min', title: 'Physics-in-Motion Hook', description: 'Sprint starts and jump stops demonstrating Newton\'s laws (inertia, action-reaction) and wide-base stability.' };
+      const demonstration = { time: '10 min', title: 'Teacher Biomechanics & Anatomical Levers Lecture', description: 'Newton\'s 3 Laws in sports; Anatomical Levers: Class 1 (Fulcrum in middle - neck extension), Class 2 (Load in middle - calf raise), Class 3 (Effort in middle - bicep curl); projectile trajectory factors.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Anatomical Lever & Movement Lab', description: 'Students diagram body joints during sports actions (kicking football, javelin release, high jump approach) and identify fulcrum, effort, and load.' };
+      const activity2 = { time: '10 min', title: 'Activity 2: Projectile Motion & CBSE Board Questions', description: 'Solve 3 CBSE board assertion-reason questions on optimum release angles (45° vacuum vs ~35°-38° aerodynamic drag) and dynamic equilibrium.' };
+      const plenary = { time: '10 min', title: 'Plenary & Mind Map Review', description: 'Recap mechanical advantage formulas (Effort Arm / Load Arm) and key projectile motion formulas for CBSE exam.' };
       return {
+        isTheory: true,
         sport: 'CBSE PE Unit 8: Biomechanics and Sports',
         objectives: `Apply Newton's 3 Laws of Motion to sports; classify 1st, 2nd, and 3rd Class anatomical levers (Fulcrum, Effort, Load); analyze Centre of Gravity, Equilibrium, and Projectile Motion.`,
-        warmup: `10 min Physics-in-Motion Warm-up: Sprint starts and jump stops demonstrating inertia, action-reaction, and wide-base stability.`,
-        mainDrill: `25 min Biomechanical Analysis: Class 1 lever (Nodding head / triceps extension - Fulcrum in middle); Class 2 lever (Calf raise / plantar flexion - Load in middle); Class 3 lever (Bicep curl / kicking - Effort in middle); Newton's laws in high jump, swimming starts, and javelin launch angle (45° in vacuum vs ~35°-38° with aerodynamic drag).`,
-        cooldown: `10 min Diagram Lab: Draw and label anatomical lever classes; answer 2 CBSE case-study scenario questions.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Physics Concept Application: Accurately identifying fulcrum, load, and effort points in body joints during sports movements.`,
         equipment: `Medicine balls, javelins/footballs for launch observation, skeleton anatomical lever model, whiteboard.`,
         safety: `Use controlled weights for lever demonstrations to prevent excessive tendon strain at mechanical disadvantage.`
@@ -249,12 +353,23 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     if (t.includes('psycholog') || t.includes('personality') || t.includes('motivation') || t.includes('aggression') || t.includes('imagery') || t.includes('self-esteem')) {
+      const starter = { time: '10 min', title: 'Mental Focus & Box-Breathing Hook', description: '3 minutes of box breathing (4s in, 4s hold, 4s out, 4s hold) and positive mental imagery for competitive focus.' };
+      const demonstration = { time: '10 min', title: 'Teacher Psychological Profiling Lecture', description: 'Carl Jung classification (Introvert, Extrovert) & Big Five (OCEAN); Intrinsic vs Extrinsic motivation; Aggression in sports: Hostile vs Instrumental vs Assertive behavior.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Athlete Behavioral Case Studies', description: 'Analyze competitive athletic scenarios to identify motivation techniques (goal setting, self-talk, reinforcement) and arousal regulation.' };
+      const activity2 = { time: '10 min', title: 'Activity 2: CBSE Board Exam PYQs & Case Studies', description: 'Evaluate CBSE 5-mark case studies distinguishing between assertive play and foul aggression; exercise adherence barriers.' };
+      const plenary = { time: '10 min', title: 'Plenary & Mind Map Review', description: 'Mind map summary of psychological traits and student self-reflection journal entries.' };
       return {
+        isTheory: true,
         sport: 'CBSE PE Unit 9: Psychology and Sports',
         objectives: `Analyze personality dimensions (Carl Jung classification & Big Five traits), differentiate intrinsic vs extrinsic motivation, explore exercise adherence, and classify types of sports aggression.`,
-        warmup: `10 min Mental Focus Routine: 3 minutes of box breathing (4s in, 4s hold, 4s out, 4s hold) and positive mental imagery for free-throw shooting.`,
-        mainDrill: `25 min Psychological Case Studies: Extroverts vs Introverts in sports selection; Big Five (OCEAN: Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism); Aggression in sports: Hostile (harm intent) vs Instrumental (goal-directed within rules) vs Assertive behavior.`,
-        cooldown: `10 min Reflective Journaling: Students identify 2 intrinsic motivators for daily physical fitness and 1 goal-setting strategy.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Analytical Rubric: Distinguishing between instrumental aggression and foul play; applying self-talk techniques to athletic performance.`,
         equipment: `Case study reflection worksheets, psychological trait checklists, timer.`,
         safety: `Foster an emotionally safe, non-judgmental classroom environment for personality and mental health discussions.`
@@ -262,12 +377,23 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     if (t.includes('training') || t.includes('doping') || t.includes('periodization') || t.includes('circuit') || t.includes('fartlek') || t.includes('interval') || t.includes('isometric') || t.includes('isotonic')) {
+      const starter = { time: '10 min', title: 'Heart Rate Elevation & Circuit Hook', description: 'Progressive 4-station pulse-raising circuit (skipping, high knees, squat holds, lateral hops) with target training zone calculation.' };
+      const demonstration = { time: '10 min', title: 'Teacher Periodization & Anti-Doping Lecture', description: 'Periodization (Micro, Meso, Macro cycles); Strength methods (Isometric, Isotonic, Isokinetic); Fartlek speed-play; WADA / NADA prohibited substances and anti-doping procedures.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Circuit Training Design Lab', description: 'Students architect an age-appropriate 8-station circuit training routine with 1:1 work-to-rest ratio and calculate Karvonen target heart rate zones.' };
+      const activity2 = { time: '10 min', title: 'Activity 2: Doping Hazards & CBSE Board Questions', description: 'Examine physical and psychological hazards of anabolic steroids; solve 2 CBSE past-year 3-mark questions on Fartlek vs Interval training.' };
+      const plenary = { time: '10 min', title: 'Plenary & Fair Play Debrief', description: 'Circuit cool-down static stretches, hydration review, and key takeaways on clean sportsmanship and anti-doping codes.' };
       return {
+        isTheory: true,
         sport: 'CBSE PE Unit 10: Training in Sports & Doping',
         objectives: `Structure training periodization cycles (Micro, Meso, Macro); compare strength training methods (Isometric, Isotonic, Isokinetic); design continuous, interval, and Fartlek endurance sessions; examine WADA/NADA anti-doping regulations.`,
-        warmup: `10 min Heart Rate Elevation: Progressive 4-station pulse-raising circuit (skipping, high knees, squat holds, lateral hops).`,
-        mainDrill: `25 min Training Methodology & Anti-Doping: Strength methods (Hettinger & Muller isometrics, DeLorme isotonics); Swedish Fartlek speed-play design; Circuit training station layout; WADA Prohibited List (Anabolic steroids, peptide hormones, blood doping, stimulants) and health hazards.`,
-        cooldown: `10 min Circuit Cool-Down: Static stretching of major muscle groups, hydration, and review of WADA anti-doping testing protocols.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Training Architecture Rubric: Designing an age-appropriate 8-station circuit training routine with proper work-to-rest ratios.`,
         equipment: `Agility cones, medicine balls, skipping ropes, exercise mats, stopwatches, WADA guideline charts.`,
         safety: `Ensure strict work-to-rest intervals (1:1 or 1:2) to prevent overtraining syndrome and acute muscle exhaustion.`
@@ -275,26 +401,69 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     if (t.includes('olympic') || t.includes('ancient') || t.includes('ioa') || t.includes('values')) {
+      const starter = { time: '10 min', title: 'Olympic Trivia Starter & Historical Hook', description: 'Quick recall of Pierre de Coubertin, 1896 Athens Games, and India\'s historic Olympic hockey & athletic medal legacy.' };
+      const demonstration = { time: '10 min', title: 'Teacher Olympic Charter & Values Lecture', description: 'The 5 interlaced Olympic rings representing 5 inhabited continents; Olympic values (Excellence, Friendship, Respect); structure of IOA (Indian Olympic Association).' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Olympic Governance & Value Analysis', description: 'Comparative analysis of Olympic vs Paralympic vs Special Olympic values; outlining IOA athlete selection and support criteria.' };
+      const activity2 = { time: '10 min', title: 'Activity 2: CBSE Board Exam PYQ Review', description: 'Diagram Olympic rings with exact color alignment (Blue, Yellow, Black, Green, Red); solve 3 CBSE past exam questions on IOC charter ethics.' };
+      const plenary = { time: '10 min', title: 'Plenary & Mind Map Summary', description: 'Recap Olympic motto (Citius, Altius, Fortius - Communiter), flame lighting traditions, and fair play ethics.' };
       return {
+        isTheory: true,
         sport: 'CBSE PE: Olympic Value Education',
         objectives: `Understand ancient vs modern Olympic history, Olympic symbols, rings, flag, flame, motto (Citius, Altius, Fortius - Communiter), and the structure of the Indian Olympic Association (IOA).`,
-        warmup: `10 min Olympic Trivia Starter: Quick recall of Pierre de Coubertin, 1896 Athens Games, and India's historic Olympic hockey & athletic medals.`,
-        mainDrill: `25 min History & Values Lecture: The 5 interlaced Olympic rings representing 5 inhabited continents; Olympic values (Excellence, Friendship, Respect); Paralympic and Special Olympic values; role of IOA in Indian athlete selection.`,
-        cooldown: `10 min Board Review: Diagram of Olympic rings with exact color alignment (Blue, Yellow, Black, Green, Red) and past exam questions.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Historical & Value Recall: Accurate breakdown of Olympic charter values and IOA governance.`,
         equipment: `Olympic charts, multimedia presentation, worksheets.`,
         safety: `Standard classroom safety.`
       };
     }
 
-    // --- PRACTICAL ON-FIELD SPORTS DETECTORS ---
-    if (t.includes('foot') || t.includes('soccer') || f.includes('foot')) {
+    if (forcedMode === 'theory') {
+      const starter = { time: '10 min', title: 'CBSE PE Theory Concept Starter', description: 'Real-world sporting case scenario discussion and prior knowledge diagnostics.' };
+      const demonstration = { time: '10 min', title: 'Teacher Concept Explanation & Formulas', description: 'Direct instruction on syllabus definitions, key physiological or organizational principles, and board exam marking criteria.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Analytical Drills & Problem Solving', description: 'Worksheet calculations, fixture diagramming, or diagnostic categorization in small groups.' };
+      const activity2 = { time: '10 min', title: 'Activity 2: CBSE Board Past Year Questions (PYQs)', description: 'Solving 3-mark and 5-mark CBSE previous year questions with step-by-step marking rubrics.' };
+      const plenary = { time: '10 min', title: 'Plenary Mind Map & Assessment Debrief', description: 'Mind map summary on whiteboard and exit slip verification of key terms.' };
       return {
+        isTheory: true,
+        sport: 'CBSE Physical Education Theory (Code 048)',
+        objectives: `Understand core concepts, definitions, and board examination problem solving for Class ${currentGrade}.`,
+        starter, demonstration, activity1, activity2, plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
+        assessment: `CBSE Marking Rubric: Accurate definitions, logical diagrams, and step-by-step numerical/case reasoning.`,
+        equipment: `NCERT PE Textbook, whiteboard/markers, CBSE past question papers.`,
+        safety: `Classroom ergonomics, clear note-taking protocols.`
+      };
+    }
+  }
+
+  // --- PRACTICAL ON-FIELD SPORTS DETECTORS ---
+  if (t.includes('foot') || t.includes('soccer') || f.includes('foot')) {
+      const starter = { time: '10 min', title: 'Dynamic Warm-Up & Mobility', description: '2 slow laps jogging, dynamic ankle and groin mobility rotations, high knees, lateral defensive shuffles.' };
+      const demonstration = { time: '10 min', title: 'Skill Demonstration & Coaching Cues', description: 'Coach demonstration of inside-of-foot passing mechanics, non-kicking foot placement alongside the ball, and head-up spatial scanning.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Skill Progression & Passing Gates', description: 'Cones zigzag dribbling sprints and partner push passing across 10m gates with instant 2-touch return rhythm.' };
+      const activity2 = { time: '15 min', title: 'Activity 2: Small-Sided Game & Tactical Play', description: '4v4 transition possession game in a 20x20m pitch with neutral pivot players, reinforcing passing under defensive pressure.' };
+      const plenary = { time: '10 min', title: 'Cool-Down & Feedback Debrief', description: 'Slow recovery walk, static hamstring and quadriceps stretching, team debrief on passing accuracy and spatial awareness.' };
+      return {
+        isTheory: false,
         sport: 'Football',
         objectives: `Master inside-foot accuracy, ball-control agility, and spatial positioning during small-sided transition plays suitable for Grade ${currentGrade}.`,
-        warmup: `10 min active warm-up: 2 laps slow jog, high knees, ankle dynamic rotations, lateral defensive shuffles.`,
-        mainDrill: `25 min core drills: Cones zigzag dribbling sprints, partner push passing across 10m gates with instant return touch, ending with defensive 3v2 keep-away drills.`,
-        cooldown: `10 min recovery: Slo-mo recovery walks, static hamstring and groin stretches, team debriefing on foot alignment.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Performance evaluation rubric: Passing accuracy, foot contact point, posture alignment under match pressure.`,
         equipment: `Size 4/5 Footballs, marker cones, whistle, stopwatch, primary team bibs.`,
         safety: `Check ground for loose stones, ensure safe spacing between drill channels, keep students hydrated.`
@@ -302,12 +471,23 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
     
     if (t.includes('basket') || f.includes('basket')) {
+      const starter = { time: '10 min', title: 'Dynamic Warm-Up & Ball Taps', description: 'Sideways sliding runs, fingertip basketball control tapping, self-toss backboard catch, calf explosive jumps.' };
+      const demonstration = { time: '10 min', title: 'Skill Demonstration & Coaching Cues', description: 'Coach demonstration of chest pass follow-through (thumbs pointing down), protected dribbling stance, and right-left-up layup foot rhythm.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Passing Lines & Layup Weave', description: '3-player motion weaving tracks ending in lay-ups, paired with stationary shooting form repetition against the backboard.' };
+      const activity2 = { time: '15 min', title: 'Activity 2: Half-Court Scrimmage & Application', description: '3v3 half-court scrimmage with mandatory 3-pass rule before shooting to enforce ball movement and spatial screening.' };
+      const plenary = { time: '10 min', title: 'Cool-Down & Feedback Debrief', description: 'Arm rotations, overhead shoulder stretches, breathing deceleration routines, group reflection on turnover prevention.' };
       return {
+        isTheory: false,
         sport: 'Basketball',
         objectives: `Improve chest pass velocity, dribbling ball-handling heights, and proper step layup approach coordination according to Grade ${currentGrade} CBSE syllabus.`,
-        warmup: `10 min active warm-up: Sideways sliding runs, fingertip basketball tapping, self-toss backboard catch, calf explosive jumps.`,
-        mainDrill: `25 min core drills: Passing lines (double-handed chest & bounce passes), three-player motion weaving tracks ending in lay-ups, static shooting form repetition.`,
-        cooldown: `10 min recovery: Arm rotations, overhead shoulder stretches, breathing deceleration routines, group reflection on pass accuracy.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Motor control scoring: Correct thumb-down release follow-through, dribbling protective posture, layup foot rhythm.`,
         equipment: `Size 6/7 Basketballs, training cones, team bibs, stopwatch.`,
         safety: `Ensure correct footwear to avoid ankle slips, enforce strict clean defensive contact rules, no hanging on hoops.`
@@ -315,12 +495,23 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     if (t.includes('volley') || f.includes('volley')) {
+      const starter = { time: '10 min', title: 'Dynamic Warm-Up & Line Shuffles', description: 'Line-shuffling exercises, shoulder clock-wise rotation loops, wrist and finger extension holds, light block jumps.' };
+      const demonstration = { time: '10 min', title: 'Skill Demonstration & Coaching Cues', description: 'Coach demonstration of underhand bump platform (locked elbows, flat forearms) and high overhead finger setting position.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Platform Bump & Setting Drills', description: 'Wall bump-setting repetitions (20 reps continuous) followed by double-partner bump-overhead sequences across the attack line.' };
+      const activity2 = { time: '15 min', title: 'Activity 2: Mini-Volleyball Game & Target Serve', description: '3v3 modified court game enforcing the 3-touch rule (Bump-Set-Spike) and target-court underhand serve accuracy.' };
+      const plenary = { time: '10 min', title: 'Cool-Down & Feedback Debrief', description: 'Standing trunk twists, static arm shoulder crossovers, diaphragmatic breathing cycles, peer feedback on platform steadiness.' };
       return {
+        isTheory: false,
         sport: 'Volleyball',
         objectives: `Establish sturdy underhand bump reception platform and overhand serving mechanics aligned with Class ${currentGrade} standards.`,
-        warmup: `10 min active warm-up: Line-shuffling exercises, shoulder clock-wise rotation loops, wrist and finger extension holds, light block jumps.`,
-        mainDrill: `25 min core drills: Overhead setting and underhand bumping drills against wall, double-partner bump-overhead sequences, target-court serve practice.`,
-        cooldown: `10 min recovery: Standing trunk twists, static arm shoulder crossovers, diaphragmatic breathing cycles.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Technical check-list: Arm platform steadiness, contact speed, body balance during high ball receptions.`,
         equipment: `Soft-touch Volleyballs, training nets, cones, whistles.`,
         safety: `Protect hands during spikes, coordinate calling 'mine' for loose balls to avoid collision accidents.`
@@ -328,39 +519,152 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     if (t.includes('athlet') || t.includes('sprint') || t.includes('run') || f.includes('athlet') || f.includes('fitness')) {
+      const starter = { time: '10 min', title: 'Dynamic Warm-Up & Strides', description: 'Dynamic leg swings, high knees, butt kicks, A-skips, B-skips, and progressive 30m acceleration strides.' };
+      const demonstration = { time: '10 min', title: 'Skill Demonstration & Coaching Cues', description: 'Coach demonstration of crouch start on blocks (On your marks, Set, Go), drive phase body angle (45°), and baton exchange visual window.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Sprint Acceleration & Baton Pass Drills', description: '15-meter block drive explosions paired with 4x100m upsweep/downsweep baton pass drills inside the official 20m exchange zone.' };
+      const activity2 = { time: '15 min', title: 'Activity 2: Relay Trials & Pacing Lap', description: 'Timed 4x100m shuttle relay competitions with official lane discipline followed by mid-distance paced track lap.' };
+      const plenary = { time: '10 min', title: 'Cool-Down & Feedback Debrief', description: '400m slow recovery walk, deep static quad and hamstring stretches, timing analysis and technique feedback.' };
       return {
+        isTheory: false,
         sport: 'Athletics & Physical Fitness',
         objectives: `Improve crouch start explosive acceleration, standard pace breathing control, and relay-baton handoff timing protocols.`,
-        warmup: `10 min active warm-up: Dynamic leg swings, high knees, butt kicks, progressive acceleration sprints over 30m.`,
-        mainDrill: `25 min core drills: Crouch starts from blocks with 15m drive-phase releases, blind baton exchange passes in pairs, mid-distance endurance pacing track laps.`,
-        cooldown: `10 min recovery: Deep static quad stretches, slow recovery pacing walks, light chest extensions and deep inhalation.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Athletic speed indicators: Acceleration drive angle, baton hand-off exchange safety, track discipline.`,
         equipment: `Baton sticks, starter blocks, stopwatch, measuring tape, lane cones.`,
         safety: `Run strictly in allocated track lanes, wear standard running shoes, clear workspace before throwing/sprinting events.`
       };
     }
 
-    if (t.includes('yoga') || t.includes('asana')) {
+    if (t.includes('cricket') || f.includes('cricket')) {
+      const starter = { time: '10 min', title: 'Dynamic Warm-Up & Arm Rotations', description: '2 laps light jog, shoulder rotator cuff mobility circles, wrist extensions, high knees and lateral boundary slides.' };
+      const demonstration = { time: '10 min', title: 'Batting Stance & Straight Drive Mechanics', description: 'Coach demonstration of grip (V-shape), balanced stance, high backlift, leading shoulder into the ball, and head over the front foot.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Front Foot Drive & Bowling Run-up Drills', description: 'Stationary tee drive repetitions (15 reps per student) paired with bowling run-up, bound, and high-arm delivery action across 22 yards.' };
+      const activity2 = { time: '15 min', title: 'Activity 2: Long Barrier Fielding & Match Scrimmage', description: 'Long barrier ground fielding drills, wicket-keeper returns, and 6-over pairs cricket match emphasizing call and run communication.' };
+      const plenary = { time: '10 min', title: 'Cool-Down & Feedback Debrief', description: 'Shoulder crossover stretches, hamstring recovery holds, slow breathing and review of cricket laws (LBW, No-ball).' };
       return {
+        isTheory: false,
+        sport: 'Cricket',
+        objectives: `Master grip, stance, and front-foot straight drive mechanics alongside bowling release and long-barrier fielding skills for Grade ${currentGrade}.`,
+        starter, demonstration, activity1, activity2, plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
+        assessment: `Technical scoring rubric: Front-foot placement, high elbow follow-through, bowling arm extension without chucking.`,
+        equipment: `Cricket bats, leather/tennis balls, batting tees, stumps, boundary cones.`,
+        safety: `Ensure protective gear (pads, gloves, helmets) when playing with hard balls; safe 15m radius around batting nets.`
+      };
+    }
+
+    if (t.includes('badminton') || f.includes('badminton')) {
+      const starter = { time: '10 min', title: 'Dynamic Warm-Up & Agility Shuffles', description: 'Lunge steps, scissor-step lateral shuffles, wrist rotations, and light shuttle tap catches.' };
+      const demonstration = { time: '10 min', title: 'Forehand Grip & Overhead Clear Mechanics', description: 'Coach demonstration of pistol forehand grip, non-racket shoulder pointing at shuttle, high contact point, and pronation follow-through.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Overhead High Clear & Net Play Drills', description: 'Corner-to-corner feeding drills: 20 overhead clears deep to rear court paired with soft net drops and tumble recovery.' };
+      const activity2 = { time: '15 min', title: 'Activity 2: Half-Court Singles / Doubles Rally Game', description: 'Half-court singles rallies with mandatory clear-drop sequences; practicing low short service into the service box.' };
+      const plenary = { time: '10 min', title: 'Cool-Down & Grip Debrief', description: 'Wrist flexor stretches, calf static stretch, deep breathing, and review of service court rules (even right, odd left).' };
+      return {
+        isTheory: false,
+        sport: 'Badminton',
+        objectives: `Execute proper forehand overhead high clears, scissor-step footwork, and tactical net drops in match play for Grade ${currentGrade}.`,
+        starter, demonstration, activity1, activity2, plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
+        assessment: `Footwork & Stroke Rubric: High contact point extension, weight transfer from rear to front foot, court recovery speed.`,
+        equipment: `Badminton rackets, feather/nylon shuttlecocks, regulation net, boundary court cones.`,
+        safety: `Ensure non-marking sports shoes on court to avoid knee twists; keep safe distance between adjacent court pairs.`
+      };
+    }
+
+    if (t.includes('table tennis') || t.includes('tt') || f.includes('table tennis')) {
+      const starter = { time: '10 min', title: 'Reflex Warm-Up & Eye-Hand Coordination', description: 'Side-to-side shuffle steps, ball bounce challenges on racket face (forehand and backhand 50 continuous taps).' };
+      const demonstration = { time: '10 min', title: 'Forehand Counter-Hit & Stance Demonstration', description: 'Coach demonstration of ready stance (knees bent, weight on balls of feet), waist-level backswing, brushing contact, and eyebrow finish.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Cross-Court Counter & Multi-Ball Drills', description: 'Cross-court forehand rally target practice (30 balls continuous) followed by multi-ball short push return training.' };
+      const activity2 = { time: '15 min', title: 'Activity 2: 11-Point Match Play with Service Variation', description: 'Regulated 11-point singles matches with legal service toss (minimum 16cm vertical throw without spin).' };
+      const plenary = { time: '10 min', title: 'Cool-Down & Debrief', description: 'Shoulder and forearm flexor stretches, wrist mobility circles, review of legal service rules.' };
+      return {
+        isTheory: false,
+        sport: 'Table Tennis',
+        objectives: `Master ready stance, forehand counter-hit topspin consistency, and legal service toss for Grade ${currentGrade}.`,
+        starter, demonstration, activity1, activity2, plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
+        assessment: `Rally endurance and stance accuracy: Maintaining balanced low centre of gravity during rapid exchanges.`,
+        equipment: `Table tennis tables, ITTF approved balls, rackets, net gauges.`,
+        safety: `Clear area around tables of spare balls and bags to prevent tripping.`
+      };
+    }
+
+    if (t.includes('kho') || f.includes('kho') || t.includes('kabaddi') || f.includes('kabaddi')) {
+      const starter = { time: '10 min', title: 'Agility Warm-Up & Zigzag Sprints', description: 'Fast feet ladder runs, lateral cone hops, ankle rotations, and 10-meter burst accelerations.' };
+      const demonstration = { time: '10 min', title: 'Dodging Techniques & Pole Dive Mechanics', description: 'Coach demonstration of fake body feints, sudden 180° turns, pole dive reach, and sitting chaser tap signals ("Kho!").' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Ring Play & Chaser Pursuit Drills', description: '3-defender evasive ring movement inside the court paired with sitting chasers giving loud, clean Kho touches.' };
+      const activity2 = { time: '15 min', title: 'Activity 2: Official Kho-Kho Mini Match (7-Minute Innings)', description: 'Full competitive innings applying official fouls rules (cross-lane, out-of-bounds, sudden direction change).' };
+      const plenary = { time: '10 min', title: 'Cool-Down & Stamina Recovery', description: 'Hamstring and calf static stretches, quad pull holds, hydration and sportsmanship reflection.' };
+      return {
+        isTheory: false,
+        sport: 'Kho-Kho & Traditional Games',
+        objectives: `Develop explosive zigzag agility, tactical running in rings, and coordinated chaser communication for Grade ${currentGrade}.`,
+        starter, demonstration, activity1, activity2, plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
+        assessment: `Agility & Decision Making: Quick reaction to 'Kho' calls, evasion timing without stepping over boundaries.`,
+        equipment: `Kho-Kho wooden poles, stopwatch, lime powder court markings, team bibs.`,
+        safety: `Ensure soft, stone-free court surface; inspect footwear for traction to prevent ankle sprains.`
+      };
+    }
+
+    if (t.includes('yoga') || t.includes('asana')) {
+      const starter = { time: '10 min', title: 'Dynamic Warm-Up & Mobilization', description: 'Neck rolls, gentle spinal cat-cow arches, joint lubrication circles, light pacing walks.' };
+      const demonstration = { time: '10 min', title: 'Skill Demonstration & Breathing Synchronization', description: 'Instructor demonstration of 12-stage Surya Namaskar (Sun Salutation) with synchronized inhalation and exhalation rhythm.' };
+      const activity1 = { time: '15 min', title: 'Activity 1: Asana Alignment & Balance Holds', description: 'Step-by-step posture holds of Vrikshasana (Tree pose), Virabhadrasana (Warrior pose), and core abdominal holds (Navasana).' };
+      const activity2 = { time: '15 min', title: 'Activity 2: Flexibility Sequence & Partner Stretches', description: 'Partner-assisted hamstring and thoracic stretches, followed by timed plank holds to build core stability.' };
+      const plenary = { time: '10 min', title: 'Cool-Down & Shavasana Relaxation', description: 'Complete Shavasana deep relaxation progressive muscle scanning, controlled deep soundless diaphragmatic breathing cycles.' };
+      return {
+        isTheory: false,
         sport: 'Yoga & Fitness',
         objectives: `Improve posture balance, structural flexibility, and core abdominal endurance tracking via Khelo India fitness tests.`,
-        warmup: `10 min active warm-up: Neck rolls, gentle spinal cat-cow arches, joint lubrication circles, light pacing walks.`,
-        mainDrill: `25 min core drills: 12-stage Sun Salutation forms (Surya Namaskar) under breathing coordination, followed by core strength sit-ups or static posture balance holds (Vrikshasana).`,
-        cooldown: `10 min recovery: Complete Shavasana deep relaxation progressive muscle scanning, controlled deep soundless diaphragmatic breathing cycles.`,
+        starter,
+        demonstration,
+        activity1,
+        activity2,
+        plenary,
+        warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+        mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+        cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
         assessment: `Physical criteria testing: Posture alignment accuracy, flexibility stretch levels (sit-and-reach scores), core muscular endurance counts.`,
         equipment: `Individual eco yoga mats, stopwatch, sit-and-reach assessment boxes.`,
         safety: `Perform poses slowly without jerky force, maintain deep slow breathing, stop instantly if dizziness or joint strain occurs.`
       };
     }
 
+    const starter = { time: '10 min', title: 'Dynamic Warm-Up & Mobility Loops', description: 'Intermittent jogging loops, dynamic flexibility stretches, and lateral skip runs.' };
+    const demonstration = { time: '10 min', title: 'Skill Demonstration & Movement Principles', description: 'Coach demonstration of target coordination exercises, footwork agility, and safe body spatial positioning.' };
+    const activity1 = { time: '15 min', title: 'Activity 1: Skill Coordination Drills', description: 'Partner passing speed trails, agility cone ladders, and movement reaction drills.' };
+    const activity2 = { time: '15 min', title: 'Activity 2: Cooperative Team Mini-Games', description: 'Active team mini-game drills enforcing tactical positioning, communication, and sportsmanship.' };
+    const plenary = { time: '10 min', title: 'Cool-Down & Reflection Debrief', description: 'Restorative static stretching, slow-paced recovery breathing, and skill feedback session.' };
     return {
-      sport: termFocus || 'General P.E.',
-      objectives: `Enhance general motor skill coordination, cardiorespiratory endurance, and tactical gameplay understanding for Grade ${currentGrade} CBSE syllabus.`,
-      warmup: `10 min active warm-up: Intermittent jogging loops, dynamic flexibility stretches, and lateral skip runs.`,
-      mainDrill: `25 min core drills: Specific target coordination exercises, partner passing speed trails, and cooperative active team mini-game drills.`,
-      cooldown: `10 min recovery: Restorative static stretching, slow-paced recovery breathing, and skill feedback session.`,
-      assessment: `Formative observation: Motor coordination, spatial awareness, and peer cooperation.`,
-      equipment: `Marker cones, relay batons, soft foam balls, whistle.`,
+      isTheory: false,
+      sport: sportOverride || termFocus || 'Practical Sports & Games',
+      objectives: `Enhance motor skill coordination, sport-specific technique, and tactical gameplay understanding for Grade ${currentGrade} CBSE syllabus.`,
+      starter,
+      demonstration,
+      activity1,
+      activity2,
+      plenary,
+      warmup: `${starter.time} ${starter.title}: ${starter.description}`,
+      mainDrill: `${demonstration.title} & ${activity1.title}: ${demonstration.description} | ${activity1.description}`,
+      cooldown: `${plenary.time} ${plenary.title}: ${plenary.description}`,
+      assessment: `Formative observation: Technical execution, spatial awareness, and peer cooperation.`,
+      equipment: `Marker cones, relay batons, sports balls, whistle, bibs.`,
       safety: `Maintain designated operating zones, encourage regular hydration, inspect playing ground for hazards.`
     };
   };
@@ -405,7 +709,7 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
       
       const localPlan: LessonPlan = {
         teacher: "PE Coach",
-        subject: "Physical Education",
+        subject: defaults.isTheory ? "Physical Education (CBSE Theory Code 048)" : "Physical Education (Practical)",
         grade: plan.grade,
         date: week.dates || "Today",
         topic: week.topic,
@@ -413,55 +717,85 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
         termWeek: `Term ${tIdx + 1} / Wk ${week.weekNumber}`,
         duration: plan.duration || "40 min",
         equipment: defaults.equipment.split(', '),
-        teachingAids: ['Whistle', 'Marker cones', 'Tactical board'],
+        teachingAids: defaults.isTheory ? ['NCERT PE Textbook', 'Whiteboard / Smartboard', 'Past Year Board Exam Papers', 'Calculation Charts'] : ['Whistle', 'Marker Cones', 'Team Bibs', 'Stopwatch'],
         safety: defaults.safety.split(', '),
-        keyVocabulary: [defaults.sport, 'Form', 'Coordination', 'Athleticism'],
+        keyVocabulary: [defaults.sport, 'Form', 'Analysis', 'Assessment'],
         sen: {
-          wave1: 'Provide larger markers, gentle speed targets, and frequent rests.',
-          wave2: 'Assign peer-mentors, reduce distance bounds, and use colorful equipment.',
-          wave3: 'Offer custom one-on-one guided exercises and soft-touch balls.'
+          wave1: defaults.isTheory ? 'Provide printed summary flashcards and larger diagram prints.' : 'Provide larger markers, gentle speed targets, and frequent rests.',
+          wave2: defaults.isTheory ? 'Pair with study buddy for peer formula checking and step-by-step guidance.' : 'Assign peer-mentors, reduce distance bounds, and use colorful equipment.',
+          wave3: defaults.isTheory ? 'Provide one-on-one guided review of formulas and key definitions.' : 'Offer custom one-on-one guided exercises and soft-touch balls.'
         },
         objectives: {
-          know: `Know the basic rules, positions, and defensive strategies for ${defaults.sport}.`,
-          understand: `Understand body posture mechanics and team communication.`,
+          know: defaults.objectives.split(';')[0] || defaults.objectives,
+          understand: defaults.objectives.split(';')[1] || 'Understand foundational biomechanics, rules, and physiological concepts.',
           beAbleTo: defaults.objectives
         },
         successCriteria: {
-          all: 'Participate actively in warm-up routines and basic skill repetitions with positive attitude.',
-          most: 'Execute the core skill correctly during controlled partner drills with steady mechanics.',
-          some: 'Apply the skill adaptively in matches or tactical group scenarios.'
+          all: defaults.isTheory ? 'Identify core terms and understand primary principles.' : 'Participate actively in warm-up routines and basic skill repetitions with positive attitude.',
+          most: defaults.isTheory ? 'Solve standard problems and explain concepts accurately.' : 'Execute the core skill correctly during controlled partner drills with steady mechanics.',
+          some: defaults.isTheory ? 'Analyze complex case studies and construct advanced fixtures independently.' : 'Apply the skill adaptively in matches or tactical group scenarios.'
         },
         starter: {
-          time: '10 min',
-          title: 'Dynamic Warm-Up & Physical Prep',
-          description: defaults.warmup
+          time: defaults.starter.time,
+          title: defaults.starter.title,
+          description: defaults.starter.description
         },
         mainActivity: {
-          time: '25 min',
+          time: '35 min',
           activities: [
             {
-              title: 'Skill Adaptation Drill Loop',
-              description: defaults.mainDrill,
-              coachingPoints: [
+              title: defaults.demonstration.title,
+              description: defaults.demonstration.description,
+              coachingPoints: defaults.isTheory ? [
+                'Highlight key NCERT definitions and terms.',
+                'Demonstrate step-by-step formula derivations and diagram layouts.',
+                'Address common student misconception points.'
+              ] : [
+                'Demonstrate proper body alignment and stance.',
+                'Show correct contact point and execution speed.',
+                'Provide clear 2-word verbal cues for students.'
+              ]
+            },
+            {
+              title: defaults.activity1.title,
+              description: defaults.activity1.description,
+              coachingPoints: defaults.isTheory ? [
+                'Verify mathematical calculations and formula applications.',
+                'Encourage peer verification of fixture drawings.',
+                'Check bye placements step-by-step.'
+              ] : [
                 'Maintain high chest posture and visual awareness.',
                 'Coordinate breathing cycles with dynamic explosive reps.',
-                'Prioritize team-focused spatial spacing.'
+                'Prioritize proper court/field spacing.'
+              ]
+            },
+            {
+              title: defaults.activity2.title,
+              description: defaults.activity2.description,
+              coachingPoints: defaults.isTheory ? [
+                'Train for CBSE 3-mark and 5-mark answer structuring.',
+                'Practice time management under timed exam conditions.',
+                'Review assertion-reason logic rigorously.'
+              ] : [
+                'Apply skill under realistic match pressure.',
+                'Encourage team communication and sportspersonship.',
+                'Follow official game rules strictly.'
               ]
             }
           ]
         },
         plenary: {
-          time: '10 min',
-          title: 'Cool-down & Review Debate',
-          description: defaults.cooldown
+          time: defaults.plenary.time,
+          title: defaults.plenary.title,
+          description: defaults.plenary.description
         },
-        homework: `Practice the target posture repetitions at home; watch professional video highlights.`,
-        collaboration: `Partner passing loops during the week; peer scoring sheets review.`,
-        differentiation: `Accommodate varied stamina speeds by adjusting court size boundaries.`,
-        criticalThinking: `Ask students: "Why is balance critical to pass direction control?"`,
-        warmupDiagramPrompt: `Diagram showing standard warmup pathways.`,
-        explanationDiagramPrompt: `Diagram showing standard technical skill execution.`,
-        gameDiagramPrompt: `Diagram showing standard game training space setup.`
+        homework: defaults.isTheory ? 'Review chapter notes and solve 2 CBSE past-year 3-mark questions.' : 'Practice 10 minutes of daily core mobility at home; review technique.',
+        collaboration: defaults.isTheory ? 'Group study problem-solving and peer checking.' : 'Pair drills and small-sided team play.',
+        differentiation: defaults.isTheory ? 'Tiered worksheets: foundational MCQs for Tier 1, advanced case studies for Tier 2.' : 'Tiered progression distances based on student confidence.',
+        criticalThinking: defaults.isTheory ? 'Ask students to justify fixture placement or physiological response mechanisms.' : 'Ask students: "Why is balance critical to pass direction control?"',
+        warmupDiagramPrompt: defaults.isTheory ? 'Concept mind map flowchart diagram' : 'Warmup drill grid layout',
+        explanationDiagramPrompt: defaults.isTheory ? 'CBSE formula calculation table or diagram' : 'Skill drill technical demonstration',
+        gameDiagramPrompt: defaults.isTheory ? 'Board exam case study layout chart' : 'Small sided game pitch layout'
       };
 
       setWeekLessons(prev => ({
@@ -636,11 +970,12 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
           <table>
             <thead>
               <tr>
-                <th width="50">Week</th>
-                <th width="100">Dates</th>
-                <th width="80">Status</th>
-                <th width="150">Topic</th>
-                <th>Details</th>
+                <th width="40">Week</th>
+                <th width="85">Dates</th>
+                <th width="75">Status</th>
+                <th width="150">CBSE Theory Scheme (Code 048)</th>
+                <th width="150">On-Field Game & Sport Skill</th>
+                <th>Instructional Guide / Details</th>
               </tr>
             </thead>
             <tbody>
@@ -652,7 +987,8 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
               <td>${week.weekNumber}</td>
               <td>${week.dates || '-'}</td>
               <td>${week.status}</td>
-              <td><b>${week.topic || '-'}</b></td>
+              <td><b>${week.theoryTopic || week.topic || '-'}</b></td>
+              <td>${week.gameSkill || '-'}</td>
               <td>${week.details || '-'}</td>
             </tr>
           `;
@@ -673,7 +1009,7 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     }
 
     let csv = "\uFEFF"; // BOM for UTF-8
-    csv += "Term,Month,Week,Dates,Status,Topic,Details\n";
+    csv += "Term,Month,Week,Dates,Status,CBSE Theory Scheme (Code 048),On-Field Game & Sport Skill,Summary Topic,Details\n";
     
     plan.terms.forEach(term => {
       const safeTerm = term.termName.replace(/"/g, '""');
@@ -686,6 +1022,8 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
             `"${week.weekNumber}"`,
             `"${(week.dates || '').replace(/"/g, '""')}"`,
             `"${week.status}"`,
+            `"${(week.theoryTopic || week.topic || '').replace(/"/g, '""')}"`,
+            `"${(week.gameSkill || '').replace(/"/g, '""')}"`,
             `"${(week.topic || '').replace(/"/g, '""')}"`,
             `"${(week.details || '').replace(/"/g, '""')}"`
           ];
@@ -1121,7 +1459,59 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                       </button>
                     </div>
                   ) : (
-                    plan.terms?.map((term, tIdx) => (
+                    <div>
+                      {/* Curriculum Track View Mode Switcher */}
+                      <div className="mb-10 p-4 bg-slate-50 border-2 border-slate-200/90 rounded-3xl print:hidden flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-700 shrink-0">
+                            <Layers size={20} />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black uppercase text-slate-800 tracking-wider block">Curriculum Display View</span>
+                            <p className="text-[11px] text-slate-500 font-semibold">Choose to view On-Field Games, CBSE Theory Scheme of Work, or Dual-Track Integrated format</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-white border border-slate-200 rounded-2xl shadow-xs">
+                          <button
+                            type="button"
+                            onClick={() => setViewMode('integrated')}
+                            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${
+                              viewMode === 'integrated'
+                                ? 'bg-slate-900 text-white shadow-md'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                            }`}
+                          >
+                            <Layers size={14} />
+                            <span>Dual-Track Integrated</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setViewMode('theory')}
+                            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${
+                              viewMode === 'theory'
+                                ? 'bg-indigo-600 text-white shadow-md'
+                                : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50'
+                            }`}
+                          >
+                            <BookOpen size={14} />
+                            <span>CBSE Theory Scheme (Code 048)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setViewMode('games')}
+                            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${
+                              viewMode === 'games'
+                                ? 'bg-emerald-600 text-white shadow-md'
+                                : 'text-slate-600 hover:text-emerald-600 hover:bg-emerald-50/50'
+                            }`}
+                          >
+                            <Trophy size={14} />
+                            <span>On-Field Games Curriculum</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {plan.terms?.map((term, tIdx) => (
                       <div key={tIdx} className="mb-16 last:mb-0">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 border-b-2 border-slate-900 pb-4">
                            <div className="flex items-center space-x-4">
@@ -1177,6 +1567,7 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                                        key={wIdx} 
                                        onClick={() => {
                                          if (week.status === 'Instructional') {
+                                           setModalLessonType(viewMode === 'games' ? 'games' : 'theory');
                                            setSelectedWeekForLesson({
                                              termIdx: tIdx,
                                              monthIdx: mIdx,
@@ -1196,15 +1587,71 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                                           <span className="flex items-center"><CalendarDays size={10} className="mr-1" /> Week {week.weekNumber}</span>
                                           <span>{week.dates}</span>
                                         </div>
-                                        <input 
-                                          className="w-full font-black text-slate-800 bg-transparent outline-none focus:text-indigo-600 transition-colors pointer-events-auto" 
-                                          value={week.topic} 
-                                          onClick={(e) => e.stopPropagation()} // stop popup if clicking input
-                                          onChange={(e) => handleUpdatePlan(tIdx, mIdx, wIdx, 'topic', e.target.value)} 
-                                        />
+
+                                        {viewMode === 'integrated' ? (
+                                          <div className="space-y-2 mb-2" onClick={(e) => e.stopPropagation()}>
+                                            {/* Theory Scheme */}
+                                            <div className="p-2.5 bg-indigo-50/70 border border-indigo-150 rounded-xl">
+                                              <div className="flex items-center justify-between mb-1">
+                                                <span className="text-[9px] font-black text-indigo-700 uppercase tracking-wider flex items-center gap-1">
+                                                  <BookOpen size={10} /> CBSE Theory Scheme (048)
+                                                </span>
+                                              </div>
+                                              <input 
+                                                className="w-full font-bold text-xs text-indigo-950 bg-transparent outline-none focus:text-indigo-600 transition-colors pointer-events-auto" 
+                                                value={week.theoryTopic ?? (week.topic.includes(' | Game:') ? week.topic.split(' | Game:')[0].replace(/^Theory:\s*/, '') : week.topic)} 
+                                                placeholder="CBSE Theory Unit / Topic"
+                                                onChange={(e) => handleUpdatePlan(tIdx, mIdx, wIdx, 'theoryTopic', e.target.value)} 
+                                              />
+                                            </div>
+
+                                            {/* Game Progression */}
+                                            <div className="p-2.5 bg-emerald-50/70 border border-emerald-150 rounded-xl">
+                                              <div className="flex items-center justify-between mb-1">
+                                                <span className="text-[9px] font-black text-emerald-700 uppercase tracking-wider flex items-center gap-1">
+                                                  <Trophy size={10} /> On-Field Game & Skill Drill
+                                                </span>
+                                              </div>
+                                              <input 
+                                                className="w-full font-bold text-xs text-emerald-950 bg-transparent outline-none focus:text-emerald-700 transition-colors pointer-events-auto" 
+                                                value={week.gameSkill ?? (week.topic.includes(' | Game:') ? week.topic.split(' | Game:')[1] : week.topic)} 
+                                                placeholder="On-Field Game Skill / Tactical Drill"
+                                                onChange={(e) => handleUpdatePlan(tIdx, mIdx, wIdx, 'gameSkill', e.target.value)} 
+                                              />
+                                            </div>
+                                          </div>
+                                        ) : viewMode === 'theory' ? (
+                                          <div className="p-2.5 bg-indigo-50/70 border border-indigo-150 rounded-xl mb-2" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-[9px] font-black text-indigo-700 uppercase tracking-wider flex items-center gap-1">
+                                                <BookOpen size={10} /> CBSE Theory Scheme of Work (Code 048)
+                                              </span>
+                                            </div>
+                                            <input 
+                                              className="w-full font-black text-xs text-indigo-950 bg-transparent outline-none focus:text-indigo-600 transition-colors pointer-events-auto" 
+                                              value={week.theoryTopic ?? (week.topic.includes(' | Game:') ? week.topic.split(' | Game:')[0].replace(/^Theory:\s*/, '') : week.topic)} 
+                                              placeholder="CBSE Theory Unit / Topic"
+                                              onChange={(e) => handleUpdatePlan(tIdx, mIdx, wIdx, 'theoryTopic', e.target.value)} 
+                                            />
+                                          </div>
+                                        ) : (
+                                          <div className="p-2.5 bg-emerald-50/70 border border-emerald-150 rounded-xl mb-2" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-[9px] font-black text-emerald-700 uppercase tracking-wider flex items-center gap-1">
+                                                <Trophy size={10} /> On-Field Game Skill & Coaching Progression
+                                              </span>
+                                            </div>
+                                            <input 
+                                              className="w-full font-black text-xs text-emerald-950 bg-transparent outline-none focus:text-emerald-700 transition-colors pointer-events-auto" 
+                                              value={week.gameSkill ?? (week.topic.includes(' | Game:') ? week.topic.split(' | Game:')[1] : week.topic)} 
+                                              placeholder="On-Field Game Skill / Tactical Drill"
+                                              onChange={(e) => handleUpdatePlan(tIdx, mIdx, wIdx, 'gameSkill', e.target.value)} 
+                                            />
+                                          </div>
+                                        )}
                                         
                                         {week.status === 'Instructional' && week.details && (
-                                          <div className="mt-3 pt-3 border-t border-slate-100/50">
+                                          <div className="mt-2 pt-2 border-t border-slate-100/50">
                                             <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest block mb-1">Instructional Guide:</span>
                                             <p className="text-xs text-slate-600 font-medium leading-relaxed italic">
                                               {week.details}
@@ -1253,126 +1700,195 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                         </div>
                       </div>
                     ))
+                    }
+                  </div>
                   )}
                 </div>
 
                 {/* Lesson Plan Integrator Modal */}
                 {selectedWeekForLesson && (
                   <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white border-4 border-slate-900 rounded-[2.5rem] w-full max-w-2xl p-6 md:p-8 shadow-[12px_12px_0px_0px_rgba(15,23,42,1)] relative max-h-[85vh] overflow-y-auto">
-                      {/* Modal Header */}
-                      <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
-                        <div>
-                          <span className="px-2.5 py-1 bg-indigo-150 text-indigo-700 text-[10px] font-black uppercase tracking-wider rounded-lg">
-                            Term {selectedWeekForLesson.termIdx + 1} &bull; Week {selectedWeekForLesson.week.weekNumber} Lesson Integrator
-                          </span>
-                          <h3 className="text-xl md:text-2xl font-black text-slate-800 uppercase mt-1.5 leading-tight">
-                            {selectedWeekForLesson.week.topic}
-                          </h3>
-                          <p className="text-xs text-slate-400 font-semibold mt-1">
-                            Dates: {selectedWeekForLesson.week.dates} &bull; Primary Pacing focused on "{selectedWeekForLesson.termIdx === 0 ? term1Focus : term2Focus}"
-                          </p>
-                        </div>
-                        <button 
-                          onClick={() => setSelectedWeekForLesson(null)}
-                          className="p-1.5 px-3 bg-slate-100 border border-slate-300 rounded-xl text-slate-500 hover:text-slate-900 font-bold text-xs uppercase"
-                        >
-                          Close
-                        </button>
-                      </div>
-
-                      {/* Modal Body */}
+                    <div className="bg-white border-4 border-slate-900 rounded-[2.5rem] w-full max-w-3xl p-6 md:p-8 shadow-[12px_12px_0px_0px_rgba(15,23,42,1)] relative max-h-[85vh] overflow-y-auto">
+                      {/* Modal Body Helper */}
                       {(() => {
-                        const monthObj = plan?.terms[selectedWeekForLesson.termIdx]?.months[selectedWeekForLesson.monthIdx];
-                        const monthName = monthObj ? monthObj.monthName : '';
-                        const lessonKey = `${selectedWeekForLesson.termIdx}_${monthName}_${selectedWeekForLesson.weekIdx}`;
+                        const lessonKey = `${selectedWeekForLesson.termIdx}_${selectedWeekForLesson.monthIdx}_${selectedWeekForLesson.weekIdx}`;
                         const aiPlan = weekLessons[lessonKey];
                         const isGenerating = generatingLessonIdx === lessonKey;
                         const termFocus = selectedWeekForLesson.termIdx === 0 ? term1Focus : term2Focus;
+                        const chosenGame = selectedWeekForLesson.termIdx === 0 ? term1Game : term2Game;
                         
+                        const activeType = modalLessonType;
+                        const activeTopic = activeType === 'theory' 
+                          ? (selectedWeekForLesson.week.theoryTopic || selectedWeekForLesson.week.topic)
+                          : (selectedWeekForLesson.week.gameSkill || `${chosenGame} — Technical Drills & Match Play`);
+
                         const defaults = getCurriculumPlanLocal(
-                          selectedWeekForLesson.week.topic,
+                          activeTopic,
                           selectedWeekForLesson.week.details,
                           termFocus,
-                          grade
+                          grade,
+                          activeType,
+                          chosenGame
                         );
 
                         return (
-                          <div className="space-y-6 text-left">
-                            {lessonGeneratingError && (
-                              <div className="p-3.5 bg-indigo-50 border border-indigo-200 text-indigo-950 text-xs font-bold rounded-xl flex items-center gap-2">
-                                <Sparkles size={16} className="text-indigo-600 flex-shrink-0 animate-pulse" />
-                                <span>{lessonGeneratingError}</span>
-                              </div>
-                            )}
-
-                            {/* Summary card */}
-                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Pedagogical Details</span>
-                              <p className="text-xs text-slate-750 font-semibold leading-relaxed mt-1">
-                                {selectedWeekForLesson.week.details}
-                              </p>
-                            </div>
-
-                            {/* Objective */}
-                            <div className="flex gap-3">
-                              <GraduationCap className="text-[#FF6B00] shrink-0 mt-0.5" size={20} />
+                          <div>
+                            {/* Modal Header */}
+                            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-4">
                               <div>
-                                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Learning Objectives (CBSE aligned)</h4>
-                                <p className="text-xs text-slate-600 font-medium leading-relaxed mt-1">
-                                  {aiPlan ? `Know: ${aiPlan.objectives?.know || ''}. Understand: ${aiPlan.objectives?.understand || ''}. Apply: ${aiPlan.objectives?.beAbleTo || ''}` : defaults.objectives}
+                                <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg inline-flex items-center gap-1.5 ${activeType === 'theory' ? 'bg-indigo-100 text-indigo-900 border border-indigo-200' : 'bg-emerald-100 text-emerald-900 border border-emerald-200'}`}>
+                                  {activeType === 'theory' ? <BookOpen size={12} className="text-indigo-600" /> : <Trophy size={12} className="text-emerald-600" />}
+                                  Term {selectedWeekForLesson.termIdx + 1} &bull; Week {selectedWeekForLesson.week.weekNumber} &bull; {activeType === 'theory' ? 'CBSE Theory Unit (Code 048)' : `On-Field Game: ${chosenGame}`}
+                                </span>
+                                <h3 className="text-xl md:text-2xl font-black text-slate-800 uppercase mt-2 leading-tight">
+                                  {activeTopic}
+                                </h3>
+                                <p className="text-xs text-slate-500 font-semibold mt-1">
+                                  Dates: {selectedWeekForLesson.week.dates} &bull; {activeType === 'theory' ? 'CBSE Syllabus Pacing: Units 1-10 complete by Nov 30, Pre-Boards in Dec, Practical in Jan' : `Practical Sport: ${chosenGame}`}
                                 </p>
                               </div>
+                              <button 
+                                onClick={() => setSelectedWeekForLesson(null)}
+                                className="p-1.5 px-3 bg-slate-100 border border-slate-300 rounded-xl text-slate-500 hover:text-slate-900 font-bold text-xs uppercase"
+                              >
+                                Close
+                              </button>
                             </div>
 
-                            {/* Structure blocks */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                              <div className="bg-rose-50/50 border border-rose-100 rounded-2xl p-4">
-                                <div className="flex items-center gap-1.5 mb-1.5 text-rose-700 font-extrabold uppercase text-[10px] tracking-wider">
-                                  <Dumbbell size={12} className="text-rose-500 animate-pulse" />
-                                  <span>Warm-Up (10m)</span>
-                                </div>
-                                <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-                                  {aiPlan ? `${aiPlan.starter?.title || ''}: ${aiPlan.starter?.description || ''}` : defaults.warmup}
-                                </p>
-                              </div>
-
-                              <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4">
-                                <div className="flex items-center gap-1.5 mb-1.5 text-indigo-700 font-extrabold uppercase text-[10px] tracking-wider">
-                                  <BookOpen size={12} className="text-indigo-500 animate-pulse" />
-                                  <span>Central Drills (25m)</span>
-                                </div>
-                                <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-                                  {aiPlan ? ((Array.isArray(aiPlan.mainActivity?.activities) ? aiPlan.mainActivity.activities : []).map(a => `${a.title || 'Drill'}: ${a.description || ''}`).join('; ') || '') : defaults.mainDrill}
-                                </p>
-                              </div>
-
-                              <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4">
-                                <div className="flex items-center gap-1.5 mb-1.5 text-emerald-700 font-extrabold uppercase text-[10px] tracking-wider">
-                                  <Award size={12} className="text-emerald-500" />
-                                  <span>Cool-Down (10m)</span>
-                                </div>
-                                <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-                                  {aiPlan ? `${aiPlan.plenary?.title || ''}: ${aiPlan.plenary?.description || ''}` : defaults.cooldown}
-                                </p>
-                              </div>
+                            {/* View Option Toggle Switcher inside Modal */}
+                            <div className="flex items-center gap-2 p-1.5 bg-slate-100 border border-slate-200 rounded-2xl mb-6">
+                              <button
+                                type="button"
+                                onClick={() => setModalLessonType('theory')}
+                                className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+                                  activeType === 'theory'
+                                    ? 'bg-indigo-600 text-white shadow-md'
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                                }`}
+                              >
+                                <BookOpen size={14} />
+                                <span>CBSE Theory Scheme Lesson (5-Stage)</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setModalLessonType('games')}
+                                className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+                                  activeType === 'games'
+                                    ? 'bg-emerald-600 text-white shadow-md'
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                                }`}
+                              >
+                                <Trophy size={14} />
+                                <span>On-Field Game Lesson Plan (5-Stage)</span>
+                              </button>
                             </div>
 
-                            {/* Equipment & Safety row */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
-                              <div className="space-y-1">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Required Equipment</span>
-                                <p className="text-xs text-slate-700 font-bold">
-                                  {aiPlan ? aiPlan.equipment?.join(', ') : defaults.equipment}
+                            <div className="space-y-6 text-left">
+                              {lessonGeneratingError && (
+                                <div className="p-3.5 bg-indigo-50 border border-indigo-200 text-indigo-950 text-xs font-bold rounded-xl flex items-center gap-2">
+                                  <Sparkles size={16} className="text-indigo-600 flex-shrink-0 animate-pulse" />
+                                  <span>{lessonGeneratingError}</span>
+                                </div>
+                              )}
+
+                              {/* Summary card */}
+                              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Pedagogical Details</span>
+                                <p className="text-xs text-slate-750 font-semibold leading-relaxed mt-1">
+                                  {selectedWeekForLesson.week.details}
                                 </p>
                               </div>
-                              <div className="space-y-1">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Safety Warning Indicators</span>
-                                <p className="text-xs text-rose-700 font-bold">
-                                  {aiPlan ? aiPlan.safety?.join('; ') : defaults.safety}
-                                </p>
+
+                              {/* Objective */}
+                              <div className="flex gap-3">
+                                <GraduationCap className="text-[#FF6B00] shrink-0 mt-0.5" size={20} />
+                                <div>
+                                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Learning Objectives ({defaults.isTheory ? 'CBSE Theory' : 'PE Competency'})</h4>
+                                  <p className="text-xs text-slate-600 font-medium leading-relaxed mt-1">
+                                    {aiPlan ? `Know: ${aiPlan.objectives?.know || ''}. Understand: ${aiPlan.objectives?.understand || ''}. Apply: ${aiPlan.objectives?.beAbleTo || ''}` : defaults.objectives}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
+
+                              {/* 5-Phase Lesson Structure */}
+                              <div className="space-y-3 pt-2">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                                  Structured 5-Stage Session Plan ({defaults.isTheory ? 'Theory Classroom Format' : 'On-Field Sports Format'})
+                                </span>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {/* Phase 1: Starter / Warm-up */}
+                                  <div className={`rounded-2xl p-4 border ${defaults.isTheory ? 'bg-indigo-50/60 border-indigo-200' : 'bg-rose-50/60 border-rose-200'}`}>
+                                    <div className={`flex items-center gap-1.5 mb-1.5 font-extrabold uppercase text-[10px] tracking-wider ${defaults.isTheory ? 'text-indigo-700' : 'text-rose-700'}`}>
+                                      {defaults.isTheory ? <Sparkles size={13} className="text-indigo-500 animate-pulse" /> : <Flame size={13} className="text-rose-500 animate-pulse" />}
+                                      <span>{defaults.isTheory ? '1. Concept Starter & Hook (10m)' : '1. Dynamic Warm-Up (10m)'}</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-650 font-medium leading-relaxed">
+                                      {aiPlan ? `${aiPlan.starter?.title || ''}: ${aiPlan.starter?.description || ''}` : `${defaults.starter.title}: ${defaults.starter.description}`}
+                                    </p>
+                                  </div>
+
+                                  {/* Phase 2: Demonstration */}
+                                  <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4">
+                                    <div className="flex items-center gap-1.5 mb-1.5 text-amber-800 font-extrabold uppercase text-[10px] tracking-wider">
+                                      {defaults.isTheory ? <Presentation size={13} className="text-amber-600" /> : <Eye size={13} className="text-amber-600" />}
+                                      <span>{defaults.isTheory ? '2. Demonstration & Lecture (10m)' : '2. Skill Demonstration & Technique (10m)'}</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-650 font-medium leading-relaxed">
+                                      {aiPlan?.mainActivity?.activities?.[0] ? `${aiPlan.mainActivity.activities[0].title}: ${aiPlan.mainActivity.activities[0].description}` : `${defaults.demonstration.title}: ${defaults.demonstration.description}`}
+                                    </p>
+                                  </div>
+
+                                  {/* Phase 3: Activity 1 */}
+                                  <div className="bg-sky-50/60 border border-sky-200 rounded-2xl p-4">
+                                    <div className="flex items-center gap-1.5 mb-1.5 text-sky-800 font-extrabold uppercase text-[10px] tracking-wider">
+                                      {defaults.isTheory ? <FileSpreadsheet size={13} className="text-sky-600" /> : <Target size={13} className="text-sky-600" />}
+                                      <span>{defaults.isTheory ? '3. Activity 1: Theory Drills & Numericals (15m)' : '3. Activity 1: Skill Progression Drills (15m)'}</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-650 font-medium leading-relaxed">
+                                      {aiPlan?.mainActivity?.activities?.[1] ? `${aiPlan.mainActivity.activities[1].title}: ${aiPlan.mainActivity.activities[1].description}` : `${defaults.activity1.title}: ${defaults.activity1.description}`}
+                                    </p>
+                                  </div>
+
+                                  {/* Phase 4: Activity 2 */}
+                                  <div className={`rounded-2xl p-4 border ${defaults.isTheory ? 'bg-purple-50/60 border-purple-200' : 'bg-orange-50/60 border-orange-200'}`}>
+                                    <div className={`flex items-center gap-1.5 mb-1.5 font-extrabold uppercase text-[10px] tracking-wider ${defaults.isTheory ? 'text-purple-800' : 'text-orange-800'}`}>
+                                      {defaults.isTheory ? <GraduationCap size={13} className="text-purple-600" /> : <Trophy size={13} className="text-orange-600" />}
+                                      <span>{defaults.isTheory ? '4. Activity 2: CBSE Board PYQs & Cases (10m)' : '4. Activity 2: Game Situation / Match Play (15m)'}</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-650 font-medium leading-relaxed">
+                                      {aiPlan?.mainActivity?.activities?.[2] ? `${aiPlan.mainActivity.activities[2].title}: ${aiPlan.mainActivity.activities[2].description}` : `${defaults.activity2.title}: ${defaults.activity2.description}`}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Phase 5: Plenary / Cool Down (Full Width) */}
+                                <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-4">
+                                  <div className="flex items-center gap-1.5 mb-1.5 text-emerald-800 font-extrabold uppercase text-[10px] tracking-wider">
+                                    <CheckCircle2 size={13} className="text-emerald-600" />
+                                    <span>{defaults.isTheory ? '5. Plenary & Mind Map Review (10m)' : '5. Cool-Down & Feedback Debrief (10m)'}</span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-650 font-medium leading-relaxed">
+                                    {aiPlan ? `${aiPlan.plenary?.title || ''}: ${aiPlan.plenary?.description || ''}` : `${defaults.plenary.title}: ${defaults.plenary.description}`}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Equipment & Safety row */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                                <div className="space-y-1">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Required Resources</span>
+                                  <p className="text-xs text-slate-700 font-bold">
+                                    {aiPlan ? aiPlan.equipment?.join(', ') : defaults.equipment}
+                                  </p>
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Safety & Precaution Indicators</span>
+                                  <p className="text-xs text-rose-700 font-bold">
+                                    {aiPlan ? aiPlan.safety?.join('; ') : defaults.safety}
+                                  </p>
+                                </div>
+                              </div>
 
                             {/* Actions footer inside Modal */}
                             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-6 border-t">
@@ -1415,7 +1931,8 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                               </div>
                             </div>
                           </div>
-                        );
+                        </div>
+                      );
                       })()}
                     </div>
                   </div>

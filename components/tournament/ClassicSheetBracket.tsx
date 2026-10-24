@@ -2,9 +2,11 @@ import React, { useRef, useState, useEffect } from 'react';
 import { 
   Download, Printer, Sparkles, Edit3, Check, RefreshCw, 
   Copy, Image as ImageIcon, Eye, Grid, LayoutTemplate, Layers, CheckCircle2,
-  Calendar, Clock, Shield, Trophy
+  Calendar, Clock, Shield, Trophy, Share2, FileText
 } from 'lucide-react';
+import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
 import { toPng } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 import { toast } from '../../services/toast.ts';
 import { trackEvent } from '../../services/analytics.ts';
 
@@ -51,6 +53,22 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [customTimes, setCustomTimes] = useState<Record<string, string>>({});
   const [customTeamNames, setCustomTeamNames] = useState<Record<number, string>>({});
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+
+  const handleWhatsAppShare = () => {
+    const text = 
+`🏆 *OFFICIAL TOURNAMENT FIXTURE DRAW*
+📌 *Tournament:* ${tournamentName} (${category})
+⚽ *Sport:* ${sport} | 📅 *Date:* ${startDate}
+👥 *Teams:* ${teamsList.length} | 🎯 *Byes:* ${byesCount}
+⏰ *First Match:* ${startTime}
+
+Official CBSE Physical Education Subject Code 048 format.
+Generated via SmartPE India Official Tournament Studio.`;
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+    toast.success("Opening WhatsApp with tournament bracket draw!");
+  };
 
   // Compute bracket power of 2
   const N = teamsList.length;
@@ -230,6 +248,308 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
     }
   };
 
+  // Export to Word (.doc) with VISUAL BRACKET IMAGE embedded
+  const handleExportWordWithImage = async () => {
+    if (!sheetRef.current) return;
+    setIsExporting(true);
+    toast.loading("Generating Word document with bracket image...", { id: 'classic-word' });
+    try {
+      const dataUrl = await toPng(sheetRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff'
+      });
+
+      // Construct matches table
+      let tableRows = '';
+      let matchNum = 1;
+      for (let r = 0; r < totalRounds; r++) {
+        const matchesInRound = Math.pow(2, totalRounds - r - 1);
+        const roundName = r === totalRounds - 1 ? 'Championship Final' : r === totalRounds - 2 ? 'Semi-Finals' : r === totalRounds - 3 ? 'Quarter-Finals' : `Round ${r + 1}`;
+        for (let m = 0; m < matchesInRound; m++) {
+          const time = roundTimes[r]?.[m] || 'TBD';
+          tableRows += `
+            <tr style="text-align:center; background-color:${matchNum % 2 === 0 ? '#f8fafc' : '#ffffff'};">
+              <td style="font-weight:bold; color:#0D2B52; padding:6px;">Match ${matchNum++}</td>
+              <td style="padding:6px;">${roundName}</td>
+              <td style="font-weight:bold; text-align:left; padding:6px 10px;">${r === 0 ? (slots[m * 2]?.teamName || 'TBD') : `Winner of Previous Round`}</td>
+              <td style="color:#888; font-weight:bold; padding:6px;">VS</td>
+              <td style="font-weight:bold; text-align:left; padding:6px 10px;">${r === 0 ? (slots[m * 2 + 1]?.teamName || 'TBD') : `Winner of Previous Round`}</td>
+              <td style="padding:6px;">${formattedDateTag || startDate}</td>
+              <td style="font-weight:bold; color:#b91c1c; padding:6px;">${time}</td>
+            </tr>
+          `;
+        }
+      }
+
+      // 1. Calculate dynamic image scale to fit strictly on Page 1 (Landscape)
+      const origW = sheetRef.current.offsetWidth || 1100;
+      const origH = sheetRef.current.offsetHeight || (P * ROW_HEIGHT + 140);
+
+      // Determine dimensions: Standard A4 Landscape is 841.9pt x 595.3pt
+      // For N > 16 (e.g. 20, 25 teams), we recommend A3 Landscape (1190.6pt x 841.9pt)
+      const isA3 = N > 16;
+      const pageSizePtW = isA3 ? '1190.6pt' : '841.9pt';
+      const pageSizePtH = isA3 ? '841.9pt' : '595.3pt';
+
+      // Page 1 budget: Available printable height minus header (~44pt) and signatures (~28pt)
+      const maxTargetW = isA3 ? 1130 : 785;
+      const maxTargetH = isA3 ? 660 : 425;
+
+      // Scale proportionally so the entire bracket tree fits within Page 1
+      const scale = Math.min(maxTargetW / origW, maxTargetH / origH, 1);
+      const renderWidthPt = Math.max(220, Math.round(origW * scale));
+      const renderHeightPt = Math.max(160, Math.round(origH * scale));
+
+      const wordHtml = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+          <meta charset="utf-8">
+          <title>${displayTitle}</title>
+          <!--[if gte mso 9]>
+          <xml>
+            <w:WordDocument>
+              <w:View>Print</w:View>
+              <w:Zoom>100</w:Zoom>
+              <w:DoNotOptimizeForBrowser/>
+            </w:WordDocument>
+          </xml>
+          <![endif]-->
+          <style>
+            @page Section1 {
+              size: ${pageSizePtW} ${pageSizePtH};
+              mso-page-orientation: landscape;
+              margin: 14pt 18pt 14pt 18pt;
+              mso-header-margin: 0pt;
+              mso-footer-margin: 0pt;
+            }
+            div.Section1 {
+              page: Section1;
+            }
+            body {
+              font-family: Arial, Helvetica, sans-serif;
+              margin: 0;
+              padding: 0;
+              color: #1e293b;
+            }
+            table {
+              border-collapse: collapse;
+            }
+          </style>
+        </head>
+        <body lang="EN-US">
+          <div class="Section1">
+            <!-- PAGE 1: 1-PAGE MASTER TOURNAMENT FIXTURE BRACKET -->
+            <div style="text-align:center; margin:0 0 3pt 0;">
+              <h1 style="color:#0D2B52; font-size:12.5pt; text-transform:uppercase; margin:0; line-height:1.2;">
+                SHRADDHA CHILDREN'S ACADEMY
+              </h1>
+              <div style="color:#64748b; font-size:7.5pt; font-weight:bold; text-transform:uppercase; margin:1pt 0;">
+                DEPARTMENT OF PHYSICAL EDUCATION & SPORTS • OFFICIAL DRAW
+              </div>
+              <div style="color:#D4A017; font-size:10pt; font-weight:bold; text-transform:uppercase; margin:1pt 0;">
+                ${displayTitle}
+              </div>
+              <div style="font-size:7.5pt; color:#475569; margin:1pt 0;">
+                <strong>Sport:</strong> ${sport} &nbsp;|&nbsp; 
+                <strong>Date:</strong> ${formattedDateTag || startDate} &nbsp;|&nbsp; 
+                <strong>First Match:</strong> ${startTime} &nbsp;|&nbsp; 
+                <strong>Total Teams:</strong> ${N} &nbsp;|&nbsp; 
+                <strong>Upper Half:</strong> ${Nu} &nbsp;|&nbsp; 
+                <strong>Lower Half:</strong> ${P - Nu} &nbsp;|&nbsp; 
+                <strong>Byes:</strong> ${byesCount} &nbsp;|&nbsp; 
+                <strong>Total Matches:</strong> ${N - 1} &nbsp;|&nbsp; 
+                <strong>Total Rounds:</strong> ${totalRounds}
+              </div>
+            </div>
+
+            <!-- Scaled Bracket Drawing (Strictly fits on Page 1 without clipping or spilling) -->
+            <div style="text-align:center; margin:2pt 0; padding:0;">
+              <img src="${dataUrl}" 
+                   width="${renderWidthPt}" 
+                   height="${renderHeightPt}" 
+                   style="width:${renderWidthPt}pt; height:${renderHeightPt}pt; max-width:100%; border:1px solid #cbd5e1; display:inline-block;" 
+                   alt="Tournament Bracket Drawing" />
+            </div>
+
+            <!-- Page 1 Signatures -->
+            <table style="width:100%; margin-top:4pt; font-size:7.5pt; text-align:center; border:none;">
+              <tr>
+                <td style="width:33%; border:none; padding:2pt;">____________________________<br/><strong>Physical Education Teacher</strong></td>
+                <td style="width:33%; border:none; padding:2pt;">____________________________<br/><strong>Sports Coordinator / HOD</strong></td>
+                <td style="width:33%; border:none; padding:2pt;">____________________________<br/><strong>Principal / Headmaster</strong></td>
+              </tr>
+            </table>
+
+            <!-- EXPLICIT SECTION BREAK TO PAGE 2 (MATCH SCHEDULE & TIMINGS) -->
+            <br clear=all style='page-break-before:always; mso-break-type:section-break'>
+
+            <!-- PAGE 2: OFFICIAL MATCH SCHEDULE & TIMINGS -->
+            <div style="margin-top:4pt;">
+              <div style="text-align:center; margin-bottom:8pt;">
+                <h2 style="color:#0D2B52; font-size:13pt; text-transform:uppercase; margin:0 0 2pt 0;">
+                  SHRADDHA CHILDREN'S ACADEMY
+                </h2>
+                <div style="color:#64748b; font-size:8pt; font-weight:bold; text-transform:uppercase; margin:1pt 0;">
+                  DEPARTMENT OF PHYSICAL EDUCATION & SPORTS
+                </div>
+                <div style="color:#D4A017; font-size:11pt; font-weight:bold; text-transform:uppercase; margin:2pt 0;">
+                  Official Match Schedule & Timings — ${displayTitle}
+                </div>
+                <div style="font-size:8pt; color:#475569;">
+                  <strong>Discipline:</strong> ${sport} &nbsp;|&nbsp; <strong>Date:</strong> ${formattedDateTag || startDate} &nbsp;|&nbsp; <strong>Total Teams:</strong> ${N} &nbsp;|&nbsp; <strong>Total Matches:</strong> ${N - 1}
+                </div>
+              </div>
+
+              <table border="1" cellpadding="5" cellspacing="0" style="border-collapse:collapse; width:100%; font-size:8.5pt; font-family:Arial, sans-serif;">
+                <tr style="background-color:#0D2B52; color:#ffffff; font-weight:bold; text-align:center;">
+                  <th style="padding:5px; color:#ffffff;">Match #</th>
+                  <th style="padding:5px; color:#ffffff;">Stage / Round</th>
+                  <th style="padding:5px; color:#ffffff;">Team 1</th>
+                  <th style="padding:5px; color:#ffffff;">VS</th>
+                  <th style="padding:5px; color:#ffffff;">Team 2</th>
+                  <th style="padding:5px; color:#ffffff;">Date</th>
+                  <th style="padding:5px; color:#ffffff;">Scheduled Time</th>
+                </tr>
+                ${tableRows}
+              </table>
+
+              <!-- Page 2 Signatures -->
+              <table style="width:100%; margin-top:24pt; font-size:8pt; text-align:center; border:none;">
+                <tr>
+                  <td style="width:33%; border:none; padding:4pt;">____________________________<br/><strong>Physical Education Teacher</strong></td>
+                  <td style="width:33%; border:none; padding:4pt;">____________________________<br/><strong>Sports Coordinator / HOD</strong></td>
+                  <td style="width:33%; border:none; padding:4pt;">____________________________<br/><strong>Principal / Headmaster</strong></td>
+                </tr>
+              </table>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const blob = new Blob(['\ufeff', wordHtml], { type: 'application/msword' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Official_Fixture_${isA3 ? 'A3' : 'A4'}.doc`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.dismiss('classic-word');
+      toast.success(`Word document (.doc) exported successfully (${isA3 ? 'A3' : 'A4'} 1-Page Bracket + Schedule)!`);
+    } catch (err) {
+      console.error(err);
+      toast.dismiss('classic-word');
+      toast.error("Failed to generate Word document with image.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Direct PDF Download (.pdf) via jsPDF
+  const handleDownloadPdf = async () => {
+    if (!sheetRef.current) return;
+    setIsExporting(true);
+    toast.loading("Generating official PDF file...", { id: 'classic-pdf' });
+    try {
+      const imgData = await toPng(sheetRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff'
+      });
+
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: N > 16 ? 'a3' : 'a4'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 8;
+      const imgWidth = pdfWidth - margin * 2;
+      const imgHeight = (sheetRef.current.offsetHeight * imgWidth) / sheetRef.current.offsetWidth;
+
+      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, Math.min(imgHeight, pdfHeight - margin * 2));
+      pdf.save(`${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Official_Fixture_${N}Teams.pdf`);
+      toast.dismiss('classic-pdf');
+      toast.success("Official PDF file downloaded successfully!");
+    } catch (err) {
+      console.error(err);
+      toast.dismiss('classic-pdf');
+      toast.error("Failed to generate PDF. You can also use Print / Save PDF.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // WhatsApp Share with ACTUAL PDF Document Attachment
+  const handleWhatsAppSharePdf = async () => {
+    if (!sheetRef.current) return;
+    setIsExporting(true);
+    toast.loading("Preparing PDF for WhatsApp...", { id: 'classic-wa' });
+    try {
+      const imgData = await toPng(sheetRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff'
+      });
+
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: N > 16 ? 'a3' : 'a4'
+      });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 8;
+      const imgWidth = pdfWidth - margin * 2;
+      const imgHeight = (sheetRef.current.offsetHeight * imgWidth) / sheetRef.current.offsetWidth;
+      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, Math.min(imgHeight, pdfHeight - margin * 2));
+      
+      const pdfBlob = pdf.output('blob');
+      const filename = `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Fixture.pdf`;
+      const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
+
+      const captionText = 
+`🏆 *OFFICIAL TOURNAMENT FIXTURE BRACKET*
+📌 *Tournament:* ${tournamentName} (${category})
+⚽ *Sport:* ${sport} | 📅 *Date:* ${formattedDateTag || startDate}
+⏰ *First Match Time:* ${startTime}
+👥 *Teams:* ${N} Teams | 🎯 *Byes:* ${byesCount} Byes
+Official CBSE PE Subject Code 048 draw sheet.`;
+
+      // Check if mobile browser can share file directly to WhatsApp
+      if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        toast.dismiss('classic-wa');
+        await navigator.share({
+          files: [pdfFile],
+          title: `Tournament Fixture - ${tournamentName}`,
+          text: captionText
+        });
+        toast.success("Shared PDF via WhatsApp!");
+        return;
+      }
+
+      // Fallback: Download PDF & open WhatsApp
+      pdf.save(filename);
+      toast.dismiss('classic-wa');
+      toast.success("PDF saved! Opening WhatsApp to attach file...");
+
+      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(
+        captionText + '\n\n📄 _(Official Fixture PDF has been downloaded to your device - please attach it now to send)_'
+      )}`;
+      window.open(waUrl, '_blank');
+    } catch (err) {
+      console.error(err);
+      toast.dismiss('classic-wa');
+      toast.error("Could not share PDF. Opening WhatsApp with summary text.");
+      handleWhatsAppShare();
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -242,20 +562,20 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Control Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900 text-white p-4 md:p-6 rounded-3xl">
+      {/* Control Bar in Brand Navy & Gold */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-[#0D2B52] text-white p-4 md:p-6 rounded-3xl border border-[#164077] shadow-lg">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-red-600/20 border border-red-500/30 text-red-400 flex items-center justify-center font-black">
+          <div className="w-10 h-10 rounded-xl bg-[#D4A017]/20 border border-[#D4A017]/40 text-[#D4A017] flex items-center justify-center font-black">
             <LayoutTemplate size={20} />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h4 className="text-sm font-black uppercase tracking-wider text-white">Classic Fixture Sheet</h4>
-              <span className="px-2 py-0.5 bg-red-500/20 text-red-300 border border-red-500/30 rounded text-[9px] font-black uppercase">
-                Grid / Image Format
+              <span className="px-2 py-0.5 bg-[#D4A017]/20 text-[#D4A017] border border-[#D4A017]/30 rounded text-[9px] font-black uppercase">
+                Official Draw Sheet
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-medium mt-0.5">
+            <p className="text-xs text-slate-300 font-medium mt-0.5">
               Classic lined tournament tree with spreadsheet background & red match times.
             </p>
           </div>
@@ -265,11 +585,11 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
           {/* Quick Load 16 Team Sample */}
           <button
             onClick={handleLoad16TeamSample}
-            className="px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border bg-red-600/20 hover:bg-red-600/30 border-red-500/40 text-red-300"
+            className="px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border bg-white/10 hover:bg-white/20 border-white/20 text-[#D4A017]"
             title="Load standard 16 teams (Team 1 - 16) with sample timings"
           >
-            <Sparkles size={14} className="text-red-400" />
-            <span>Sample 16 Teams & Timings</span>
+            <Sparkles size={14} className="text-[#D4A017]" />
+            <span>Sample 16 Draw</span>
           </button>
 
           {/* Toggle Grid Lines */}
@@ -277,8 +597,8 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
             onClick={() => setShowGrid(!showGrid)}
             className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
               showGrid 
-                ? 'bg-slate-800 border-slate-700 text-slate-200' 
-                : 'bg-slate-950 border-white/10 text-slate-400 hover:text-white'
+                ? 'bg-[#164077] border-white/20 text-white' 
+                : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
             }`}
             title="Toggle background spreadsheet grid lines"
           >
@@ -290,19 +610,54 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
           <button
             onClick={handleDownloadImage}
             disabled={isExporting}
-            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-emerald-900/30 disabled:opacity-50"
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md disabled:opacity-50"
+            title="Download high-resolution PNG image"
           >
-            {isExporting ? <RefreshCw size={14} className="animate-spin" /> : <ImageIcon size={14} />}
-            <span>Download Image (.PNG)</span>
+            {isExporting ? <RefreshCw size={13} className="animate-spin" /> : <ImageIcon size={13} />}
+            <span>PNG</span>
           </button>
 
-          {/* Print PDF */}
+          {/* Export Word (.doc with Bracket Image) */}
           <button
-            onClick={handlePrint}
-            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-indigo-900/30"
+            onClick={handleExportWordWithImage}
+            disabled={isExporting}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+            title="Export Word document with bracket image and match schedule"
+          >
+            <FileText size={14} />
+            <span>Word (.doc + Image)</span>
+          </button>
+
+          {/* Download PDF (.pdf) */}
+          <button
+            onClick={handleDownloadPdf}
+            disabled={isExporting}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+            title="Download direct PDF file"
+          >
+            <Download size={14} />
+            <span>Download PDF</span>
+          </button>
+
+          {/* WhatsApp Share PDF */}
+          <button
+            onClick={handleWhatsAppSharePdf}
+            disabled={isExporting}
+            className="px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+            title="Share tournament bracket PDF directly to WhatsApp"
+          >
+            <Share2 size={13} />
+            <span>WhatsApp PDF</span>
+          </button>
+
+          {/* Print Preview & Sizing Modal */}
+          <button
+            onClick={() => setIsPrintModalOpen(true)}
+            className="px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95"
+            title="Open interactive print preview with A4/A3 paper sizing and Word export"
           >
             <Printer size={14} />
-            <span>Print / Save PDF</span>
+            <span>Print Preview</span>
           </button>
         </div>
       </div>
@@ -533,6 +888,32 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Interactive Print Preview Modal with A4/A3 page sizing and Word/WhatsApp exports */}
+      <TournamentPrintPreviewModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        tournamentName={tournamentName}
+        subTitle={subTitle}
+        category={category}
+        sport={sport}
+        startDate={startDate}
+        startTime={startTime}
+        format="knockout"
+        teamsList={teamsList}
+        byesCount={byesCount}
+        setupFormula={{
+          totalTeams: N,
+          powerOfTwo: P,
+          byesCount: byesCount,
+          upperHalfTeams: Nu,
+          lowerHalfTeams: P - Nu,
+          upperHalfByes: Math.floor(byesCount / 2),
+          lowerHalfByes: Math.ceil(byesCount / 2),
+          totalMatches: N - 1,
+          totalRounds: Math.round(totalRounds)
+        }}
+      />
     </div>
   );
 };
