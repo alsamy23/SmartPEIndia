@@ -94,45 +94,45 @@ Generated via SmartPE India Official Tournament Studio.`;
               </p>
             </div>
 
-            {/* Mode Switcher Tabs - Responsive Grid on Mobile so Combination is NEVER cut off */}
-            <div className="w-full lg:w-auto bg-[#08182D]/90 p-1.5 rounded-2xl border border-white/10 shadow-lg grid grid-cols-3 gap-1 sm:flex sm:items-center">
+            {/* Mode Switcher Tabs - Responsive Segmented Bar on Mobile so Knockout, League & Combination are ALWAYS visible */}
+            <div className="w-full lg:w-auto bg-[#08182D]/95 p-1.5 rounded-2xl border border-white/10 shadow-lg flex items-center overflow-x-auto no-scrollbar gap-1.5">
               <button
                 type="button"
                 onClick={() => setFixtureMode('knockout')}
-                className={`px-2.5 sm:px-4 py-2.5 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 text-center min-h-[46px] ${
+                className={`flex-1 min-w-[105px] px-3 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shrink-0 ${
                   fixtureMode === 'knockout'
-                    ? 'bg-[#D4A017] text-[#0D2B52] shadow-md shadow-amber-950/40'
+                    ? 'bg-[#D4A017] text-[#0D2B52] shadow-md shadow-amber-950/40 ring-2 ring-[#D4A017]'
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
                 }`}
               >
                 <Trophy size={15} className="shrink-0" />
-                <span className="truncate">Knockout</span>
+                <span className="whitespace-nowrap">Knockout</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setFixtureMode('roundrobin')}
-                className={`px-2.5 sm:px-4 py-2.5 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 text-center min-h-[46px] ${
+                className={`flex-1 min-w-[105px] px-3 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shrink-0 ${
                   fixtureMode === 'roundrobin'
-                    ? 'bg-[#059669] text-white shadow-md shadow-emerald-950/40'
+                    ? 'bg-[#059669] text-white shadow-md shadow-emerald-950/40 ring-2 ring-emerald-400'
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
                 }`}
               >
                 <RefreshCw size={15} className="shrink-0" />
-                <span className="truncate">Round Robin</span>
+                <span className="whitespace-nowrap">League</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setFixtureMode('combination')}
-                className={`px-2.5 sm:px-4 py-2.5 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 text-center min-h-[46px] ${
+                className={`flex-1 min-w-[115px] px-3 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shrink-0 ${
                   fixtureMode === 'combination'
-                    ? 'bg-[#1D4ED8] text-white shadow-md shadow-blue-950/40'
+                    ? 'bg-[#1D4ED8] text-white shadow-md shadow-blue-950/40 ring-2 ring-blue-400'
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
                 }`}
               >
                 <Layers size={15} className="shrink-0" />
-                <span className="truncate">Combination</span>
+                <span className="whitespace-nowrap">Combination</span>
               </button>
             </div>
           </div>

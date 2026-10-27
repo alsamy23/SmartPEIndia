@@ -77,6 +77,16 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
     }
   }, [numTeams]);
 
+  // Handle ESC key to dismiss modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // Bracket Mathematics for Classic Lined Tree
@@ -687,28 +697,44 @@ ${schedulePreview}
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
+    <div 
+      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="bg-slate-900 border-2 border-slate-800 rounded-[2.5rem] shadow-2xl w-full max-w-6xl max-h-[94vh] flex flex-col overflow-hidden text-white">
         
         {/* Top Modal Header */}
         <div className="p-4 sm:p-6 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#08182D]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#D4A017]/20 border border-[#D4A017]/40 text-[#D4A017] flex items-center justify-center font-black">
-              <Printer size={20} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black uppercase tracking-tight text-white">
-                  Official Tournament Print Preview & Export Studio
-                </h3>
-                <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-[#D4A017]/20 text-[#D4A017] border border-[#D4A017]/40">
-                  CBSE Code 048 Ready
-                </span>
+          <div className="flex items-center justify-between gap-3 w-full md:w-auto">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-[#D4A017]/20 border border-[#D4A017]/40 text-[#D4A017] flex items-center justify-center font-black shrink-0">
+                <Printer size={20} />
               </div>
-              <p className="text-xs text-slate-400 font-medium">
-                {tournamentName} • {category} • {numTeams} Teams • {sport}
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-black uppercase tracking-tight text-white">
+                    Official Tournament Print Preview & Export Studio
+                  </h3>
+                  <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase bg-[#D4A017]/20 text-[#D4A017] border border-[#D4A017]/40">
+                    CBSE Code 048 Ready
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 font-medium">
+                  {tournamentName} • {category} • {numTeams} Teams • {sport}
+                </p>
+              </div>
             </div>
+
+            {/* Quick close button on mobile */}
+            <button
+              onClick={onClose}
+              className="md:hidden w-8 h-8 rounded-xl bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center shrink-0"
+              title="Close modal"
+            >
+              <X size={16} />
+            </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 self-end md:self-auto relative">

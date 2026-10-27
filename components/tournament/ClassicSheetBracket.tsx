@@ -581,21 +581,22 @@ Official CBSE PE Subject Code 048 draw sheet.`;
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Action Buttons Toolbar with smooth horizontal scroll on mobile */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full lg:w-auto pb-1 lg:pb-0">
           {/* Quick Load 16 Team Sample */}
           <button
             onClick={handleLoad16TeamSample}
-            className="px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border bg-white/10 hover:bg-white/20 border-white/20 text-[#D4A017]"
+            className="shrink-0 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border bg-white/10 hover:bg-white/20 border-white/20 text-[#D4A017]"
             title="Load standard 16 teams (Team 1 - 16) with sample timings"
           >
             <Sparkles size={14} className="text-[#D4A017]" />
-            <span>Sample 16 Draw</span>
+            <span className="whitespace-nowrap">Sample 16 Draw</span>
           </button>
 
           {/* Toggle Grid Lines */}
           <button
             onClick={() => setShowGrid(!showGrid)}
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
+            className={`shrink-0 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
               showGrid 
                 ? 'bg-[#164077] border-white/20 text-white' 
                 : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
@@ -603,74 +604,86 @@ Official CBSE PE Subject Code 048 draw sheet.`;
             title="Toggle background spreadsheet grid lines"
           >
             <Grid size={14} />
-            <span>{showGrid ? 'Grid: ON' : 'Grid: OFF'}</span>
+            <span className="whitespace-nowrap">{showGrid ? 'Grid: ON' : 'Grid: OFF'}</span>
           </button>
 
           {/* Download Image (.PNG) */}
           <button
             onClick={handleDownloadImage}
             disabled={isExporting}
-            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md disabled:opacity-50"
+            className="shrink-0 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md disabled:opacity-50"
             title="Download high-resolution PNG image"
           >
             {isExporting ? <RefreshCw size={13} className="animate-spin" /> : <ImageIcon size={13} />}
-            <span>PNG</span>
+            <span className="whitespace-nowrap">PNG</span>
           </button>
 
           {/* Export Word (.doc with Bracket Image) */}
           <button
             onClick={handleExportWordWithImage}
             disabled={isExporting}
-            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+            className="shrink-0 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
             title="Export Word document with bracket image and match schedule"
           >
             <FileText size={14} />
-            <span>Word (.doc + Image)</span>
+            <span className="whitespace-nowrap">Word (.doc)</span>
           </button>
 
           {/* Download PDF (.pdf) */}
           <button
             onClick={handleDownloadPdf}
             disabled={isExporting}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+            className="shrink-0 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
             title="Download direct PDF file"
           >
             <Download size={14} />
-            <span>Download PDF</span>
+            <span className="whitespace-nowrap">PDF</span>
           </button>
 
           {/* WhatsApp Share PDF */}
           <button
             onClick={handleWhatsAppSharePdf}
             disabled={isExporting}
-            className="px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+            className="shrink-0 px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
             title="Share tournament bracket PDF directly to WhatsApp"
           >
             <Share2 size={13} />
-            <span>WhatsApp PDF</span>
+            <span className="whitespace-nowrap">WhatsApp</span>
           </button>
 
           {/* Print Preview & Sizing Modal */}
           <button
             onClick={() => setIsPrintModalOpen(true)}
-            className="px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95"
+            className="shrink-0 px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95"
             title="Open interactive print preview with A4/A3 paper sizing and Word export"
           >
             <Printer size={14} />
-            <span>Print Preview</span>
+            <span className="whitespace-nowrap">Print Preview</span>
           </button>
         </div>
       </div>
 
-      {/* Printable Sheet Viewport */}
-      <div className="bg-slate-100 p-3 md:p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-inner overflow-x-auto">
-        <div 
-          ref={sheetRef}
-          className={`mx-auto bg-white p-6 md:p-12 rounded-2xl shadow-xl transition-all relative border border-slate-300 min-w-[900px] max-w-[1200px] ${
-            showGrid ? 'bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:32px_24px]' : ''
-          }`}
-          style={{ minHeight: `${TOTAL_HEIGHT}px` }}
-        >
+      {/* Printable Sheet Viewport with native touch-scrolling */}
+      <div className="bg-slate-100 p-2 sm:p-4 md:p-8 rounded-2xl sm:rounded-[2.5rem] border-2 border-slate-900 shadow-inner">
+        {/* Mobile Swipe Guide Banner */}
+        <div className="lg:hidden flex items-center justify-between bg-amber-500/10 border border-amber-500/30 text-amber-900 px-3.5 py-2 rounded-xl text-xs font-bold mb-3 shadow-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="text-base animate-pulse">👉</span>
+            <span>Swipe right to view all rounds, timings & final winner</span>
+          </div>
+          <span className="text-[10px] uppercase font-black bg-amber-500/20 text-amber-900 px-2 py-0.5 rounded-full shrink-0">
+            Scroll &rarr;
+          </span>
+        </div>
+
+        <div className="overflow-x-auto pb-3">
+          <div 
+            ref={sheetRef}
+            className={`mx-auto bg-white p-4 sm:p-6 md:p-12 rounded-2xl shadow-xl transition-all relative border border-slate-300 min-w-[900px] max-w-[1200px] ${
+              showGrid ? 'bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:32px_24px]' : ''
+            }`}
+            style={{ minHeight: `${TOTAL_HEIGHT}px` }}
+          >
           {/* Header Title (Red, Bold, Left-Aligned like user image) */}
           <div className="mb-8 border-b-2 border-slate-200 pb-4 flex justify-between items-start">
             <div>
@@ -773,7 +786,7 @@ Official CBSE PE Subject Code 048 draw sheet.`;
 
             {/* 2. SVG Connecting Step Lines & Match Times for all Rounds */}
             <svg 
-              className="absolute inset-0 w-full h-full pointer-events-auto"
+              className="absolute inset-0 w-full h-full pointer-events-none"
               style={{ overflow: 'visible' }}
             >
               {Array.from({ length: totalRounds }).map((_, rIdx) => {
@@ -820,13 +833,14 @@ Official CBSE PE Subject Code 048 draw sheet.`;
                         strokeWidth="2" 
                       />
 
-                      {/* Match Time on next round line in RED (like the 10.45AM, 12.30PM, 2.30PM in image) */}
+                      {/* Match Time on next round line in RED */}
                       {!isLastRound && (mIdx % 2 === 1 || matchesInThisRound === 1) && displayTime && (
                         <foreignObject 
                           x={stepX + 6} 
                           y={centerY - 22} 
                           width={95} 
                           height={22}
+                          className="pointer-events-auto"
                         >
                           <div className="flex items-center">
                             <input
@@ -847,6 +861,7 @@ Official CBSE PE Subject Code 048 draw sheet.`;
                           y={centerY - 22} 
                           width={95} 
                           height={22}
+                          className="pointer-events-auto"
                         >
                           <div className="flex items-center">
                             <input
@@ -867,6 +882,7 @@ Official CBSE PE Subject Code 048 draw sheet.`;
                           y={centerY - 18} 
                           width={150} 
                           height={36}
+                          className="pointer-events-auto"
                         >
                           <div className="bg-amber-100 border-2 border-amber-500 text-amber-950 px-3 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
                             <Trophy size={14} className="text-amber-600" />
@@ -888,6 +904,7 @@ Official CBSE PE Subject Code 048 draw sheet.`;
           </div>
         </div>
       </div>
+    </div>
 
       {/* Interactive Print Preview Modal with A4/A3 page sizing and Word/WhatsApp exports */}
       <TournamentPrintPreviewModal

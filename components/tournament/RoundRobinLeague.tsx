@@ -229,6 +229,12 @@ Generated via SmartPE India Official Tournament Studio.`;
     trackEvent('tool_used', { tool_name: 'Round Robin League Generator' });
   };
 
+  useEffect(() => {
+    if (!hasGenerated && teamsList.length >= 2) {
+      generateRoundRobin();
+    }
+  }, []);
+
   // Update match score and recalculate standings live
   const handleScoreChange = (matchId: number, team1Score: string, team2Score: string) => {
     setMatches(prev => prev.map(m => {
@@ -608,20 +614,21 @@ Generated via SmartPE India Official Tournament Studio.`;
                             </span>
                           </div>
 
-                          <div className="grid grid-cols-5 items-center gap-2">
-                            <div className="col-span-2 text-xs font-bold text-slate-900 text-right truncate">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex-1 min-w-0 text-xs font-bold text-slate-900 text-right truncate">
                               {m.team1}
                             </div>
 
-                            {/* Score Inputs */}
-                            <div className="col-span-1 flex items-center justify-center gap-1">
+                            {/* Score Inputs - fixed width container so mobile never squishes */}
+                            <div className="shrink-0 flex items-center justify-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded-xl shadow-xs">
                               <input 
                                 type="number" 
                                 min={0}
                                 placeholder="-"
                                 value={m.score1 !== null ? m.score1 : ''}
                                 onChange={(e) => handleScoreChange(m.id, e.target.value, m.score2 !== null ? String(m.score2) : '')}
-                                className="w-9 h-9 bg-white border border-slate-300 rounded-lg text-center font-black text-sm outline-none focus:border-indigo-600"
+                                aria-label={`${m.team1} score`}
+                                className="w-8 h-8 sm:w-9 sm:h-9 bg-slate-50 border border-slate-300 rounded-lg text-center font-black text-xs sm:text-sm outline-none focus:border-indigo-600 focus:bg-white"
                               />
                               <span className="text-xs font-black text-slate-400">:</span>
                               <input 
@@ -630,11 +637,12 @@ Generated via SmartPE India Official Tournament Studio.`;
                                 placeholder="-"
                                 value={m.score2 !== null ? m.score2 : ''}
                                 onChange={(e) => handleScoreChange(m.id, m.score1 !== null ? String(m.score1) : '', e.target.value)}
-                                className="w-9 h-9 bg-white border border-slate-300 rounded-lg text-center font-black text-sm outline-none focus:border-indigo-600"
+                                aria-label={`${m.team2} score`}
+                                className="w-8 h-8 sm:w-9 sm:h-9 bg-slate-50 border border-slate-300 rounded-lg text-center font-black text-xs sm:text-sm outline-none focus:border-indigo-600 focus:bg-white"
                               />
                             </div>
 
-                            <div className="col-span-2 text-xs font-bold text-slate-900 text-left truncate">
+                            <div className="flex-1 min-w-0 text-xs font-bold text-slate-900 text-left truncate">
                               {m.team2}
                             </div>
                           </div>
@@ -649,19 +657,24 @@ Generated via SmartPE India Official Tournament Studio.`;
 
           {/* VIEW 2: LEAGUE STANDINGS TABLE */}
           {activeSubTab === 'table' && (
-            <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-sm space-y-6">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-                <h4 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                  <Trophy size={22} className="text-amber-500" />
+            <div className="bg-white p-5 sm:p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-sm space-y-4 sm:space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-100 pb-4">
+                <h4 className="text-lg sm:text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                  <Trophy size={22} className="text-amber-500 shrink-0" />
                   <span>League Standings Table</span>
                 </h4>
-                <span className="text-xs font-bold text-slate-400">
+                <span className="text-[11px] sm:text-xs font-bold text-slate-500">
                   Win = {winPoints}pts • Draw = {drawPoints}pts • Loss = {lossPoints}pts
                 </span>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+              {/* Mobile swipe helper banner */}
+              <div className="sm:hidden px-3 py-1.5 bg-amber-50 border border-amber-200/80 rounded-xl text-[10px] font-bold text-amber-900 flex items-center justify-between">
+                <span>👉 Swipe right to view full stats (GD, Points)</span>
+              </div>
+
+              <div className="overflow-x-auto pb-2 -mx-1 px-1">
+                <table className="w-full min-w-[580px] text-left border-collapse">
                   <thead>
                     <tr className="border-b-2 border-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-400">
                       <th className="p-3 w-12 text-center">Pos</th>
