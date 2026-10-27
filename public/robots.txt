@@ -27,4 +27,4 @@ Allow: /physical-education-assessment
 User-agent: Googlebot-Image
 Allow: /
 
-Sitemap: https://smartpeindia.app/sitemap.xml
+Sitemap: https://www.smartpeindia.app/sitemap.xml

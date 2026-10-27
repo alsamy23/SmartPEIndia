@@ -1206,42 +1206,10 @@ apiRouter.post("/ai/transcribe", express.json({ limit: "15mb" }), optionalAuth, 
 // Mount API routes
 app.use("/api", apiRouter);
 
-async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    console.log("Starting in development mode with Vite middleware...");
-    const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
-      server: { 
-        middlewareMode: true,
-        host: "0.0.0.0",
-        hmr: process.env.DISABLE_HMR === 'true' ? false : undefined
-      },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    console.log("Starting in production mode...");
-    const distPath = path.resolve(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get(/.*/, (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-
-  // Error handler for API
-  app.use("/api", (req, res) => {
-    res.status(404).json({ error: "API endpoint not found" });
-  });
-
-  if (!process.env.VERCEL || process.env.NODE_ENV !== "production") {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  }
-}
-
-startServer().catch(err => {
-  console.error("Failed to start server:", err);
+// Fallback for unmatched API routes
+app.use("/api", (req, res) => {
+  res.status(404).json({ error: "API endpoint not found" });
 });
 
 export default app;
+
