@@ -279,7 +279,7 @@ apiRouter.get("/health", (req, res) => {
 });
 
 // Check transactional email service configuration
-apiRouter.get("/email/status", (req, res) => {
+apiRouter.get("/email/status", requireAdmin, (req, res) => {
   try {
     const config = getEmailConfig();
     res.json(config);
@@ -290,7 +290,7 @@ apiRouter.get("/email/status", (req, res) => {
 });
 
 // Check Brevo specific live account & sender verification status
-apiRouter.get("/email/brevo/status", async (req, res) => {
+apiRouter.get("/email/brevo/status", requireAdmin, async (req, res) => {
   try {
     const status = await checkBrevoStatus();
     res.json(status);
@@ -308,7 +308,7 @@ apiRouter.get("/email/brevo/status", async (req, res) => {
 });
 
 // Send a test email via active provider (Brevo / SMTP / Resend)
-apiRouter.post("/email/test", async (req, res) => {
+apiRouter.post("/email/test", requireAdmin, async (req, res) => {
   try {
     const { toEmail } = req.body;
     const targetEmail = toEmail || "alsamy36@gmail.com";

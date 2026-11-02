@@ -29,13 +29,13 @@ export interface SEOConfig {
 }
 
 export const DEFAULT_SEO_CONFIG: SEOConfig = {
-  canonicalUrl: 'https://smartpeindia.app/',
+  canonicalUrl: 'https://www.smartpeindia.app/',
   allowCrawling: true,
   metaTitlePrefix: 'SmartPE India',
   metaDescription: "India's #1 PE Teacher App. Generate CBSE PE lesson plans in 60s, calculate Khelo India student fitness test percentiles, and create official tournament fixture brackets online.",
   socialTitle: "SmartPE India | #1 PE Teacher App – Lesson Plans, Fitness Tests & Fixtures",
   socialDescription: "India's #1 PE Teacher App. Generate CBSE PE lesson plans in 60s, calculate Khelo India student fitness test percentiles, and create official tournament fixture brackets online.",
-  socialImageUrl: 'https://smartpeindia.app/logo.png',
+  socialImageUrl: 'https://www.smartpeindia.app/logo.png',
   shareUrlFormat: 'domain_only',
   sitemapActive: true,
   keywords: 'PE teacher app, physical education software, CBSE PE lesson planner, student fitness test app, Khelo India fitness assessment, tournament fixture maker, school PE management, smartpeindia, smartpeindia.app',
@@ -272,7 +272,7 @@ export async function saveSEOConfig(schoolId: string, config: SEOConfig): Promis
   // Always prioritize canonical URL to smartpeindia.app if left empty
   const sanitizedConfig: SEOConfig = {
     ...config,
-    canonicalUrl: config.canonicalUrl?.trim() || 'https://smartpeindia.app/'
+    canonicalUrl: config.canonicalUrl?.trim() || 'https://www.smartpeindia.app/'
   };
 
   localStorage.setItem(SEO_LOCAL_STORAGE_KEY, JSON.stringify(sanitizedConfig));

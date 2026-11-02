@@ -109,13 +109,28 @@ service cloud.firestore {
         (resource != null && resource.data.schoolId != null && isSchoolMember(resource.data.schoolId))
       );
       allow create: if isAuthenticated() && (
-        isOwner(uid) || 
-        isSuperAdmin() || 
+        isSuperAdmin() ||
+        (request.auth.uid == uid &&
+          request.resource.data.schoolId != null &&
+          (
+            request.resource.data.role != 'admin' ||
+            request.resource.data.schoolId == request.auth.uid ||
+            request.resource.data.schoolId == 'personal_' + request.auth.uid ||
+            request.resource.data.schoolId == 'school_' + request.auth.uid ||
+            (
+              exists(/databases/$(database)/documents/schools/$(request.resource.data.schoolId)) &&
+              get(/databases/$(database)/documents/schools/$(request.resource.data.schoolId)).data.adminId == request.auth.uid
+            )
+          )
+        ) ||
         (request.resource.data.schoolId != null && isSchoolAdmin(request.resource.data.schoolId))
       );
       allow update: if isAuthenticated() && (
-        isOwner(uid) || 
-        isSuperAdmin() || 
+        isSuperAdmin() ||
+        (request.auth.uid == uid &&
+          request.resource.data.schoolId == resource.data.schoolId &&
+          request.resource.data.role == resource.data.role
+        ) ||
         (resource != null && isSchoolAdmin(resource.data.schoolId))
       );
       allow delete: if isAuthenticated() && (
