@@ -32,21 +32,21 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
   canonicalUrl: 'https://smartpeindia.app/',
   allowCrawling: true,
   metaTitlePrefix: 'SmartPE India',
-  metaDescription: "SmartPE helps Indian schools plan PE lessons, track student fitness, assess sports skills and manage physical education records in one platform.",
-  socialTitle: "Physical Education Software for Indian Schools | SmartPE India",
-  socialDescription: "SmartPE helps Indian schools plan PE lessons, track student fitness, assess sports skills and manage physical education records in one platform.",
+  metaDescription: "India's #1 PE Teacher App. Generate CBSE PE lesson plans in 60s, calculate Khelo India student fitness test percentiles, and create official tournament fixture brackets online.",
+  socialTitle: "SmartPE India | #1 PE Teacher App – Lesson Plans, Fitness Tests & Fixtures",
+  socialDescription: "India's #1 PE Teacher App. Generate CBSE PE lesson plans in 60s, calculate Khelo India student fitness test percentiles, and create official tournament fixture brackets online.",
   socialImageUrl: 'https://smartpeindia.app/logo.png',
   shareUrlFormat: 'domain_only',
   sitemapActive: true,
-  keywords: 'physical education software, physical education software India, PE teacher software, physical education management system, school PE management, CBSE physical education, CBSE PE lesson planner, student fitness assessment, Khelo India fitness assessment, PE assessment, physical education assessment, PE department management, school sports management, smartpeindia',
+  keywords: 'PE teacher app, physical education software, CBSE PE lesson planner, student fitness test app, Khelo India fitness assessment, tournament fixture maker, school PE management, smartpeindia, smartpeindia.app',
   author: 'SmartPE India',
   siteName: 'SmartPE India',
   twitterHandle: '@smartpeindia',
   routeOverrides: {
     dashboard: {
-      title: 'Physical Education Software for Indian Schools | SmartPE India',
-      description: 'SmartPE helps Indian schools plan PE lessons, track student fitness, assess sports skills and manage physical education records in one platform.',
-      keywords: 'physical education software, physical education software India, PE teacher software, physical education management system, school PE management, PE department management',
+      title: 'SmartPE India | #1 PE Teacher App – Lesson Plans, Fitness Tests & Fixtures',
+      description: "India's #1 PE Teacher App. Generate CBSE PE lesson plans in 60s, calculate Khelo India student fitness test percentiles, and create official tournament fixture brackets online.",
+      keywords: 'PE teacher app, physical education software, CBSE PE lesson planner, student fitness test app, Khelo India fitness assessment, tournament fixture maker, school PE management',
       canonicalPath: '/'
     },
     'cbse-physical-education': {
