@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo, useTransition } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 import { SEOHead } from './components/SEOHead.tsx';
 import { OfflineBanner } from './components/OfflineBanner.tsx';
@@ -653,7 +653,6 @@ const App: React.FC = () => {
   const [activeWorkspace, setActiveWorkspace] = useState<'school' | 'academy'>(() => {
     return (localStorage.getItem('smartpe_active_workspace') as 'school' | 'academy') || 'school';
   });
-  const [isPending, startTransition] = useTransition();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState<'checking' | 'ok' | 'missing' | 'quota'>('checking');
   const [aiProviders, setAiProviders] = useState<{ gemini: boolean, groq: boolean }>({ gemini: false, groq: false });
@@ -1004,9 +1003,7 @@ const App: React.FC = () => {
       }
     }
 
-    startTransition(() => {
-      setActiveTab(tabId);
-    });
+    setActiveTab(tabId);
     setHighlightStudentId(null);
     if (window.history.state?.sidebarOpen) {
       window.history.back();

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import { 
   Heart, 
@@ -105,6 +105,8 @@ const FitnessTests: React.FC = () => {
   const [profileModalStudent, setProfileModalStudent] = useState<Student | null>(null);
   const [sequentialMode, setSequentialMode] = useState<boolean>(true);
   const [activeFocusCoord, setActiveFocusCoord] = useState<{ sIdx: number; tIdx: number } | null>(null);
+  const [visibleStudentLimit, setVisibleStudentLimit] = useState<number>(24);
+  const dirtyCellsRef = useRef<Set<string>>(new Set());
 
   const formatFitnessError = (err: any): string => {
     try {
@@ -131,24 +133,31 @@ const FitnessTests: React.FC = () => {
     return err.message || "An unexpected error occurred. Please try again.";
   };
 
-  /**
-   * Helper to accurately match a test result in the database for a given student, test, and term.
-   */
-  const findSavedResult = (
-    studentId: string, 
-    testId: string, 
-    testName: string, 
-    term: string, 
-    resultsList: FitnessResult[]
+  // Pre-index results by studentId + term in O(R) so cell lookups are O(1) instead of scanning all results per cell
+  const resultsByStudentTerm = useMemo(() => {
+    const map = new Map<string, FitnessResult[]>();
+    if (!allResults || allResults.length === 0) return map;
+    for (let i = 0; i < allResults.length; i++) {
+      const r = allResults[i];
+      if (!r.studentId) continue;
+      const rTerm = r.term || 'Baseline';
+      const key = `${r.studentId}::${rTerm}`;
+      let bucket = map.get(key);
+      if (!bucket) {
+        bucket = [];
+        map.set(key, bucket);
+      }
+      bucket.push(r);
+    }
+    return map;
+  }, [allResults]);
+
+  const matchResultInStudentBucket = (
+    testId: string,
+    testName: string,
+    studentMatchingResults: FitnessResult[] | undefined
   ): FitnessResult | undefined => {
-    if (!resultsList || resultsList.length === 0 || !studentId) return undefined;
-
-    const studentMatchingResults = resultsList.filter(r => 
-      r.studentId === studentId && 
-      (r.term === term || (!r.term && term === 'Baseline'))
-    );
-
-    if (studentMatchingResults.length === 0) return undefined;
+    if (!studentMatchingResults || studentMatchingResults.length === 0) return undefined;
 
     const tId = (testId || '').toLowerCase().trim();
     const tName = (testName || '').toLowerCase().trim();
@@ -246,6 +255,28 @@ const FitnessTests: React.FC = () => {
     });
   };
 
+  /**
+   * Helper to accurately match a test result in the database for a given student, test, and term.
+   */
+  const findSavedResult = (
+    studentId: string, 
+    testId: string, 
+    testName: string, 
+    term: string, 
+    resultsList: FitnessResult[]
+  ): FitnessResult | undefined => {
+    if (!studentId) return undefined;
+    if (resultsList === allResults) {
+      return matchResultInStudentBucket(testId, testName, resultsByStudentTerm.get(`${studentId}::${term}`));
+    }
+    if (!resultsList || resultsList.length === 0) return undefined;
+    const studentMatchingResults = resultsList.filter(r => 
+      r.studentId === studentId && 
+      (r.term === term || (!r.term && term === 'Baseline'))
+    );
+    return matchResultInStudentBucket(testId, testName, studentMatchingResults);
+  };
+
   useEffect(() => {
     let unsubStudents: (() => void) | undefined;
     let unsubResults: (() => void) | undefined;
@@ -280,78 +311,14 @@ const FitnessTests: React.FC = () => {
     };
   }, [auth.currentUser?.uid]);
 
-  // When grade filter changes, auto-select corresponding battery and filter available tests
-  useEffect(() => {
-    if (selectedGradeFilter && selectedGradeFilter !== 'ALL') {
-      const matchingBattery = fitnessService.getBatteryForGrade(selectedGradeFilter);
-      if (matchingBattery) {
-        if (!selectedBattery || selectedBattery.category !== matchingBattery.category) {
-          setSelectedBattery(matchingBattery);
-          const isCurrentTestValid = selectedTest && matchingBattery.tests.some(t => t.id === selectedTest.id);
-          const defaultTest = isCurrentTestValid 
-            ? selectedTest 
-            : (matchingBattery.tests.find(t => t.id === 'pushups') || matchingBattery.tests[0]);
-          setSelectedTest(defaultTest);
-          if (testSelectionFilter !== 'all' && testSelectionFilter !== 'custom') {
-            setTestSelectionFilter(defaultTest.id);
-          }
-          setCustomSelectedTestIds(prev => {
-            const valid = prev.filter(id => matchingBattery.tests.some(t => t.id === id));
-            return valid.length > 0 ? valid : [matchingBattery.tests[0].id, matchingBattery.tests[1]?.id || matchingBattery.tests[0].id];
-          });
-        }
-      }
-    }
-  }, [selectedGradeFilter]);
-
-  // Synchronize batch scores and saved indicators with database results
-  useEffect(() => {
-    const currentTests = selectedBattery ? selectedBattery.tests : (selectedTest ? [selectedTest] : []);
-    if (currentTests.length === 0 || students.length === 0) return;
-
-    setBatchScores(prev => {
-      const next = { ...prev };
-      students.forEach(student => {
-        currentTests.forEach(testItem => {
-          const cellKey = `${student.id}_${testItem.id}`;
-          // Only populate if not in middle of unsaved user typing
-          if (batchSavedStatus[cellKey] !== false) {
-            const saved = findSavedResult(student.id, testItem.id, testItem.name, selectedTerm, allResults || []);
-            if (saved && saved.value) {
-              next[cellKey] = saved.value;
-            } else if (allResults && allResults.length > 0) {
-              // Clear stale value if not saved in current term
-              delete next[cellKey];
-            }
-          }
-        });
-      });
-      return next;
-    });
-
-    setBatchSavedStatus(prev => {
-      const next = { ...prev };
-      students.forEach(student => {
-        currentTests.forEach(testItem => {
-          const cellKey = `${student.id}_${testItem.id}`;
-          if (prev[cellKey] !== false) {
-            const saved = findSavedResult(student.id, testItem.id, testItem.name, selectedTerm, allResults || []);
-            if (saved && saved.value) {
-              next[cellKey] = true;
-            } else {
-              delete next[cellKey];
-            }
-          }
-        });
-      });
-      return next;
-    });
-  }, [allResults, selectedTerm, selectedBattery, selectedTest, students]);
-
   // In single student mode, auto-fill testValue when student, test, or term changes
   useEffect(() => {
     if (selectedStudentId && selectedTest) {
-      const saved = findSavedResult(selectedStudentId, selectedTest.id, selectedTest.name, selectedTerm, allResults);
+      const saved = matchResultInStudentBucket(
+        selectedTest.id,
+        selectedTest.name,
+        resultsByStudentTerm.get(`${selectedStudentId}::${selectedTerm}`)
+      );
       if (saved && saved.value) {
         setTestValue(saved.value);
         setIsSaved(true);
@@ -362,7 +329,7 @@ const FitnessTests: React.FC = () => {
         setResult(null);
       }
     }
-  }, [selectedStudentId, selectedTest?.id, selectedTerm, allResults]);
+  }, [selectedStudentId, selectedTest?.id, selectedTerm, resultsByStudentTerm]);
 
   useEffect(() => {
     let unsubStudentResults: (() => void) | undefined;
@@ -715,34 +682,46 @@ const FitnessTests: React.FC = () => {
   };
 
   const handleBatteryClick = (battery: KIFTBattery) => {
-    setSelectedBattery(battery);
     const defaultTest = (battery.category === 'Middle School' || battery.category === 'Secondary' || battery.category === 'Senior Secondary')
       ? (battery.tests.find(t => t.id === 'pushups') || battery.tests[0])
       : battery.tests[0];
+    setSelectedBattery(battery);
     setSelectedTest(defaultTest);
-    setTestSelectionFilter('all');
-    setCustomSelectedTestIds(battery.tests.map(t => t.id));
+    // Open focused single test first so mobile & large rosters open instantly; teachers can switch to All/Multi-Select in 1 tap
+    setTestSelectionFilter(defaultTest.id);
+    setCustomSelectedTestIds([defaultTest.id]);
     setResult(null);
-    if (selectedGradeFilter !== 'ALL' && !battery.grades.some(g => fitnessService.isGradeMatching(selectedGradeFilter, g))) {
-      setSelectedGradeFilter(battery.grades[0]);
+    setActiveFocusCoord(null);
+    setVisibleStudentLimit(24);
+    if (selectedGradeFilter !== 'ALL' && selectedGradeFilter !== 'ALL_SCHOOL' && !battery.grades.some(g => fitnessService.isGradeMatching(selectedGradeFilter, g))) {
+      setSelectedGradeFilter('ALL');
     }
   };
 
   const handleGradeFilterChange = (newGrade: string) => {
     setSelectedGradeFilter(newGrade);
-    if (newGrade && newGrade !== 'ALL') {
+    setVisibleStudentLimit(24);
+    setActiveFocusCoord(null);
+    if (newGrade && newGrade !== 'ALL' && newGrade !== 'ALL_SCHOOL') {
       const matchingBattery = fitnessService.getBatteryForGrade(newGrade);
       if (matchingBattery) {
+        const wasBatteryUnselected = !selectedBattery;
+        const isBatteryChanged = !selectedBattery || selectedBattery.category !== matchingBattery.category;
         setSelectedBattery(matchingBattery);
         const isCurrentTestValid = selectedTest && matchingBattery.tests.some(t => t.id === selectedTest.id);
         const defaultTest = isCurrentTestValid 
           ? selectedTest 
           : (matchingBattery.tests.find(t => t.id === 'pushups') || matchingBattery.tests[0]);
         setSelectedTest(defaultTest);
-        setCustomSelectedTestIds(prev => {
-          const valid = prev.filter(id => matchingBattery.tests.some(t => t.id === id));
-          return valid.length > 0 ? valid : matchingBattery.tests.map(t => t.id);
-        });
+        if (wasBatteryUnselected || isBatteryChanged) {
+          setTestSelectionFilter(defaultTest.id);
+          setCustomSelectedTestIds([defaultTest.id]);
+        } else {
+          setCustomSelectedTestIds(prev => {
+            const valid = prev.filter(id => matchingBattery.tests.some(t => t.id === id));
+            return valid.length > 0 ? valid : [defaultTest.id];
+          });
+        }
       }
     }
   };
@@ -756,12 +735,12 @@ const FitnessTests: React.FC = () => {
   };
 
   /**
-   * Returns the list of tests to display and record in the active view:
+   * Memoized list of tests to display and record in the active view:
    * - 1 focused single test (e.g. pushups, 50m dash)
    * - Picked 1, 2, 3+ custom selected tests
-   * - Full 8-test battery spreadsheet
+   * - Full battery spreadsheet
    */
-  const getActiveTests = (): KIFTTest[] => {
+  const activeTests = useMemo<KIFTTest[]>(() => {
     if (!selectedBattery || !selectedBattery.tests || selectedBattery.tests.length === 0) {
       return selectedTest ? [selectedTest] : [];
     }
@@ -778,7 +757,9 @@ const FitnessTests: React.FC = () => {
       return [selectedTest];
     }
     return [selectedBattery.tests[0]];
-  };
+  }, [selectedBattery, selectedTest, testSelectionFilter, customSelectedTestIds]);
+
+  const getActiveTests = (): KIFTTest[] => activeTests;
 
   /**
    * Helper to increment/decrement repetition or numeric scores directly with quick touch steppers
@@ -790,7 +771,8 @@ const FitnessTests: React.FC = () => {
     if (isNaN(currentNum)) currentNum = 0;
     const nextNum = Math.max(0, currentNum + delta);
     const nextValStr = nextNum.toString();
-    
+
+    dirtyCellsRef.current.add(`${selectedTerm}::${cellKey}`);
     setBatchScores(prev => ({
       ...prev,
       [cellKey]: nextValStr
@@ -1032,6 +1014,7 @@ const FitnessTests: React.FC = () => {
               percentile: 0
             });
 
+            dirtyCellsRef.current.delete(`${selectedTerm}::${cellKey}`);
             setBatchSavedStatus(prev => ({
               ...prev,
               [cellKey]: true
@@ -1096,6 +1079,7 @@ const FitnessTests: React.FC = () => {
             percentile: 0
           });
 
+          dirtyCellsRef.current.delete(`${selectedTerm}::${cellKey}`);
           setBatchSavedStatus(prev => ({
             ...prev,
             [cellKey]: true
@@ -1175,13 +1159,15 @@ const FitnessTests: React.FC = () => {
             currentTests.forEach((t, tIdx) => {
               const val = row[5 + tIdx];
               if (val && val !== '') {
+                const cellKey = `${matchedStudent.id}_${t.id}`;
+                dirtyCellsRef.current.add(`${selectedTerm}::${cellKey}`);
                 setBatchScores(prev => ({
                   ...prev,
-                  [`${matchedStudent.id}_${t.id}`]: val
+                  [cellKey]: val
                 }));
                 setBatchSavedStatus(prev => ({
                   ...prev,
-                  [`${matchedStudent.id}_${t.id}`]: false
+                  [cellKey]: false
                 }));
                 importedCount++;
               }
@@ -1240,16 +1226,28 @@ const FitnessTests: React.FC = () => {
       }
     }
 
+    if (nextStudentIdx >= visibleStudentLimit) {
+      setVisibleStudentLimit(prev => Math.max(prev + 24, nextStudentIdx + 12));
+    }
+
     setActiveFocusCoord({ sIdx: nextStudentIdx, tIdx: nextTestIdx });
 
-    const inputId = `grid-input-${nextStudentIdx}-${nextTestIdx}`;
-    const targetEl = document.getElementById(inputId) as HTMLInputElement;
-    if (targetEl) {
-      targetEl.focus();
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setTimeout(() => {
-        targetEl.select?.();
-      }, 40);
+    const focusTarget = () => {
+      const inputId = `grid-input-${nextStudentIdx}-${nextTestIdx}`;
+      const targetEl = document.getElementById(inputId) as HTMLInputElement;
+      if (targetEl) {
+        targetEl.focus();
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => {
+          targetEl.select?.();
+        }, 40);
+      }
+    };
+
+    if (nextStudentIdx >= visibleStudentLimit) {
+      setTimeout(focusTarget, 60);
+    } else {
+      focusTarget();
     }
   };
 
@@ -1276,55 +1274,143 @@ const FitnessTests: React.FC = () => {
     }
   };
 
-  // Get unique grades and sections for filter dropdowns
-  const uniqueGrades = Array.from(new Set(students.map(s => s.grade)))
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  // Get unique grades and sections for filter dropdowns (memoized)
+  const uniqueGrades = useMemo(() => {
+    return Array.from(new Set(students.map(s => s.grade)))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [students]);
 
-  const uniqueSections = Array.from(new Set(students.map(s => s.section)))
-    .filter(Boolean)
-    .sort();
+  const uniqueSections = useMemo(() => {
+    return Array.from(new Set(students.map(s => s.section)))
+      .filter(Boolean)
+      .sort();
+  }, [students]);
 
-  // Filter students based on grade, section, and roll number or name search
-  const filteredStudentsForSelect = students.filter(s => {
-    const matchesGrade = !selectedGradeFilter || selectedGradeFilter === 'ALL' || fitnessService.isGradeMatching(s.grade, selectedGradeFilter);
-    const matchesSection = !selectedSectionFilter || selectedSectionFilter === 'ALL' || s.section === selectedSectionFilter;
+  // Filter students based on active battery grades, grade dropdown, section, and search query (memoized)
+  const filteredStudentsForSelect = useMemo(() => {
     const queryLower = studentSearchQuery.toLowerCase().trim();
-    const matchesSearch = !queryLower || 
-      s.name.toLowerCase().includes(queryLower) || 
-      (s.rollNumber && s.rollNumber.toLowerCase().includes(queryLower));
-    return matchesGrade && matchesSection && matchesSearch;
-  }).sort((a, b) => {
-    if (a.rollNumber && b.rollNumber) {
-      return a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true });
-    }
-    return a.name.localeCompare(b.name);
-  });
-
-  // Count unsaved batch scores across all visible students and tests
-  const currentTestsForCount = getActiveTests();
-  const unsavedBatchCount = filteredStudentsForSelect.reduce((count, s) => {
-    let studentUnsaved = false;
-    currentTestsForCount.forEach(t => {
-      const cellKey = `${s.id}_${t.id}`;
-      const val = (batchScores[cellKey] || '').trim();
-      const isSaved = batchSavedStatus[cellKey] || false;
-      if (val && !isSaved) {
-        studentUnsaved = true;
+    return students.filter(s => {
+      let matchesGrade = true;
+      if (selectedGradeFilter && selectedGradeFilter !== 'ALL_SCHOOL') {
+        if (selectedGradeFilter === 'ALL') {
+          if (selectedBattery?.grades?.length) {
+            matchesGrade = selectedBattery.grades.some(g => fitnessService.isGradeMatching(s.grade, g));
+          }
+        } else {
+          matchesGrade = fitnessService.isGradeMatching(s.grade, selectedGradeFilter);
+        }
       }
+      const matchesSection = !selectedSectionFilter || selectedSectionFilter === 'ALL' || s.section === selectedSectionFilter;
+      const matchesSearch = !queryLower || 
+        s.name.toLowerCase().includes(queryLower) || 
+        (s.rollNumber && s.rollNumber.toLowerCase().includes(queryLower));
+      return matchesGrade && matchesSection && matchesSearch;
+    }).sort((a, b) => {
+      if (a.rollNumber && b.rollNumber) {
+        return a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true });
+      }
+      return a.name.localeCompare(b.name);
     });
-    return count + (studentUnsaved ? 1 : 0);
-  }, 0);
+  }, [students, selectedGradeFilter, selectedSectionFilter, studentSearchQuery, selectedBattery]);
+
+  const visibleBatchStudents = useMemo(() => {
+    return filteredStudentsForSelect.slice(0, visibleStudentLimit);
+  }, [filteredStudentsForSelect, visibleStudentLimit]);
+
+  // Synchronize batch scores and saved indicators with O(1) pre-indexed database results for active roster & tests
+  useEffect(() => {
+    if (activeTests.length === 0 || filteredStudentsForSelect.length === 0) return;
+
+    const scoreUpdates: Record<string, string | undefined> = {};
+    const statusUpdates: Record<string, boolean | undefined> = {};
+
+    for (let sIdx = 0; sIdx < filteredStudentsForSelect.length; sIdx++) {
+      const student = filteredStudentsForSelect[sIdx];
+      const bucket = resultsByStudentTerm.get(`${student.id}::${selectedTerm}`);
+      for (let tIdx = 0; tIdx < activeTests.length; tIdx++) {
+        const testItem = activeTests[tIdx];
+        const cellKey = `${student.id}_${testItem.id}`;
+        if (dirtyCellsRef.current.has(`${selectedTerm}::${cellKey}`)) {
+          continue;
+        }
+        const saved = matchResultInStudentBucket(testItem.id, testItem.name, bucket);
+        if (saved && saved.value) {
+          scoreUpdates[cellKey] = saved.value;
+          statusUpdates[cellKey] = true;
+        } else {
+          scoreUpdates[cellKey] = undefined;
+          statusUpdates[cellKey] = undefined;
+        }
+      }
+    }
+
+    setBatchScores(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const cellKey of Object.keys(scoreUpdates)) {
+        const val = scoreUpdates[cellKey];
+        if (val !== undefined) {
+          if (next[cellKey] !== val) {
+            next[cellKey] = val;
+            changed = true;
+          }
+        } else if (cellKey in next) {
+          delete next[cellKey];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    setBatchSavedStatus(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const cellKey of Object.keys(statusUpdates)) {
+        const val = statusUpdates[cellKey];
+        if (val !== undefined) {
+          if (next[cellKey] !== val) {
+            next[cellKey] = val;
+            changed = true;
+          }
+        } else if (cellKey in next) {
+          delete next[cellKey];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [resultsByStudentTerm, selectedTerm, filteredStudentsForSelect, activeTests]);
+
+  // Count unsaved batch scores across visible filtered students and tests (memoized)
+  const unsavedBatchCount = useMemo(() => {
+    return filteredStudentsForSelect.reduce((count, s) => {
+      let studentUnsaved = false;
+      for (let i = 0; i < activeTests.length; i++) {
+        const cellKey = `${s.id}_${activeTests[i].id}`;
+        const val = (batchScores[cellKey] || '').trim();
+        const isSavedCell = batchSavedStatus[cellKey] || false;
+        if (val && !isSavedCell) {
+          studentUnsaved = true;
+          break;
+        }
+      }
+      return count + (studentUnsaved ? 1 : 0);
+    }, 0);
+  }, [filteredStudentsForSelect, activeTests, batchScores, batchSavedStatus]);
 
   // Ensure currently selected student is always presented in the dropdown
-  const isSelectedInFiltered = filteredStudentsForSelect.some(s => s.id === selectedStudentId);
-  const finalStudentsList = [...filteredStudentsForSelect];
-  if (selectedStudentId && !isSelectedInFiltered) {
-    const currentStudent = students.find(s => s.id === selectedStudentId);
-    if (currentStudent) {
-      finalStudentsList.unshift(currentStudent);
+  const finalStudentsList = useMemo(() => {
+    const isSelectedInFiltered = filteredStudentsForSelect.some(s => s.id === selectedStudentId);
+    const list = [...filteredStudentsForSelect];
+    if (selectedStudentId && !isSelectedInFiltered) {
+      const currentStudent = students.find(s => s.id === selectedStudentId);
+      if (currentStudent) {
+        list.unshift(currentStudent);
+      }
     }
-  }
+    return list;
+  }, [filteredStudentsForSelect, selectedStudentId, students]);
 
   return (
     <div className="space-y-8 animate-in fade-in pb-32 sm:pb-36">
@@ -1490,7 +1576,11 @@ const FitnessTests: React.FC = () => {
         /* Battery View */
         <div className="space-y-8">
           <button 
-            onClick={() => setSelectedBattery(null)}
+            onClick={() => {
+              setSelectedBattery(null);
+              setActiveFocusCoord(null);
+              setVisibleStudentLimit(24);
+            }}
             className="flex items-center space-x-2 text-slate-400 hover:text-indigo-600 font-bold uppercase text-xs tracking-widest transition-colors"
           >
             <ArrowLeft size={16} />
@@ -1651,7 +1741,12 @@ const FitnessTests: React.FC = () => {
                         value={selectedGradeFilter}
                         onChange={e => handleGradeFilterChange(e.target.value)}
                       >
-                        <option value="ALL">All Grades ({uniqueGrades.length > 0 ? uniqueGrades.join(', ') : 'All'})</option>
+                        <option value="ALL">
+                          {selectedBattery
+                            ? `All ${selectedBattery.category} (Gr ${selectedBattery.grades.join(', ')})`
+                            : `All Grades (${uniqueGrades.length > 0 ? uniqueGrades.join(', ') : 'All'})`}
+                        </option>
+                        <option value="ALL_SCHOOL">All School Grades (1–12)</option>
                         <optgroup label="Middle School (Classes 6, 7, 8) — Modified Push-Ups">
                           <option value="6">Class 6 (Middle School)</option>
                           <option value="7">Class 7 (Middle School)</option>
@@ -1689,7 +1784,10 @@ const FitnessTests: React.FC = () => {
                       <select 
                         className="w-full min-h-[46px] p-3 bg-white border border-slate-300 rounded-xl font-bold text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-slate-800 cursor-pointer shadow-2xs"
                         value={selectedSectionFilter}
-                        onChange={e => setSelectedSectionFilter(e.target.value)}
+                        onChange={e => {
+                          setSelectedSectionFilter(e.target.value);
+                          setVisibleStudentLimit(24);
+                        }}
                       >
                         <option value="ALL">All Sections ({uniqueSections.length})</option>
                         {uniqueSections.map(s => (
@@ -1776,7 +1874,10 @@ const FitnessTests: React.FC = () => {
                           placeholder="Search roll / name..."
                           className="w-full min-h-[46px] p-3 pl-9 pr-8 bg-white border border-slate-300 rounded-xl font-bold text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-slate-800 shadow-2xs"
                           value={studentSearchQuery}
-                          onChange={e => setStudentSearchQuery(e.target.value)}
+                          onChange={e => {
+                            setStudentSearchQuery(e.target.value);
+                            setVisibleStudentLimit(24);
+                          }}
                         />
                         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         {studentSearchQuery && (
@@ -2253,17 +2354,27 @@ const FitnessTests: React.FC = () => {
 
                       {/* Content Area: Field Cards or Table Grid */}
                       {filteredStudentsForSelect.length === 0 ? (
-                        <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400">
-                          <Users size={32} className="mx-auto mb-2 text-slate-300" />
-                          <p className="font-bold text-xs uppercase">No students found matching this class / search filter.</p>
-                          <p className="text-[10px] text-slate-400 mt-1">Try changing the Class or Section filter above, or add students in the Student Management tab.</p>
+                        <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 space-y-3">
+                          <Users size={32} className="mx-auto text-slate-300" />
+                          <div>
+                            <p className="font-bold text-xs uppercase">No students found matching this class / search filter.</p>
+                            <p className="text-[10px] text-slate-400 mt-1">Try changing the Class or Section filter above, or add students in the Student Management tab.</p>
+                          </div>
+                          {students.length > 0 && selectedGradeFilter !== 'ALL_SCHOOL' && (
+                            <button
+                              type="button"
+                              onClick={() => handleGradeFilterChange('ALL_SCHOOL')}
+                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase tracking-wider cursor-pointer active:scale-95 transition-all"
+                            >
+                              Show All School Students ({students.length})
+                            </button>
+                          )}
                         </div>
                       ) : viewLayoutMode === 'cards' ? (
                         /* MOBILE-FIRST FIELD CARDS MODE */
                         <div className="space-y-4">
                           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                            {filteredStudentsForSelect.map((student, sIdx) => {
-                              const activeTests = getActiveTests();
+                            {visibleBatchStudents.map((student, sIdx) => {
                               const isCardActive = activeFocusCoord?.sIdx === sIdx;
                               // Check if all active tests are saved for this student
                               const allSaved = activeTests.every(t => {
@@ -2386,6 +2497,7 @@ const FitnessTests: React.FC = () => {
                                                 value={currentVal}
                                                 onChange={e => {
                                                   const val = e.target.value;
+                                                  dirtyCellsRef.current.add(`${selectedTerm}::${cellKey}`);
                                                   setBatchScores(prev => ({
                                                     ...prev,
                                                     [cellKey]: val
@@ -2454,6 +2566,29 @@ const FitnessTests: React.FC = () => {
                               );
                             })}
                           </div>
+                          {filteredStudentsForSelect.length > visibleBatchStudents.length && (
+                            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                              <span className="text-xs font-bold text-slate-600">
+                                Showing <strong className="text-slate-900">{visibleBatchStudents.length}</strong> of <strong className="text-slate-900">{filteredStudentsForSelect.length}</strong> students
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setVisibleStudentLimit(prev => prev + 24)}
+                                  className="min-h-[40px] px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase tracking-wider cursor-pointer active:scale-95 transition-all"
+                                >
+                                  Load Next {Math.min(24, filteredStudentsForSelect.length - visibleBatchStudents.length)}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setVisibleStudentLimit(filteredStudentsForSelect.length)}
+                                  className="min-h-[40px] px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-black text-xs uppercase tracking-wider cursor-pointer active:scale-95 transition-all"
+                                >
+                                  Show All ({filteredStudentsForSelect.length})
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         /* SPREADSHEET TABLE GRID MODE */
@@ -2492,7 +2627,7 @@ const FitnessTests: React.FC = () => {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {filteredStudentsForSelect.map((student, sIdx) => {
+                                    {visibleBatchStudents.map((student, sIdx) => {
                                       const isRowActive = activeFocusCoord?.sIdx === sIdx;
 
                                       return (
@@ -2546,6 +2681,7 @@ const FitnessTests: React.FC = () => {
                                                     value={currentVal}
                                                     onChange={e => {
                                                       const val = e.target.value;
+                                                      dirtyCellsRef.current.add(`${selectedTerm}::${cellKey}`);
                                                       setBatchScores(prev => ({
                                                         ...prev,
                                                         [cellKey]: val
@@ -2584,8 +2720,29 @@ const FitnessTests: React.FC = () => {
                             })()}
                           </div>
 
-                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold px-2 pt-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 font-bold px-2 pt-1">
                             <span>Tip: Press Enter to move down rows, Shift+Enter to move up.</span>
+                            {filteredStudentsForSelect.length > visibleBatchStudents.length && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-600">
+                                  Showing {visibleBatchStudents.length} of {filteredStudentsForSelect.length}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setVisibleStudentLimit(prev => prev + 24)}
+                                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black uppercase cursor-pointer"
+                                >
+                                  +24 More
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setVisibleStudentLimit(filteredStudentsForSelect.length)}
+                                  className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-black uppercase cursor-pointer"
+                                >
+                                  All
+                                </button>
+                              </div>
+                            )}
                             <span className="text-emerald-600 font-extrabold flex items-center gap-1">
                               <CheckCircle2 size={12} /> Green cells = Saved to DB
                             </span>

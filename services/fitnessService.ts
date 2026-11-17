@@ -587,6 +587,7 @@ export const KIFT_BATTERIES: KIFTBattery[] = [
 
 // In-memory cache to prevent redundant Firestore reads and laggy UI tab switching
 const schoolMemberCache: { [uid: string]: SchoolMember | null } = {};
+const schoolMemberInFlight: { [uid: string]: Promise<SchoolMember | null> | undefined } = {};
 const schoolCache: { [schoolId: string]: School | null } = {};
 
 export const fitnessService = {
@@ -691,100 +692,110 @@ export const fitnessService = {
     if (schoolMemberCache[uid] !== undefined && schoolMemberCache[uid] !== null) {
       return schoolMemberCache[uid];
     }
-    try {
-      const docSnap = await getDoc(doc(db, 'schoolMembers', uid));
-      if (docSnap.exists()) {
-        const res = docSnap.data() as SchoolMember;
-        schoolMemberCache[uid] = res;
-        return res;
-      }
-
-      // Check if there is an invited record with matching email
-      const userEmail = auth.currentUser?.email;
-      if (userEmail) {
-        const q = query(collection(db, 'schoolMembers'), where('email', '==', userEmail.toLowerCase().trim()));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const matchDoc = snap.docs.find(d => d.id !== uid) || snap.docs[0];
-          const data = matchDoc.data();
-          const memberRecord: SchoolMember = {
-            uid: uid,
-            schoolId: data.schoolId || `school_${uid}`,
-            role: data.role || 'teacher',
-            displayName: auth.currentUser?.displayName || data.displayName || 'Teacher',
-            email: userEmail,
-            schoolName: data.schoolName || '',
-            schoolLogo: data.schoolLogo || ''
-          };
-
-          await setDoc(doc(db, 'schoolMembers', uid), memberRecord, { merge: true });
-          await setDoc(doc(db, 'users', uid), {
-            uid: uid,
-            email: userEmail,
-            displayName: memberRecord.displayName,
-            schoolId: memberRecord.schoolId,
-            schoolName: memberRecord.schoolName,
-            schoolLogo: memberRecord.schoolLogo,
-            role: memberRecord.role
-          }, { merge: true });
-
-          if (matchDoc.id.startsWith('pending_')) {
-            try {
-              await deleteDoc(doc(db, 'schoolMembers', matchDoc.id));
-            } catch (e) {
-              console.warn("Could not delete pending member doc:", e);
-            }
-          }
-
-          schoolMemberCache[uid] = memberRecord;
-          return memberRecord;
+    if (schoolMemberInFlight[uid]) {
+      return schoolMemberInFlight[uid]!;
+    }
+    const fetchPromise = (async (): Promise<SchoolMember | null> => {
+      try {
+        const docSnap = await getDoc(doc(db, 'schoolMembers', uid));
+        if (docSnap.exists()) {
+          const res = docSnap.data() as SchoolMember;
+          schoolMemberCache[uid] = res;
+          return res;
         }
-      }
 
-      // Check users/{uid}
-      const userSnap = await getDoc(doc(db, 'users', uid));
-      if (userSnap.exists()) {
-        const uData = userSnap.data();
-        if (uData.schoolId && !uData.schoolId.startsWith('personal_')) {
-          // Verify user is still owner of school or school exists before re-creating
-          const schoolSnap = await getDoc(doc(db, 'schools', uData.schoolId));
-          const isSchoolAdmin = schoolSnap.exists() && schoolSnap.data()?.adminId === uid;
-          
-          if (isSchoolAdmin) {
+        // Check if there is an invited record with matching email
+        const userEmail = auth.currentUser?.email;
+        if (userEmail) {
+          const q = query(collection(db, 'schoolMembers'), where('email', '==', userEmail.toLowerCase().trim()));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const matchDoc = snap.docs.find(d => d.id !== uid) || snap.docs[0];
+            const data = matchDoc.data();
             const memberRecord: SchoolMember = {
               uid: uid,
-              schoolId: uData.schoolId,
-              role: 'admin',
-              displayName: uData.displayName || auth.currentUser?.displayName || 'School Admin',
-              email: uData.email || auth.currentUser?.email || '',
-              schoolName: uData.schoolName || '',
-              schoolLogo: uData.schoolLogo || ''
+              schoolId: data.schoolId || `school_${uid}`,
+              role: data.role || 'teacher',
+              displayName: auth.currentUser?.displayName || data.displayName || 'Teacher',
+              email: userEmail,
+              schoolName: data.schoolName || '',
+              schoolLogo: data.schoolLogo || ''
             };
+
             await setDoc(doc(db, 'schoolMembers', uid), memberRecord, { merge: true });
+            await setDoc(doc(db, 'users', uid), {
+              uid: uid,
+              email: userEmail,
+              displayName: memberRecord.displayName,
+              schoolId: memberRecord.schoolId,
+              schoolName: memberRecord.schoolName,
+              schoolLogo: memberRecord.schoolLogo,
+              role: memberRecord.role
+            }, { merge: true });
+
+            if (matchDoc.id.startsWith('pending_')) {
+              try {
+                await deleteDoc(doc(db, 'schoolMembers', matchDoc.id));
+              } catch (e) {
+                console.warn("Could not delete pending member doc:", e);
+              }
+            }
+
             schoolMemberCache[uid] = memberRecord;
             return memberRecord;
           }
         }
-      }
 
-      if (auth.currentUser) {
-        const fallbackRecord: SchoolMember = {
-          uid: uid,
-          schoolId: `personal_${uid}`,
-          role: 'teacher',
-          displayName: auth.currentUser.displayName || 'Teacher',
-          email: auth.currentUser.email || ''
-        };
-        schoolMemberCache[uid] = fallbackRecord;
-        return fallbackRecord;
-      }
+        // Check users/{uid}
+        const userSnap = await getDoc(doc(db, 'users', uid));
+        if (userSnap.exists()) {
+          const uData = userSnap.data();
+          if (uData.schoolId && !uData.schoolId.startsWith('personal_')) {
+            // Verify user is still owner of school or school exists before re-creating
+            const schoolSnap = await getDoc(doc(db, 'schools', uData.schoolId));
+            const isSchoolAdmin = schoolSnap.exists() && schoolSnap.data()?.adminId === uid;
+            
+            if (isSchoolAdmin) {
+              const memberRecord: SchoolMember = {
+                uid: uid,
+                schoolId: uData.schoolId,
+                role: 'admin',
+                displayName: uData.displayName || auth.currentUser?.displayName || 'School Admin',
+                email: uData.email || auth.currentUser?.email || '',
+                schoolName: uData.schoolName || '',
+                schoolLogo: uData.schoolLogo || ''
+              };
+              await setDoc(doc(db, 'schoolMembers', uid), memberRecord, { merge: true });
+              schoolMemberCache[uid] = memberRecord;
+              return memberRecord;
+            }
+          }
+        }
 
-      schoolMemberCache[uid] = null;
-      return null;
-    } catch (err) {
-      logError(err, 'error', { context: 'getSchoolMember failed', uid });
-      return null;
-    }
+        if (auth.currentUser) {
+          const fallbackRecord: SchoolMember = {
+            uid: uid,
+            schoolId: `personal_${uid}`,
+            role: 'teacher',
+            displayName: auth.currentUser.displayName || 'Teacher',
+            email: auth.currentUser.email || ''
+          };
+          schoolMemberCache[uid] = fallbackRecord;
+          return fallbackRecord;
+        }
+
+        schoolMemberCache[uid] = null;
+        return null;
+      } catch (err) {
+        logError(err, 'error', { context: 'getSchoolMember failed', uid });
+        return null;
+      } finally {
+        delete schoolMemberInFlight[uid];
+      }
+    })();
+
+    schoolMemberInFlight[uid] = fetchPromise;
+    return fetchPromise;
   },
 
   addTeamMember: async (member: SchoolMember) => {
