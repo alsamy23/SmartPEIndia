@@ -31,6 +31,7 @@ import {
 } from '../../services/privacyAuditService';
 import { SchoolDPAModal } from './SchoolDPAModal';
 import { PrivacyNoticeModal } from './PrivacyNoticeModal';
+import { downloadBlobFile } from '../../utils/safeBrowser';
 
 interface DataPrivacyTabProps {
   schoolId: string;
@@ -105,28 +106,16 @@ export const DataPrivacyTab: React.FC<DataPrivacyTabProps> = ({
       if (exportFormat === 'json') {
         const jsonStr = JSON.stringify(data, null, 2);
         const blob = new Blob([jsonStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `smartpe_school_export_${schoolId}_${timestamp}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        downloadBlobFile(blob, `smartpe_school_export_${schoolId}_${timestamp}.json`);
       } else {
         // Structured CSV Export of Students & Results
-        const studentsHeader = "Name,RollNumber,Grade,Section,Gender,Age\n";
+        const studentsHeader = "\uFEFFName,RollNumber,Grade,Section,Gender,Age\n";
         const studentRows = (data.students || []).map((s: any) => 
-          `"${s.name || ''}","${s.rollNumber || ''}","${s.grade || ''}","${s.section || ''}","${s.gender || ''}",${s.age || ''}`
+          `"${(s.name || '').replace(/"/g, '""')}","${(s.rollNumber || '').replace(/"/g, '""')}","${(s.grade || '').replace(/"/g, '""')}","${(s.section || '').replace(/"/g, '""')}","${(s.gender || '').replace(/"/g, '""')}",${s.age || ''}`
         ).join('\n');
         
         const blob = new Blob([studentsHeader + studentRows], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `smartpe_students_export_${schoolId}_${timestamp}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        downloadBlobFile(blob, `smartpe_students_export_${schoolId}_${timestamp}.csv`);
       }
 
       toast.success('School data package exported successfully.');

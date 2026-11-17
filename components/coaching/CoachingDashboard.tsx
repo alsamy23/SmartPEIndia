@@ -33,7 +33,7 @@ import {
   AssessmentType,
   getDevelopmentLevelColor 
 } from '../../services/academyService';
-import { showToast } from '../../services/toast';
+import { showToast, toast } from '../../services/toast';
 
 interface CoachingDashboardProps {
   onNavigateTab: (subTab: string, contextId?: string) => void;
@@ -160,16 +160,16 @@ export const CoachingDashboard: React.FC<CoachingDashboardProps> = ({
   const handleBulkDeleteStudents = () => {
     if (selectedStudentIds.size === 0) return;
     const count = selectedStudentIds.size;
-    if (window.confirm(`Are you sure you want to delete ${count} selected student profile(s) from the academy cloud database?`)) {
+    toast.confirm(`Are you sure you want to delete ${count} selected student profile(s) from the academy cloud database?`, () => {
       academyService.deletePlayersBulk(Array.from(selectedStudentIds));
       setSelectedStudentIds(new Set());
       refreshPlayers();
       showToast(`Successfully deleted ${count} athlete profiles`, 'success');
-    }
+    });
   };
 
   const handleDeleteSingleStudent = (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to delete ${name}'s profile?`)) {
+    toast.confirm(`Are you sure you want to delete ${name}'s profile?`, () => {
       academyService.deletePlayer(id);
       setSelectedStudentIds(prev => {
         const next = new Set(prev);
@@ -178,7 +178,7 @@ export const CoachingDashboard: React.FC<CoachingDashboardProps> = ({
       });
       refreshPlayers();
       showToast(`${name} removed from roster`, 'info');
-    }
+    });
   };
 
   const handleToggleFeeStatus = (student: PlayerProfileData) => {

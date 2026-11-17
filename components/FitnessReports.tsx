@@ -58,6 +58,7 @@ import {
 } from '../utils/bmiUtils.ts';
 import { auth } from '../services/firebase.ts';
 import { toast } from '../services/toast.ts';
+import { downloadBlobFile } from '../utils/safeBrowser.ts';
 import Logo from './Logo.tsx';
 import { D3StudentProgressChart } from './fitness/D3StudentProgressChart.tsx';
 import { StudentGrowthComparisonChart } from './fitness/StudentGrowthComparisonChart.tsx';
@@ -469,13 +470,19 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
           return order.indexOf(a.term) - order.indexOf(b.term);
         });
 
-        // Comparison benchmarks - compare student averages vs school averages for same tests
+        // Comparison benchmarks - pre-aggregate school averages per testId in O(N)
+        const testAggregates = new Map<string, { sum: number; count: number }>();
+        for (const res of results) {
+          const entry = testAggregates.get(res.testId) || { sum: 0, count: 0 };
+          entry.sum += parseValue(res.value);
+          entry.count += 1;
+          testAggregates.set(res.testId, entry);
+        }
+
         const comparisonData = Object.values(latestByTest).map(r => {
-          const sameTestResults = results.filter(res => res.testId === r.testId);
-          const schoolAvg = sameTestResults.length > 0 
-            ? sameTestResults.reduce((sum, res) => sum + parseValue(res.value), 0) / sameTestResults.length
-            : 0;
-            
+          const agg = testAggregates.get(r.testId);
+          const schoolAvg = agg && agg.count > 0 ? agg.sum / agg.count : 0;
+
           return {
             name: r.testName.split('(')[0].trim(),
             student: parseValue(r.value),
@@ -719,7 +726,8 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
           classSubtitle = `Total Students: ${targetStudents.length}`;
         }
 
-        const teamResults = results.filter(r => targetStudents.some(s => s.id === r.studentId));
+        const targetStudentIds = new Set(targetStudents.map(s => s.id));
+        const teamResults = results.filter(r => targetStudentIds.has(r.studentId));
         
         // Distribution of tests
         const testCounts = groupCount(teamResults, 'testName');
@@ -1560,26 +1568,21 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
     }
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadBlobFile(blob, filename);
+    toast.success("CSV report exported!");
   };
 
-  const handleDeleteResult = async (resultId: string) => {
-    if (!window.confirm("Are you sure you want to delete this fitness result? This action cannot be undone.")) return;
-    
-    try {
-      await fitnessService.deleteResult(resultId);
-      // The real-time listener will update the UI automatically
-    } catch (err) {
-      console.error("Error deleting result:", err);
-      alert("Failed to delete result. Please try again.");
-    }
+  const handleDeleteResult = (resultId: string) => {
+    toast.confirm("Are you sure you want to delete this fitness result? This action cannot be undone.", async () => {
+      try {
+        await fitnessService.deleteResult(resultId);
+        toast.success("Fitness result deleted.");
+        // The real-time listener will update the UI automatically
+      } catch (err) {
+        console.error("Error deleting result:", err);
+        toast.error("Failed to delete result. Please try again.");
+      }
+    });
   };
 
   if (loading) {
@@ -2623,38 +2626,48 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
 
                         {/* 4 Core Fitness Trajectory Line Charts (2x2 Grid) */}
                         <div className="grid grid-cols-2 gap-4 items-stretch flex-1 my-2 relative z-10">
-                          {Object.entries((reportData.studentResults || []).reduce((acc: any, r: FitnessResult) => {
-                            const tName = r.testName.split('(')[0].trim();
-                            if (!acc[tName] && !r.testId.startsWith('rubric_')) {
-                              acc[tName] = [];
+                          {(() => {
+                            const classPeerIds = new Set(
+                              students
+                                .filter(s =>
+                                  s.grade === reportData.student?.grade &&
+                                  (!reportData.student?.section || s.section === reportData.student?.section)
+                                )
+                                .map(p => p.id)
+                            );
+                            const cohortAggByKey = new Map<string, { sum: number; count: number }>();
+                            for (const res of results) {
+                              if (!classPeerIds.has(res.studentId)) continue;
+                              const k = `${res.testId}__${res.term}`;
+                              const entry = cohortAggByKey.get(k) || { sum: 0, count: 0 };
+                              entry.sum += parseValue(res.value);
+                              entry.count += 1;
+                              cohortAggByKey.set(k, entry);
                             }
-                            if (!r.testId.startsWith('rubric_')) {
-                              // Calculate class cohort average for this test and term
-                              const classPeers = students.filter(s => 
-                                s.grade === reportData.student?.grade && 
-                                (!reportData.student?.section || s.section === reportData.student?.section)
-                              );
-                              const peerResults = results.filter(res => 
-                                res.testId === r.testId && 
-                                res.term === r.term && 
-                                classPeers.some(p => p.id === res.studentId)
-                              );
-                              let classAvg = parseValue(r.value);
-                              if (peerResults.length > 0) {
-                                const sum = peerResults.reduce((sVal, pr) => sVal + parseValue(pr.value), 0);
-                                classAvg = parseFloat((sum / peerResults.length).toFixed(1));
-                              }
 
-                              acc[tName].push({
-                                term: r.term,
-                                value: parseValue(r.value),
-                                classAverage: classAvg,
-                                unit: r.unit,
-                                date: r.date
-                              });
-                            }
-                            return acc;
-                          }, {})).slice(0, 4).map(([testName, testData]: [string, any]) => {
+                            const grouped = (reportData.studentResults || []).reduce((acc: any, r: FitnessResult) => {
+                              const tName = r.testName.split('(')[0].trim();
+                              if (!acc[tName] && !r.testId.startsWith('rubric_')) {
+                                acc[tName] = [];
+                              }
+                              if (!r.testId.startsWith('rubric_')) {
+                                const peerAgg = cohortAggByKey.get(`${r.testId}__${r.term}`);
+                                const classAvg = peerAgg && peerAgg.count > 0
+                                  ? parseFloat((peerAgg.sum / peerAgg.count).toFixed(1))
+                                  : parseValue(r.value);
+
+                                acc[tName].push({
+                                  term: r.term,
+                                  value: parseValue(r.value),
+                                  classAverage: classAvg,
+                                  unit: r.unit,
+                                  date: r.date
+                                });
+                              }
+                              return acc;
+                            }, {});
+                            return Object.entries(grouped);
+                          })().slice(0, 4).map(([testName, testData]: [string, any]) => {
                             const sortedData = [...testData].sort((a, b) => {
                               const order = ['Baseline', 'Term 1', 'Term 2', 'Final'];
                               return order.indexOf(a.term) - order.indexOf(b.term);

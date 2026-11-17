@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import { toJpeg } from 'html-to-image';
+import { safeOpenExternal, safeCopyToClipboard } from '../../utils/safeBrowser';
 import { 
   Printer, 
   Share2, 
@@ -391,36 +392,28 @@ ${assessment.nextGoals?.length ? `🚀 *Next 90-Day Goals:*\n${assessment.nextGo
     return `${window.location.origin}${window.location.pathname}#merit-report-${assessment.id}`;
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     const url = getShareUrl();
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(url).then(() => {
-        setCopiedLink(true);
-        showToast('Merit Report URL copied to clipboard!', 'success');
-        setTimeout(() => setCopiedLink(false), 2500);
-      }).catch(() => fallbackCopyText(url));
-    } else {
-      fallbackCopyText(url);
+    const ok = await safeCopyToClipboard(url, 'Merit Report URL copied to clipboard!');
+    if (ok) {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
     }
   };
 
-  const handleCopyWhatsApp = () => {
+  const handleCopyWhatsApp = async () => {
     const text = generateWhatsAppSummary();
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text).then(() => {
-        setCopiedSummary(true);
-        showToast('WhatsApp summary copied to clipboard!', 'success');
-        setTimeout(() => setCopiedSummary(false), 2500);
-      }).catch(() => fallbackCopyText(text));
-    } else {
-      fallbackCopyText(text);
+    const ok = await safeCopyToClipboard(text, 'WhatsApp summary copied to clipboard!');
+    if (ok) {
+      setCopiedSummary(true);
+      setTimeout(() => setCopiedSummary(false), 2500);
     }
   };
 
   const handleOpenWhatsAppDirect = () => {
     const text = generateWhatsAppSummary();
     const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(waUrl, '_blank');
+    safeOpenExternal(waUrl, 'Opening WhatsApp...');
   };
 
   const handleNativeShare = async () => {
@@ -439,23 +432,6 @@ ${assessment.nextGoals?.length ? `🚀 *Next 90-Day Goals:*\n${assessment.nextGo
     } else {
       setIsShareModalOpen(true);
     }
-  };
-
-  const fallbackCopyText = (text: string) => {
-    const textArea = document.createElement('textarea');
-    textArea.value = text;
-    textArea.style.position = 'fixed';
-    textArea.style.left = '-999999px';
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    try {
-      document.execCommand('copy');
-      showToast('Copied to clipboard!', 'success');
-    } catch (err) {
-      showToast('Failed to copy. Please copy link manually.', 'error');
-    }
-    document.body.removeChild(textArea);
   };
 
   return (

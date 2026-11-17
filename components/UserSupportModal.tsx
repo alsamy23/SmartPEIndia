@@ -11,6 +11,7 @@ import {
   IncidentReport 
 } from '../services/telemetryService';
 import { motion, AnimatePresence } from 'motion/react';
+import { safeOpenExternal, safeCopyToClipboard } from '../utils/safeBrowser';
 
 interface UserSupportModalProps {
   adminWhatsAppNumber?: string;
@@ -66,7 +67,7 @@ export const UserSupportModal: React.FC<UserSupportModalProps> = ({
 
   const handleWhatsAppClick = () => {
     const waUrl = buildWhatsAppSupportUrl(adminWhatsAppNumber, recentIncident || undefined, userNote || undefined);
-    window.open(waUrl, '_blank', 'noopener,noreferrer');
+    safeOpenExternal(waUrl, 'Opening WhatsApp support chat...');
   };
 
   const handleSubmitReport = async (e: React.FormEvent) => {
@@ -92,12 +93,14 @@ export const UserSupportModal: React.FC<UserSupportModalProps> = ({
     }
   };
 
-  const handleCopyPrompt = () => {
+  const handleCopyPrompt = async () => {
     if (!recentIncident) return;
     const prompt = formatAIStudioPrompt(recentIncident);
-    navigator.clipboard.writeText(prompt);
-    setCopiedPrompt(true);
-    setTimeout(() => setCopiedPrompt(false), 2500);
+    const ok = await safeCopyToClipboard(prompt, 'Diagnostics prompt copied!');
+    if (ok) {
+      setCopiedPrompt(true);
+      setTimeout(() => setCopiedPrompt(false), 2500);
+    }
   };
 
   return (

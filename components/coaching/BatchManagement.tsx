@@ -21,7 +21,7 @@ import {
   CoachingSportId, 
   SPORT_TEMPLATES 
 } from '../../services/academyService';
-import { showToast } from '../../services/toast';
+import { showToast, toast } from '../../services/toast';
 
 interface BatchManagementProps {
   onNewAssessment: (playerId: string) => void;
@@ -99,11 +99,11 @@ export const BatchManagement: React.FC<BatchManagementProps> = ({
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (window.confirm(`Delete batch "${name}"?`)) {
+    toast.confirm(`Delete batch "${name}"?`, () => {
       academyService.deleteBatch(id);
       refreshData();
       showToast('Batch removed', 'success');
-    }
+    });
   };
 
   const togglePlayerInBatch = (playerId: string) => {

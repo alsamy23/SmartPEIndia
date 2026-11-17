@@ -4,6 +4,7 @@ import Webcam from 'react-webcam';
 
 const MoveCheckTool: React.FC = () => {
   const [view, setView] = useState<'main' | 'choose' | 'camera'>('main');
+  const [mode, setMode] = useState<'reps' | 'form'>('reps');
   const [selectedExercise, setSelectedExercise] = useState<any>(null);
   const [reps, setReps] = useState(0);
   const [isTracking, setIsTracking] = useState(false);
@@ -44,9 +45,23 @@ const MoveCheckTool: React.FC = () => {
       
       {/* Header Area */}
       <div className="flex items-center gap-4 mb-6">
-        <button className="p-2 hover:bg-slate-100 rounded-full transition-colors hidden md:block">
-          <ChevronLeft size={20} className="text-slate-600" />
-        </button>
+        {view !== 'main' && (
+          <button
+            type="button"
+            onClick={() => {
+              if (view === 'camera') {
+                setView('choose');
+                setIsTracking(false);
+              } else {
+                setView('main');
+              }
+            }}
+            className="p-2 hover:bg-slate-100 rounded-full transition-colors hidden md:block"
+            title="Go back"
+          >
+            <ChevronLeft size={20} className="text-slate-600" />
+          </button>
+        )}
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-sky-50 text-sky-500 rounded-xl flex items-center justify-center shadow-sm border border-sky-100">
             <Camera size={24} />
@@ -69,7 +84,8 @@ const MoveCheckTool: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <button 
-              onClick={() => setView('choose')}
+              type="button"
+              onClick={() => { setMode('reps'); setView('choose'); }}
               className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all text-left group"
             >
               <div className="w-10 h-10 bg-red-50 text-red-500 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
@@ -83,7 +99,11 @@ const MoveCheckTool: React.FC = () => {
               </p>
             </button>
 
-            <button className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all text-left group">
+            <button
+              type="button"
+              onClick={() => { setMode('form'); setView('choose'); }}
+              className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all text-left group"
+            >
               <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <Dumbbell size={20} />
               </div>
@@ -105,21 +125,32 @@ const MoveCheckTool: React.FC = () => {
       {view === 'choose' && (
         <div className="space-y-6 animate-in slide-in-from-right-4">
           <div className="flex items-center gap-4 mb-2">
-            <button onClick={() => setView('main')} className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
+            <button type="button" onClick={() => setView('main')} className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
               <ChevronLeft size={16} /> Back
             </button>
-            <h2 className="text-xl font-black text-slate-800 ml-2">Choose an exercise to count</h2>
+            <h2 className="text-xl font-black text-slate-800 ml-2">
+              {mode === 'form' ? 'Choose a posture / hold to check form' : 'Choose an exercise to count'}
+            </h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {[
-              { icon: '🧍', name: 'Jumping Jacks', desc: 'Count jumping jack reps automatically', req: 'Stand 1-2m from camera, full body visible' },
-              { icon: '🏋️', name: 'Squats', desc: 'Count squat reps by tracking knee depth', req: 'Side view recommended for best accuracy' },
-              { icon: '🦵', name: 'High Knees', desc: 'Count alternating knee raises', req: 'Stand 1-2m from camera, full body visible' },
-              { icon: '🎽', name: 'Lunges', desc: 'Count alternating lunge reps', req: 'Front or side view, full body visible' },
-              { icon: '💪', name: 'Sit-ups', desc: 'Count sit-up reps via torso angle', req: 'Side view required — place camera at floor level' },
-            ].map((ex, idx) => (
+            {(mode === 'form'
+              ? [
+                  { icon: '🏋️', name: 'Squat Hold', desc: 'Check knee alignment, hip depth, and neutral spine posture', req: 'Side or 45° angle view recommended' },
+                  { icon: '🧘', name: 'Plank Hold', desc: 'Check shoulder-hip-ankle alignment without lower back sag', req: 'Side view at floor level required' },
+                  { icon: '🦩', name: 'Single-Leg Balance', desc: 'Check Flamingo balance stability and torso uprightness', req: 'Front view, full body visible' },
+                  { icon: '🎽', name: 'Lunge Hold', desc: 'Check 90-degree front knee angle and upright torso posture', req: 'Side view recommended' },
+                ]
+              : [
+                  { icon: '🧍', name: 'Jumping Jacks', desc: 'Count jumping jack reps automatically', req: 'Stand 1-2m from camera, full body visible' },
+                  { icon: '🏋️', name: 'Squats', desc: 'Count squat reps by tracking knee depth', req: 'Side view recommended for best accuracy' },
+                  { icon: '🦵', name: 'High Knees', desc: 'Count alternating knee raises', req: 'Stand 1-2m from camera, full body visible' },
+                  { icon: '🎽', name: 'Lunges', desc: 'Count alternating lunge reps', req: 'Front or side view, full body visible' },
+                  { icon: '💪', name: 'Sit-ups', desc: 'Count sit-up reps via torso angle', req: 'Side view required — place camera at floor level' },
+                ]
+            ).map((ex, idx) => (
               <button 
+                type="button"
                 key={idx} 
                 onClick={() => startCamera(ex)}
                 className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all text-left flex flex-col justify-between min-h-[140px]"
@@ -143,7 +174,7 @@ const MoveCheckTool: React.FC = () => {
            {/* Top Bar inside camera view */}
            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center gap-4">
-                <button onClick={() => { setView('choose'); setIsTracking(false); }} className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
+                <button type="button" onClick={() => { setView('choose'); setIsTracking(false); }} className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
                   <ChevronLeft size={16} /> Back
                 </button>
                 <div className="h-6 w-px bg-slate-200" />
@@ -154,7 +185,7 @@ const MoveCheckTool: React.FC = () => {
             
             <div className="flex items-center gap-3">
                  <div className="px-4 py-2 bg-slate-900 text-white rounded-xl font-black text-xl flex items-center gap-2 shadow-inner">
-                     <Activity size={20} className="text-emerald-400" /> {reps} Reps
+                     <Activity size={20} className="text-emerald-400" /> {mode === 'form' ? `${reps * 3}s Hold` : `${reps} Reps`}
                  </div>
                  <button 
                   onClick={() => setIsTracking(!isTracking)}

@@ -37,7 +37,8 @@ import {
   onAuthStateChanged,
   User as FirebaseUser
 } from 'firebase/auth';
-import { showToast } from '../../services/toast';
+import { showToast, toast } from '../../services/toast';
+import { safeCopyToClipboard } from '../../utils/safeBrowser';
 
 interface AcademyDatabaseModalProps {
   isOpen: boolean;
@@ -341,8 +342,8 @@ export const AcademyDatabaseModal: React.FC<AcademyDatabaseModalProps> = ({
     setColleagueName('');
   };
 
-  const handleRemoveTeacher = async (email: string) => {
-    if (confirm(`Remove teacher ${email} from this academy?`)) {
+  const handleRemoveTeacher = (email: string) => {
+    toast.confirm(`Remove teacher ${email} from this academy?`, async () => {
       const updated = teachers.filter(t => t.email.toLowerCase() !== email.toLowerCase());
       setTeachers(updated);
       if (program?.id) {
@@ -357,15 +358,19 @@ export const AcademyDatabaseModal: React.FC<AcademyDatabaseModalProps> = ({
           showToast('Failed to remove teacher from cloud', 'error');
         }
       }
-    }
+    });
   };
 
-  const handleCopyInviteCode = () => {
+  const handleCopyInviteCode = async () => {
     if (program?.inviteCode) {
-      navigator.clipboard.writeText(program.inviteCode);
-      setCopiedCode(true);
-      showToast(`Invite Code ${program.inviteCode} copied to clipboard!`, 'success');
-      setTimeout(() => setCopiedCode(false), 2500);
+      const ok = await safeCopyToClipboard(program.inviteCode);
+      if (ok) {
+        setCopiedCode(true);
+        showToast(`Invite Code ${program.inviteCode} copied to clipboard!`, 'success');
+        setTimeout(() => setCopiedCode(false), 2500);
+      } else {
+        showToast('Could not copy invite code automatically', 'error');
+      }
     }
   };
 

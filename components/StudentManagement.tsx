@@ -38,6 +38,7 @@ import { auth } from '../services/firebase.ts';
 import { toast } from '../services/toast.ts';
 import { calculateExactBMI } from '../utils/bmiUtils.ts';
 import { IndividualStudentProfileModal } from './fitness/IndividualStudentProfileModal.tsx';
+import { downloadBlobFile, parseCsvLine } from '../utils/safeBrowser.ts';
 
 interface StudentManagementProps {
   onNavigate?: (tab: any) => void;
@@ -89,13 +90,7 @@ const StudentManagement: React.FC<StudentManagementProps> = ({ onNavigate, onSel
   const handleDownloadTemplate = () => {
     const csvContent = "Name,Roll Number,Grade,Section,Gender,Age\nJohn Doe,101,1,A,Male,6\nJane Smith,102,1,B,Female,6";
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", "student_import_template_blank.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadBlobFile(blob, "student_import_template_blank.csv");
   };
 
   const handleDownloadSampleCsv = () => {
@@ -114,13 +109,7 @@ Arjun Malhotra,1201,12,A,Male,17
 Tanvi Nair,1202,12,A,Female,17
 Kabir Dutt,1203,12,B,Male,18`;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", "smartpe_sample_students_dummy_data.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadBlobFile(blob, "smartpe_sample_students_dummy_data.csv");
     toast.success("Downloaded sample CSV with 12 pre-filled students ready to import!");
   };
 
@@ -131,7 +120,7 @@ Kabir Dutt,1203,12,B,Male,18`;
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = event.target?.result as string;
-      const lines = text.split('\n').filter(line => line.trim());
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
       
       const newStudents: Student[] = [];
       
@@ -142,7 +131,7 @@ Kabir Dutt,1203,12,B,Male,18`;
       
       // Skip header
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',');
+        const values = parseCsvLine(lines[i]);
         if (values.length < 6 || !auth.currentUser) continue;
         
         const student: Student = {
@@ -152,7 +141,7 @@ Kabir Dutt,1203,12,B,Male,18`;
           grade: values[2].trim(),
           section: values[3].trim(),
           gender: values[4].trim() as any,
-          age: parseInt(values[5].trim()) || 6,
+          age: parseInt(values[5].trim(), 10) || 6,
           teacherId: auth.currentUser?.uid || 'temp',
           schoolId: schoolId,
           attendance: 0,
@@ -165,14 +154,16 @@ Kabir Dutt,1203,12,B,Male,18`;
         setLoading(true);
         try {
           await fitnessService.bulkSaveStudents(newStudents);
-          alert(`Successfully imported ${newStudents.length} students.`);
+          toast.success(`Successfully imported ${newStudents.length} students.`);
           setIsImporting(false);
         } catch (err) {
           console.error(err);
-          alert('Failed to import students. Check file format.');
+          toast.error('Failed to import students. Check file format.');
         } finally {
           setLoading(false);
         }
+      } else {
+        toast.error('No valid student rows found in CSV file.');
       }
     };
     reader.readAsText(file);
@@ -299,7 +290,7 @@ Kabir Dutt,1203,12,B,Male,18`;
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStudent.name || !newStudent.rollNumber || !auth.currentUser) {
-      alert('Please ensure you are logged in.');
+      toast.error('Please fill in student name and roll number and ensure you are logged in.');
       return;
     }
 
@@ -319,6 +310,7 @@ Kabir Dutt,1203,12,B,Male,18`;
       };
 
       await fitnessService.saveStudent(student);
+      toast.success(`Student ${student.name} added!`);
       setIsAdding(false);
       setNewStudent({
         name: '',
@@ -330,7 +322,7 @@ Kabir Dutt,1203,12,B,Male,18`;
       });
     } catch (err: any) {
       console.error(err);
-      alert(formatFitnessError(err));
+      toast.error(formatFitnessError(err));
     }
   };
 
@@ -348,8 +340,8 @@ Kabir Dutt,1203,12,B,Male,18`;
     return msg;
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this student?')) {
+  const handleDelete = (id: string) => {
+    toast.confirm('Are you sure you want to delete this student?', async () => {
       try {
         await fitnessService.deleteStudent(id, userProfile?.schoolId);
         toast.success('Student deleted successfully.');
@@ -357,7 +349,7 @@ Kabir Dutt,1203,12,B,Male,18`;
         console.error(err);
         toast.error('Failed to delete student: ' + formatErrorMessage(err));
       }
-    }
+    });
   };
 
   // Standard CBSE Grades (1 to 12) merged with any existing student grades

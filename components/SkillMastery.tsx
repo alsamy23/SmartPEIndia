@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Target, Search, Loader2, ChevronRight, BookOpen, Layers, Zap, Save, CheckCircle2 } from 'lucide-react';
 import { generateSkillProgression, generateLessonDiagram } from '../services/geminiService.ts';
 import { storageService } from '../services/storageService.ts';
+import { toast } from '../services/toast.ts';
 import { SkillProgression } from '../types.ts';
 
 const SkillMastery: React.FC = () => {
@@ -11,6 +12,15 @@ const SkillMastery: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [progression, setProgression] = useState<SkillProgression | null>(null);
   const [isSaved, setIsSaved] = useState(false);
+  const saveTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleSaveToHistory = () => {
     if (!progression) return;
@@ -21,7 +31,11 @@ const SkillMastery: React.FC = () => {
       metadata: { sport, skill, level: progression.level }
     });
     setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+    toast.success('Skill mastery progression saved to history!');
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = window.setTimeout(() => setIsSaved(false), 3000);
   };
 
   const handleGenerate = async () => {
@@ -51,7 +65,7 @@ const SkillMastery: React.FC = () => {
       setProgression({ ...data, phases: phasesWithImages });
     } catch (e) {
       console.error(e);
-      alert("Failed to generate progression. Please try again.");
+      toast.error("Failed to generate progression. Please try again.");
     } finally {
       setLoading(false);
     }

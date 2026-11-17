@@ -55,6 +55,22 @@ const EasyRubric = () => {
 
   const totalScore = criteria.reduce((acc, c) => acc + (c.score * (c.weight / 100)), 0);
 
+  const handleSaveRubric = () => {
+    try {
+      const existing = JSON.parse(localStorage.getItem('smartpe_saved_rubrics') || '[]');
+      const entry = {
+        id: Date.now().toString(),
+        date: new Date().toISOString(),
+        criteria,
+        totalScore: Number(totalScore.toFixed(1))
+      };
+      localStorage.setItem('smartpe_saved_rubrics', JSON.stringify([entry, ...(Array.isArray(existing) ? existing : [])].slice(0, 50)));
+      toast.success(`Rubric evaluation saved (${totalScore.toFixed(1)} / 5.0)!`);
+    } catch {
+      toast.error('Failed to save rubric locally.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-slate-900 p-6 rounded-3xl text-white">
@@ -93,7 +109,12 @@ const EasyRubric = () => {
           <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">Final Score</p>
           <p className="text-4xl font-black tracking-tighter">{totalScore.toFixed(1)} / 5.0</p>
         </div>
-        <button className="p-4 bg-white/20 rounded-2xl hover:bg-white/30 transition-all">
+        <button
+          type="button"
+          onClick={handleSaveRubric}
+          title="Save Rubric Evaluation"
+          className="p-4 bg-white/20 rounded-2xl hover:bg-white/30 transition-all"
+        >
           <Save size={24} />
         </button>
       </div>
@@ -260,20 +281,23 @@ const StationTimer = () => {
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Stations</label>
           <input 
-            type="number" 
+            type="number"
+            min={1}
             value={stations} 
-            onChange={e => setStations(parseInt(e.target.value))}
+            onChange={e => setStations(Math.max(1, parseInt(e.target.value, 10) || 1))}
             className="w-full text-2xl font-black text-slate-800 outline-none bg-transparent"
           />
         </div>
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm relative">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Duration (s)</label>
           <input 
-            type="number" 
+            type="number"
+            min={1}
             value={duration} 
             onChange={e => {
-              setDuration(parseInt(e.target.value));
-              if (!isRunning) setTimeLeft(parseInt(e.target.value));
+              const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+              setDuration(val);
+              if (!isRunning) setTimeLeft(val);
             }}
             className="w-full text-2xl font-black text-slate-800 outline-none bg-transparent"
           />
@@ -319,13 +343,20 @@ const SpinIt = () => {
   const [newItem, setNewItem] = useState('');
   const [winner, setWinner] = useState<string | null>(null);
   const [isSpinning, setIsSpinning] = useState(false);
+  const spinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (spinTimeoutRef.current) clearTimeout(spinTimeoutRef.current);
+    };
+  }, []);
 
   const handleSpin = () => {
-    if (items.length === 0) return;
+    if (items.length === 0 || isSpinning) return;
     setIsSpinning(true);
     setWinner(null);
-    
-    setTimeout(() => {
+    if (spinTimeoutRef.current) clearTimeout(spinTimeoutRef.current);
+    spinTimeoutRef.current = setTimeout(() => {
       const randomIndex = Math.floor(Math.random() * items.length);
       setWinner(items[randomIndex]);
       setIsSpinning(false);
@@ -478,7 +509,17 @@ const WorkoutTimer = () => {
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm relative">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Work</label>
-          <input type="number" value={work} onChange={e => setWork(parseInt(e.target.value))} className="w-full font-black text-slate-800 outline-none bg-transparent" />
+          <input
+            type="number"
+            min={1}
+            value={work}
+            onChange={e => {
+              const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+              setWork(val);
+              if (!isRunning && isWorkPhase && currentRound === 1) setTimeLeft(val);
+            }}
+            className="w-full font-black text-slate-800 outline-none bg-transparent"
+          />
           <button 
             onClick={() => setSayLouder(!sayLouder)}
             className={`absolute top-2 right-2 p-1.5 rounded-full transition-all ${sayLouder ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}
@@ -489,11 +530,23 @@ const WorkoutTimer = () => {
         </div>
         <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Rest</label>
-          <input type="number" value={rest} onChange={e => setRest(parseInt(e.target.value))} className="w-full font-black text-slate-800 outline-none bg-transparent" />
+          <input
+            type="number"
+            min={0}
+            value={rest}
+            onChange={e => setRest(Math.max(0, parseInt(e.target.value, 10) || 0))}
+            className="w-full font-black text-slate-800 outline-none bg-transparent"
+          />
         </div>
         <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Rounds</label>
-          <input type="number" value={rounds} onChange={e => setRounds(parseInt(e.target.value))} className="w-full font-black text-slate-800 outline-none bg-transparent" />
+          <input
+            type="number"
+            min={1}
+            value={rounds}
+            onChange={e => setRounds(Math.max(1, parseInt(e.target.value, 10) || 1))}
+            className="w-full font-black text-slate-800 outline-none bg-transparent"
+          />
         </div>
       </div>
 

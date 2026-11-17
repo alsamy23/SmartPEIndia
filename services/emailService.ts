@@ -48,7 +48,10 @@ export async function sendAutomatedWelcomeEmail(
       })
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, message: data.error || data.message || `Request failed (${res.status})` };
+    }
     return data;
   } catch (err: any) {
     console.error('Error sending automated welcome email:', err);
@@ -75,7 +78,10 @@ export async function sendFeatureAnnouncementEmail(
       })
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, sentCount: 0, message: data.error || data.message || `Request failed (${res.status})` };
+    }
     return data;
   } catch (err: any) {
     console.error('Error sending feature announcement email:', err);
@@ -361,9 +367,10 @@ export async function triggerNurtureStep(
   schoolName?: string
 ): Promise<{ success: boolean; message: string; step: number; stepName: string; triggerDay: string; provider: string }> {
   try {
+    const headers = await getAuthHeaders();
     const res = await fetch('/api/email/nurture/trigger', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         toEmail,
         step,
@@ -372,7 +379,17 @@ export async function triggerNurtureStep(
       })
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        message: data.error || data.message || `Failed to trigger nurture step ${step} (${res.status})`,
+        step,
+        stepName: `Step ${step}`,
+        triggerDay: `Day ${step === 1 ? 0 : step === 2 ? 2 : 5}`,
+        provider: 'none'
+      };
+    }
     return data;
   } catch (err: any) {
     console.error(`Error triggering nurture step ${step}:`, err);
@@ -422,7 +439,14 @@ export async function evaluateNurtureSequence(payload: {
       body: JSON.stringify(payload)
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        actionTaken: 'error',
+        message: data.error || data.message || `Evaluation failed (${res.status})`
+      };
+    }
     return data;
   } catch (err: any) {
     console.error('Error evaluating nurture sequence:', err);

@@ -32,6 +32,8 @@ import {
 import { BoardType, YearlyPlan, Language, LessonPlan } from '../types.ts';
 import { generateYearlyPlan, generateLessonPlan, buildComprehensiveYearlyPlanFallback } from '../services/geminiService.ts';
 import { exportToPdf, exportToWord, exportYearlyPlanToIcs } from '../lib/exportUtils.ts';
+import { toast } from '../services/toast.ts';
+import { downloadBlobFile } from '../utils/safeBrowser.ts';
 
 declare var html2pdf: any;
 
@@ -810,7 +812,7 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
 
   const handleExportTermLessonsExcel = (tIdx: number) => {
     if (!plan || !plan.terms || !plan.terms[tIdx]) {
-      alert("No plan available.");
+      toast.error("No plan available.");
       return;
     }
     const term = plan.terms[tIdx];
@@ -877,12 +879,8 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `PE_${term.termName.replace(/\s+/g, '_')}_Grade${grade}_Detailed_Lessons.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadBlobFile(blob, `PE_${term.termName.replace(/\s+/g, '_')}_Grade${grade}_Detailed_Lessons.csv`);
+    toast.success("Term lesson breakdown exported!");
   };
 
   const handleGenerate = async () => {
@@ -938,7 +936,7 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
 
   const handleExportWord = () => {
     if (!plan || !plan.terms || plan.terms.length === 0) {
-      alert("No data available to export.");
+      toast.error("No data available to export.");
       return;
     }
 
@@ -1004,7 +1002,7 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
 
   const handleExportExcel = () => {
     if (!plan || !plan.terms || plan.terms.length === 0) {
-      alert("No data available to export.");
+      toast.error("No data available to export.");
       return;
     }
 
@@ -1033,17 +1031,13 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `PE_Yearly_Plan_Grade${grade}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadBlobFile(blob, `PE_Yearly_Plan_Grade${grade}.csv`);
+    toast.success("Yearly plan CSV exported!");
   };
 
   const handleExportCalendarIcs = () => {
     if (!plan || !plan.terms || plan.terms.length === 0) {
-      alert("No curriculum plan available to export.");
+      toast.error("No curriculum plan available to export.");
       return;
     }
 

@@ -130,7 +130,7 @@ const AIToolCenter: React.FC = () => {
             <ChevronLeft size={16} />
             <span>Back to Tool Center</span>
           </button>
-          <TournamentMaker />
+          <TournamentMaker initialMode={selectedTool.id === 'round-robin' ? 'roundrobin' : 'knockout'} />
         </div>
       );
     }

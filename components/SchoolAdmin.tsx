@@ -50,6 +50,8 @@ import { auth, db } from '../services/firebase.ts';
 import { SEOConfig, DEFAULT_SEO_CONFIG, loadSEOConfig, saveSEOConfig, RouteSEOOverride } from '../services/seoService.ts';
 import { DataPrivacyTab } from './privacy/DataPrivacyTab.tsx';
 import { userActivityService, LoginActivityRecord } from '../services/userActivityService.ts';
+import { callAIBase } from '../services/geminiService.ts';
+import { safeCopyToClipboard, downloadCsvFile } from '../utils/safeBrowser.ts';
 
 const SchoolAdmin: React.FC = () => {
   const [members, setMembers] = useState<SchoolMember[]>([]);
@@ -115,6 +117,17 @@ const SchoolAdmin: React.FC = () => {
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
   const isSuperAdmin = isBrandSuperAdmin(auth.currentUser?.email);
+  const ocrTimersRef = React.useRef<number[]>([]);
+  const isMountedRef = React.useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      ocrTimersRef.current.forEach(id => window.clearTimeout(id));
+      ocrTimersRef.current = [];
+    };
+  }, []);
 
   useEffect(() => {
     if (!auth.currentUser) {
@@ -474,16 +487,26 @@ const SchoolAdmin: React.FC = () => {
   };
 
   const handleOCRFileIngestion = async (file: File) => {
+    ocrTimersRef.current.forEach(id => window.clearTimeout(id));
+    ocrTimersRef.current = [];
     setSelectedFile(file);
     setOcrProgressStep(0);
     setRawText('');
     setOcrLogs(["Reading local schedule file bits...", `Found file: "${file.name}" (${(file.size / 1024).toFixed(1)} KB)`]);
 
+    const scheduleTimeout = (fn: () => void, ms: number) => {
+      const id = window.setTimeout(() => {
+        if (isMountedRef.current) fn();
+      }, ms);
+      ocrTimersRef.current.push(id);
+    };
+
     const reader = new FileReader();
     reader.onload = async (e) => {
+      if (!isMountedRef.current) return;
       const textResult = e.target?.result as string || '';
       
-      setTimeout(() => {
+      scheduleTimeout(() => {
         setOcrProgressStep(1);
         setOcrLogs(prev => [
           ...prev, 
@@ -492,7 +515,7 @@ const SchoolAdmin: React.FC = () => {
           "Compiling table columns and resolving handwriting offsets..."
         ]);
 
-        setTimeout(async () => {
+        scheduleTimeout(async () => {
           setOcrLogs(prev => [...prev, "Probing custom layout mapping schema..."]);
           const textToParse = textResult.length > 50 ? textResult : getSampleTimetableText();
           setRawText(textToParse);
@@ -503,7 +526,7 @@ const SchoolAdmin: React.FC = () => {
 
     // If it's binary or empty, simulate text load
     if (file.name.endsWith('.pdf') || file.name.endsWith('.docx') || file.name.endsWith('.doc') || file.size < 5) {
-      setTimeout(() => {
+      scheduleTimeout(() => {
         const sampleText = getSampleTimetableText();
         setRawText(sampleText);
         setOcrProgressStep(1);
@@ -512,7 +535,7 @@ const SchoolAdmin: React.FC = () => {
           "Parsing rich PDF layout elements...", 
           "Successfully extracted text nodes via document OCR scan."
         ]);
-        setTimeout(async () => {
+        scheduleTimeout(async () => {
           setOcrLogs(prev => [...prev, "Probing custom layout mapping schema..."]);
           await handleAIMapPrompt(sampleText);
         }, 1000);
@@ -527,19 +550,14 @@ const SchoolAdmin: React.FC = () => {
     setOcrLogs(prev => [...prev, "Running Gemini layout parsing instruction model..."]);
     
     try {
-      const response = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'gemini-3.7-flash',
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: `You are an expert CBSE/ICSE physical education timetable OCR parser. 
+      const resData = await callAIBase({
+        model: 'gemini-3.1-flash-lite',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `You are an expert CBSE/ICSE physical education timetable OCR parser. 
 Analyze the following text from school timetable files. Identify the teacher (coach) name, day of week (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday or Sunday), period index (1 to 8), and the class assignment (e.g., "9A - Football").
 
 Return ONLY a valid JSON array block with this structure, without any extra text, headings, or explanation. It must follow this pattern:
@@ -549,18 +567,14 @@ Return ONLY a valid JSON array block with this structure, without any extra text
 
 Timetable text to parse:
 ${textToParse}`
-                }
-              ]
-            }
-          ]
-        })
-      });
-
-      const resData = await response.json();
-      if (!response.ok) throw new Error(resData.message || "Failed model generation");
+              }
+            ]
+          }
+        ]
+      }, 1);
 
       let parsedJson: any[] = [];
-      const text = resData.text || '';
+      const text = resData?.text || '';
       
       // Extract json from potential markdown tags
       const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
@@ -2236,10 +2250,9 @@ Friday Period 3: Grade 7B - Fitness`;
                         type="button"
                         onClick={() => {
                           const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${seoConfig.canonicalUrl || 'https://smartpeindia.app/'}</loc>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
-                          navigator.clipboard.writeText(xml);
+                          safeCopyToClipboard(xml, "XML Sitemap copied to clipboard!");
                           setCopiedText('xml');
-                          toast.success("XML Sitemap copied to clipboard!");
-                          setTimeout(() => setCopiedText(null), 2000);
+                          setTimeout(() => isMountedRef.current && setCopiedText(null), 2000);
                         }}
                         className="text-[10px] font-black text-[#0D2B52] uppercase tracking-wider flex items-center gap-1 hover:underline"
                       >
@@ -2278,10 +2291,9 @@ Friday Period 3: Grade 7B - Fitness`;
                         type="button"
                         onClick={() => {
                           const txt = `User-agent: *\n${seoConfig.allowCrawling ? 'Allow: /' : 'Disallow: /'}\nSitemap: ${(seoConfig.canonicalUrl || 'https://smartpeindia.app/').replace(/\/$/, '')}/sitemap.xml`;
-                          navigator.clipboard.writeText(txt);
+                          safeCopyToClipboard(txt, "robots.txt copied to clipboard!");
                           setCopiedText('robots');
-                          toast.success("robots.txt copied to clipboard!");
-                          setTimeout(() => setCopiedText(null), 2000);
+                          setTimeout(() => isMountedRef.current && setCopiedText(null), 2000);
                         }}
                         className="text-[10px] font-black text-[#0D2B52] uppercase tracking-wider flex items-center gap-1 hover:underline"
                       >
@@ -2356,19 +2368,23 @@ Friday Period 3: Grade 7B - Fitness`;
                   <button
                     onClick={() => {
                       if (registeredUsers.length === 0) return;
-                      const csvHeader = "UID,Name,Email,Role,Workspace,Organization,RegisteredAt,LastLoginAt,LastActiveAt,LoginCount\n";
+                      const headers = ['UID', 'Name', 'Email', 'Role', 'Workspace', 'Organization', 'RegisteredAt', 'LastLoginAt', 'LastActiveAt', 'LoginCount'];
                       const rows = registeredUsers.map(u => {
                         const org = u.schoolName || u.academyName || (u.workspaceType === 'academy' ? 'Sports Academy' : 'School');
-                        return `"${u.uid || ''}","${u.displayName || ''}","${u.email || ''}","${u.role || 'teacher'}","${u.workspaceType || 'school'}","${org}","${u.registrationDate || u.createdAt || ''}","${u.lastLoginAt || ''}","${u.lastActiveAt || ''}","${u.loginCount || 1}"`;
-                      }).join('\n');
-                      const blob = new Blob([csvHeader + rows], { type: 'text/csv;charset=utf-8;' });
-                      const url = URL.createObjectURL(blob);
-                      const link = document.createElement('a');
-                      link.setAttribute('href', url);
-                      link.setAttribute('download', `smartpe_registered_users_${new Date().toISOString().split('T')[0]}.csv`);
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
+                        return [
+                          u.uid || '',
+                          u.displayName || '',
+                          u.email || '',
+                          u.role || 'teacher',
+                          u.workspaceType || 'school',
+                          org,
+                          u.registrationDate || u.createdAt || '',
+                          u.lastLoginAt || '',
+                          u.lastActiveAt || '',
+                          u.loginCount || 1
+                        ];
+                      });
+                      downloadCsvFile(`smartpe_registered_users_${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
                       toast.success("User directory & login stats exported to CSV!");
                     }}
                     className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm cursor-pointer"
@@ -2701,8 +2717,7 @@ Friday Period 3: Grade 7B - Fitness`;
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => {
-                                  navigator.clipboard.writeText(user.uid || '');
-                                  toast.success(`Copied UID: ${user.uid}`);
+                                  safeCopyToClipboard(user.uid || '', `Copied UID: ${user.uid}`);
                                 }}
                                 title="Copy User ID"
                                 className="p-1.5 hover:bg-slate-100 text-slate-500 rounded-lg transition-colors cursor-pointer"

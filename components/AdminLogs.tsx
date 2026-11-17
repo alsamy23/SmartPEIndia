@@ -14,6 +14,8 @@ import {
   buildWhatsAppSupportUrl,
   isBenignError 
 } from '../services/telemetryService';
+import { safeCopyToClipboard, safeOpenExternal } from '../utils/safeBrowser';
+import { toast } from '../services/toast';
 
 interface TelemetryConfigState {
   adminAlertEmail: string;
@@ -153,28 +155,33 @@ const AdminLogs: React.FC = () => {
     return true;
   });
 
-  const handleCopyPrompt = (incident: IncidentReport) => {
+  const handleCopyPrompt = async (incident: IncidentReport) => {
     const prompt = formatAIStudioPrompt(incident);
-    navigator.clipboard.writeText(prompt);
-    setCopiedId(incident.id || incident.message);
-    setTimeout(() => setCopiedId(null), 2500);
+    const ok = await safeCopyToClipboard(prompt, 'AI Studio prompt copied!');
+    if (ok) {
+      setCopiedId(incident.id || incident.message);
+      setTimeout(() => setCopiedId(null), 2500);
+    }
   };
 
   const handleOpenWhatsAppAlert = (incident: IncidentReport) => {
     const url = buildWhatsAppSupportUrl(config.adminWhatsAppNumber, incident);
-    window.open(url, '_blank', 'noopener,noreferrer');
+    safeOpenExternal(url, 'Opening WhatsApp alert...');
   };
 
-  const handleClearLogs = async () => {
-    if (!window.confirm('Are you sure you want to clear telemetry incident history?')) return;
-    try {
-      localStorage.removeItem('smartpe_incident_logs');
-      setLocalIncidents([]);
-      await fetch('/api/telemetry/incidents', { method: 'DELETE' });
-      setServerIncidents([]);
-    } catch (err) {
-      console.error('Failed to clear incident logs:', err);
-    }
+  const handleClearLogs = () => {
+    toast.confirm('Are you sure you want to clear telemetry incident history?', async () => {
+      try {
+        localStorage.removeItem('smartpe_incident_logs');
+        setLocalIncidents([]);
+        await fetch('/api/telemetry/incidents', { method: 'DELETE' });
+        setServerIncidents([]);
+        toast.success('Incident history cleared.');
+      } catch (err) {
+        console.error('Failed to clear incident logs:', err);
+        toast.error('Failed to clear telemetry logs.');
+      }
+    });
   };
 
   const handleSaveConfig = async (e: React.FormEvent) => {

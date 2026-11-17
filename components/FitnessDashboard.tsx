@@ -19,6 +19,8 @@ import { motion } from 'motion/react';
 import { fitnessService, FitnessResult, Team, Student, SchoolMember, School } from '../services/fitnessService.ts';
 import { isBrandSuperAdmin, BRAND_EMAILS } from '../types';
 import { auth } from '../services/firebase.ts';
+import { toast } from '../services/toast.ts';
+import { downloadCsvFile } from '../utils/safeBrowser.ts';
 
 interface FitnessDashboardProps {
   onNavigate: (tab: any) => void;
@@ -32,6 +34,7 @@ const FitnessDashboard: React.FC<FitnessDashboardProps> = ({ onNavigate, onSelec
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<SchoolMember | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isSuperAdmin = isBrandSuperAdmin(auth.currentUser?.email);
 
@@ -94,21 +97,26 @@ const FitnessDashboard: React.FC<FitnessDashboardProps> = ({ onNavigate, onSelec
     };
   }, [auth.currentUser?.uid]);
 
-  const handleDeleteResult = async (e: React.MouseEvent, resultId: string) => {
+  const handleDeleteResult = (e: React.MouseEvent, resultId: string) => {
     e.stopPropagation();
-    if (!window.confirm("Delete this result forever?")) return;
-    try {
-      await fitnessService.deleteResult(resultId);
-    } catch (err) {
-      console.error(err);
-      alert("Delete failed.");
-    }
+    toast.confirm("Delete this result forever?", async () => {
+      try {
+        await fitnessService.deleteResult(resultId);
+        toast.success("Fitness result deleted.");
+      } catch (err) {
+        console.error(err);
+        toast.error("Delete failed. Please try again.");
+      }
+    });
   };
+
+  const todayPrefix = new Date().toISOString().split('T')[0];
+  const resultsTodayList = results.filter(r => typeof r.date === 'string' && r.date.startsWith(todayPrefix));
 
   const stats = {
     totalStudents: students.length,
-    resultsToday: results.filter(r => r.date.startsWith(new Date().toISOString().split('T')[0])).length,
-    activeStudentsToday: new Set(results.filter(r => r.date.startsWith(new Date().toISOString().split('T')[0])).map(r => r.studentId)).size,
+    resultsToday: resultsTodayList.length,
+    activeStudentsToday: new Set(resultsTodayList.map(r => r.studentId)).size,
     totalTracked: results.length
   };
 
@@ -123,30 +131,37 @@ const FitnessDashboard: React.FC<FitnessDashboardProps> = ({ onNavigate, onSelec
     return student.name;
   };
 
+  const filteredResults = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return results;
+    return results.filter(r => {
+      const sName = getStudentName(r.studentId).toLowerCase();
+      return (
+        sName.includes(q) ||
+        (r.testName || '').toLowerCase().includes(q) ||
+        (r.rating || '').toLowerCase().includes(q)
+      );
+    });
+  }, [results, students, schools, searchQuery, isSuperAdmin]);
+
   const handleExportCSV = () => {
     if (results.length === 0) {
-      alert("No results to export.");
+      toast.error("No results to export.");
       return;
     }
 
     const headers = ['Student Name', 'Test Name', 'Value', 'Unit', 'Rating', 'Term', 'Date'];
-    const csvContent = [
-      headers.join(','),
-      ...results.map(r => {
-        const studentName = getStudentName(r.studentId).replace(/,/g, ''); // Remove commas to prevent CSV issues
-        const dateStr = new Date(r.date).toLocaleDateString();
-        return `"${studentName}","${r.testName}","${r.value}","${r.unit || ''}","${r.rating || ''}","${r.term || ''}","${dateStr}"`;
-      })
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `fitness_results_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const rows = results.map(r => [
+      getStudentName(r.studentId),
+      r.testName,
+      r.value,
+      r.unit || '',
+      r.rating || '',
+      r.term || '',
+      r.date ? new Date(r.date).toLocaleDateString() : ''
+    ]);
+    downloadCsvFile(`fitness_results_${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+    toast.success("Fitness results exported to CSV!");
   };
 
   if (loading) {
@@ -258,6 +273,8 @@ const FitnessDashboard: React.FC<FitnessDashboardProps> = ({ onNavigate, onSelec
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                   <input 
                     type="text" 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search results..." 
                     className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
                   />
@@ -266,26 +283,39 @@ const FitnessDashboard: React.FC<FitnessDashboardProps> = ({ onNavigate, onSelec
             </div>
 
             <div className="divide-y divide-slate-100">
-              {results.length === 0 ? (
+              {filteredResults.length === 0 ? (
                 <div className="p-20 text-center space-y-4">
                   <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
                     <Activity size={32} className="text-slate-200" />
                   </div>
                   <div className="space-y-2">
-                    <p className="font-black text-slate-900 uppercase tracking-tight">No results yet</p>
+                    <p className="font-black text-slate-900 uppercase tracking-tight">
+                      {results.length === 0 ? 'No results yet' : 'No matching results'}
+                    </p>
                     <p className="text-slate-400 text-sm font-medium max-w-xs mx-auto">
-                      Start a testing session or create a team to see live results here.
+                      {results.length === 0
+                        ? 'Start a testing session or create a team to see live results here.'
+                        : 'Try searching by a different student name, test name, or rating.'}
                     </p>
                   </div>
-                  <button 
-                    onClick={() => onNavigate('fitness')}
-                    className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all"
-                  >
-                    Start Testing
-                  </button>
+                  {results.length === 0 ? (
+                    <button 
+                      onClick={() => onNavigate('fitness')}
+                      className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all"
+                    >
+                      Start Testing
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => setSearchQuery('')}
+                      className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all"
+                    >
+                      Clear Search
+                    </button>
+                  )}
                 </div>
               ) : (
-                results.slice(0, 10).map((result) => (
+                filteredResults.slice(0, 15).map((result) => (
                   <div 
                     key={result.id} 
                     onClick={() => onSelectStudent?.(result.studentId)}
@@ -348,13 +378,18 @@ const FitnessDashboard: React.FC<FitnessDashboardProps> = ({ onNavigate, onSelec
                   </div>
                 ) : (
                   teams.map(team => (
-                    <div key={team.id} className="p-4 bg-slate-800 rounded-2xl flex items-center justify-between hover:bg-slate-700 transition-colors cursor-pointer group">
+                    <button
+                      type="button"
+                      key={team.id}
+                      onClick={() => onNavigate('school-teams')}
+                      className="w-full text-left p-4 bg-slate-800 rounded-2xl flex items-center justify-between hover:bg-slate-700 transition-colors cursor-pointer group"
+                    >
                       <div>
                         <h4 className="font-black text-sm uppercase tracking-tight">{team.name}</h4>
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{team.studentIds.length} Students</p>
                       </div>
                       <ArrowUpRight size={16} className="text-slate-600 group-hover:text-white transition-colors" />
-                    </div>
+                    </button>
                   ))
                 )}
               </div>

@@ -36,6 +36,7 @@ import { auth } from '../services/firebase.ts';
 import { toast } from '../services/toast.ts';
 import { PracticalVivaAssistantModal } from './practical/PracticalVivaAssistantModal.tsx';
 import { generateCbsePracticalAwardSheetPdf } from './practical/CbseAwardSheetPdf.ts';
+import { downloadCsvFile } from '../utils/safeBrowser.ts';
 
 const CBSE_GAMES_LIST = [
   'Basketball',
@@ -440,8 +441,8 @@ export const PracticalAssessmentHub: React.FC = () => {
 
       return [
         idx + 1,
-        `"${s.rollNumber || ''}"`,
-        `"${s.name}"`,
+        s.rollNumber || '',
+        s.name,
         s.gender,
         s.grade,
         s.section,
@@ -456,14 +457,11 @@ export const PracticalAssessmentHub: React.FC = () => {
       ];
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `CBSE_Practical_Marks_Class_${selectedGrade}_${selectedSection}_${academicYear}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsvFile(
+      `CBSE_Practical_Marks_Class_${selectedGrade}_${selectedSection}_${academicYear}.csv`,
+      headers,
+      rows
+    );
 
     toast.success("Exported CSV successfully for CBSE portal!");
   };

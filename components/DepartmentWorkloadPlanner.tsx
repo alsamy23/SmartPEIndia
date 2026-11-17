@@ -31,6 +31,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { fitnessService, SchoolMember } from '../services/fitnessService.ts';
 import { auth, db } from '../services/firebase.ts';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { toast } from '../services/toast.ts';
+import { callAIBase } from '../services/geminiService.ts';
 
 interface Workload {
   id: string;
@@ -346,14 +348,23 @@ const DepartmentWorkloadPlanner: React.FC = () => {
     return DEFAULT_WORKLOADS;
   });
 
-  // Keep localStorage sync
+  // Keep localStorage sync & notify calendar view
   useEffect(() => {
     localStorage.setItem('smartpe_workloads', JSON.stringify(workloads));
+    window.dispatchEvent(new Event('smartpe_workloads_updated'));
   }, [workloads]);
 
   useEffect(() => {
     localStorage.setItem('smartpe_school_profile', JSON.stringify(schoolProfile));
   }, [schoolProfile]);
+
+  const ocrTimersRef = React.useRef<number[]>([]);
+  useEffect(() => {
+    return () => {
+      ocrTimersRef.current.forEach(id => window.clearTimeout(id));
+      ocrTimersRef.current = [];
+    };
+  }, []);
 
   // Sync state to Firestore on change if logged in
   const syncToFirestore = async (updatedWorkloads: Workload[]) => {
@@ -605,20 +616,23 @@ const DepartmentWorkloadPlanner: React.FC = () => {
     setNotificationLogs(prev => [log, ...prev]);
   };
 
-  const handleDeleteWorkload = async (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to remove Coach ${name} from this school department allotment list?`)) {
-      const next = workloads.filter(w => w.id !== id);
-      setWorkloads(next);
-      setNotificationLogs(prev => [`Hiring termination notice: ${name} de-allocated.`, ...prev]);
+  const handleDeleteWorkload = (id: string, name: string) => {
+    toast.confirm(
+      `Remove Coach ${name} from this school department allotment list?`,
+      async () => {
+        setWorkloads(prev => prev.filter(w => w.id !== id));
+        setNotificationLogs(prev => [`Hiring termination notice: ${name} de-allocated.`, ...prev]);
+        toast.success(`Coach ${name} removed from department roster.`);
 
-      if (auth.currentUser) {
-        try {
-          await deleteDoc(doc(db, 'workloads', id));
-        } catch (e) {
-          console.error(e);
+        if (auth.currentUser) {
+          try {
+            await deleteDoc(doc(db, 'workloads', id));
+          } catch (e) {
+            console.error(e);
+          }
         }
       }
-    }
+    );
   };
 
   // Drag and Drop simulated OCR Timetable
@@ -628,20 +642,21 @@ const DepartmentWorkloadPlanner: React.FC = () => {
   };
 
   const simulateOCRFileIngestion = (fileName: string) => {
+    ocrTimersRef.current.forEach(id => window.clearTimeout(id));
+    ocrTimersRef.current = [];
     setOcrProgIndex(0);
     setOcrLogs(["Uploading schedule document to AI module..."]);
     
-    setTimeout(() => {
+    const t1 = window.setTimeout(() => {
       setOcrProgIndex(1);
       setOcrLogs(prev => [...prev, "Extracting text nodes & resolving handwriting variables..."]);
       
-      setTimeout(() => {
+      const t2 = window.setTimeout(() => {
         setOcrProgIndex(2);
         setOcrLogs(prev => [...prev, "Matching slot days with Greenwood Period tables..."]);
         
-        setTimeout(() => {
+        const t3 = window.setTimeout(() => {
           setOcrProgIndex(3);
-          // Auto populated OCR timetable Mock matching the pattern
           const ocrTimetable = {
             'Monday_1': 'Grade 9A Football',
             'Wednesday_3': 'Grade 10B Yoga',
@@ -654,8 +669,11 @@ const DepartmentWorkloadPlanner: React.FC = () => {
           setUploadSuccess(`Successfully decoded "${fileName}" via AI OCR! 4 teaching slots extracted.`);
           setNotificationLogs(prev => [`AI OCR extraction: Parsed timetable file "${fileName}" successfully.`, ...prev]);
         }, 1200);
+        ocrTimersRef.current.push(t3);
       }, 1000);
+      ocrTimersRef.current.push(t2);
     }, 1000);
+    ocrTimersRef.current.push(t1);
   };
 
   const handleFileDrop = (e: React.DragEvent) => {
@@ -758,23 +776,17 @@ Generate exactly ${totalPeriodsActive > 0 ? totalPeriodsActive : 3} period struc
 ]`;
 
     try {
-      const response = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'gemini-3.7-flash',
-          contents: prompt
-        })
-      });
+      const resJson = await callAIBase({
+        model: 'gemini-3.1-flash-lite',
+        contents: prompt
+      }, 1);
 
-      if (!response.ok) {
+      const text = resJson?.text || '';
+      if (!text) {
         throw new Error('Fallback target active');
       }
-
-      const resJson = await response.json();
-      let text = resJson.text;
       
-      let cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
       const parsedSchedules = JSON.parse(cleanText);
 
       const next = workloads.map(w => {
@@ -833,9 +845,9 @@ Generate exactly ${totalPeriodsActive > 0 ? totalPeriodsActive : 3} period struc
     }
   };
 
-  // Substitute Dispatch simulation with gorgeous logs
+  // Substitute Dispatch notification
   const handleDispatchSubstitute = (coachName: string, day: string, period: number, originalClass: string) => {
-    alert(`Substitution Cover Dispatched Successfully!\n\nEmail & App alert sent to Admin and ${coachName}:\n"Hi ${coachName}, please report for urgent substitute PE coverage for ${originalClass} during Period ${period} (${day}). Timings: ${DEFAULT_TIMINGS[period]}."`);
+    toast.success(`Substitution cover dispatched to ${coachName} for ${originalClass} (Period ${period}, ${day} • ${DEFAULT_TIMINGS[period]}).`, 5000);
     const log = `URGENT COVER: Assigned Coach ${coachName} as substitute for ${originalClass} (Period ${period} - ${day}). Confirmation dispatch logged.`;
     setNotificationLogs(prev => [log, ...prev]);
   };

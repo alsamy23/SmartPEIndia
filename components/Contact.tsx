@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, CheckCircle2, MessageSquare, AlertCircle, FileText, Send, HelpCircle, Loader2 } from 'lucide-react';
 import { BRAND_EMAILS } from '../types';
+import { reportUserFeedback } from '../services/telemetryService.ts';
+import { toast } from '../services/toast.ts';
 
 interface ContactProps {
   onNavigate?: (tab: any) => void;
@@ -19,15 +21,36 @@ const Contact: React.FC<ContactProps> = ({ onNavigate }) => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    // Simulate real communication form processing
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      await reportUserFeedback(
+        formData.message.trim(),
+        formData.senderEmail.trim(),
+        {
+          name: formData.name.trim(),
+          schoolName: formData.schoolName.trim(),
+          topic: formData.topic,
+          module: 'Contact Page'
+        }
+      );
       setSubmitted(true);
-      setTimeout(() => {
+      toast.success('Message delivered directly to the SmartPE India team!');
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+      resetTimerRef.current = window.setTimeout(() => {
         setSubmitted(false);
         setFormData({
           name: '',
@@ -37,8 +60,13 @@ const Contact: React.FC<ContactProps> = ({ onNavigate }) => {
           topic: 'Support',
           message: ''
         });
-      }, 5000);
-    }, 1500);
+      }, 4000);
+    } catch (err: any) {
+      console.error('Contact form submission failed:', err);
+      toast.error('Could not submit message right now. Please email us directly.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

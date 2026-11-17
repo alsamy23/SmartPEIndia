@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   FileText, 
@@ -24,7 +24,6 @@ import { TestPaper, Language } from '../types.ts';
 import { generateTestPaper } from '../services/geminiService.ts';
 import { storageService } from '../services/storageService.ts';
 import { exportToPdf, exportToWord } from '../lib/exportUtils.ts';
-import { useRef } from 'react';
 
 const TestPaperGenerator: React.FC = () => {
   const [grade, setGrade] = useState('12');
@@ -42,6 +41,19 @@ const TestPaperGenerator: React.FC = () => {
   const [showMarkingScheme, setShowMarkingScheme] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const stepTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      stepTimeoutsRef.current.forEach(clearTimeout);
+      stepTimeoutsRef.current = [];
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
 
   const chapters12 = [
     "Management of Sporting Events",
@@ -107,20 +119,26 @@ const TestPaperGenerator: React.FC = () => {
     setLoading(true);
     setError(null);
     setLoadingStep("Analyzing Curriculum...");
+    stepTimeoutsRef.current.forEach(clearTimeout);
+    stepTimeoutsRef.current = [];
     
     try {
-      setTimeout(() => setLoadingStep("Architecting Questions..."), 2000);
-      setTimeout(() => setLoadingStep("Optimizing Marks Distribution..."), 5000);
-      setTimeout(() => setLoadingStep("Finalizing Formatting..."), 8000);
+      stepTimeoutsRef.current.push(
+        setTimeout(() => { if (isMountedRef.current) setLoadingStep("Architecting Questions..."); }, 2000),
+        setTimeout(() => { if (isMountedRef.current) setLoadingStep("Optimizing Marks Distribution..."); }, 5000),
+        setTimeout(() => { if (isMountedRef.current) setLoadingStep("Finalizing Formatting..."); }, 8000)
+      );
       
       const topicString = `Units: ${selectedChapters.join(', ')}. Difficulty: ${difficulty}. Custom context: ${topic}`;
       const data = await generateTestPaper(grade, topicString, testType, timeAllowed, maxMarks, language);
-      setResult(data);
+      if (isMountedRef.current) setResult(data);
     } catch (e: any) {
       console.error(e);
-      setError(e.message || "Failed to generate question paper (CBSE).");
+      if (isMountedRef.current) setError(e.message || "Failed to generate question paper (CBSE).");
     } finally {
-      setLoading(false);
+      stepTimeoutsRef.current.forEach(clearTimeout);
+      stepTimeoutsRef.current = [];
+      if (isMountedRef.current) setLoading(false);
     }
   };
 
@@ -133,7 +151,10 @@ const TestPaperGenerator: React.FC = () => {
       metadata: { grade, topic, testType }
     });
     setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) setIsSaved(false);
+    }, 3000);
   };
 
   const reset = () => {
@@ -314,8 +335,9 @@ const TestPaperGenerator: React.FC = () => {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Marks</label>
                     <input 
                       type="number"
+                      min={1}
                       value={maxMarks}
-                      onChange={e => setMaxMarks(Number(e.target.value))}
+                      onChange={e => setMaxMarks(Math.max(1, parseInt(e.target.value, 10) || 1))}
                       className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-slate-700"
                     />
                   </div>

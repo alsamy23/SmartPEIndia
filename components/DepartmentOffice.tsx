@@ -16,6 +16,7 @@ import {
   FileText 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from '../services/toast.ts';
 
 interface EquipmentItem {
   id: string;
@@ -125,26 +126,33 @@ export const DepartmentOffice: React.FC = () => {
   };
 
   const handleAddEquipment = () => {
-    if (!newEqName.trim() || !newEqLocation.trim()) return;
+    if (!newEqName.trim() || !newEqLocation.trim()) {
+      toast.error('Please enter both an equipment title and storage location.');
+      return;
+    }
+    const safeTotal = Math.max(1, Number(newEqTotal) || 1);
     const item: EquipmentItem = {
       id: Date.now().toString(),
-      name: newEqName,
-      total: Number(newEqTotal),
-      available: Number(newEqTotal),
+      name: newEqName.trim(),
+      total: safeTotal,
+      available: safeTotal,
       condition: newEqCondition,
-      location: newEqLocation,
+      location: newEqLocation.trim(),
     };
     setEquipmentList([item, ...equipmentList]);
     setNewEqName('');
     setNewEqLocation('');
     setIsAddingEq(false);
+    toast.success(`Added ${item.name} (${safeTotal}) to equipment log.`);
   };
 
   const handleDeleteEquipment = (id: string) => {
     setEquipmentList(equipmentList.filter(item => item.id !== id));
+    toast.info('Equipment item removed.');
   };
 
   const handleApplyHousePoints = () => {
+    const safePoints = Math.max(0, Number(pointsAmount) || 0);
     setHouseScores(prev => prev.map(hs => {
       if (hs.id === selectedHouseForPoints) {
         let g = hs.gold;
@@ -156,7 +164,7 @@ export const DepartmentOffice: React.FC = () => {
 
         return {
           ...hs,
-          points: hs.points + Number(pointsAmount),
+          points: hs.points + safePoints,
           gold: g,
           silver: s,
           bronze: b
@@ -164,7 +172,7 @@ export const DepartmentOffice: React.FC = () => {
       }
       return hs;
     }));
-    alert(`Successfully awarded +${pointsAmount} points to house for: "${pointsReason}"`);
+    toast.success(`Successfully awarded +${safePoints} points to house for: "${pointsReason || 'House Event'}"`);
   };
 
   return (
@@ -420,8 +428,9 @@ export const DepartmentOffice: React.FC = () => {
                   <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Total Quantity</label>
                   <input
                     type="number"
+                    min={1}
                     value={newEqTotal}
-                    onChange={(e) => setNewEqTotal(Number(e.target.value))}
+                    onChange={(e) => setNewEqTotal(Math.max(1, parseInt(e.target.value, 10) || 1))}
                     className="w-full px-3 py-2 bg-white border-2 border-slate-900 rounded-lg text-xs font-bold"
                   />
                 </div>
@@ -558,8 +567,9 @@ export const DepartmentOffice: React.FC = () => {
                   <label className="text-xs font-black text-slate-500 uppercase block mb-1.5">Action Points</label>
                   <input
                     type="number"
+                    min={0}
                     value={pointsAmount}
-                    onChange={(e) => setPointsAmount(Number(e.target.value))}
+                    onChange={(e) => setPointsAmount(Math.max(0, parseInt(e.target.value, 10) || 0))}
                     className="w-full px-4 py-3 bg-white border-2 border-slate-900 rounded-xl text-xs font-black"
                   />
                 </div>

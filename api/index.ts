@@ -1005,8 +1005,17 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
             });
           } catch (modelErr: any) {
             clearTimeout(timeoutTimer);
-            console.warn(`Model ${currentModel} failed:`, modelErr?.message || modelErr);
+            const msg = String(modelErr?.message || modelErr || '');
+            console.warn(`Model ${currentModel} failed:`, msg);
             lastError = modelErr;
+            // Non-retryable bad request (400 INVALID_ARGUMENT) — stop trying other models with identical payload
+            if (msg.includes('INVALID_ARGUMENT') || msg.includes('400 Bad Request')) {
+              return res.status(400).json({ error: msg || 'Invalid AI request payload' });
+            }
+            // Key invalid for this key — skip remaining models for this key and try next key
+            if (msg.includes('API_KEY_INVALID') || msg.toLowerCase().includes('api key not valid')) {
+              break;
+            }
             continue;
           }
         }

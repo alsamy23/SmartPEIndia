@@ -10,6 +10,7 @@ import { trackEvent } from '../../services/analytics.ts';
 import { reportTournamentFailure } from '../../services/telemetryService.ts';
 import ClassicSheetBracket from './ClassicSheetBracket.tsx';
 import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
+import { safeOpenExternal } from '../../utils/safeBrowser.ts';
 
 export interface Match {
   id: number;
@@ -209,8 +210,7 @@ ${allMatches.length > 5 ? `\n• ... and ${allMatches.length - 5} more official 
 
 Official CBSE PE Code 048 format.
 Generated via SmartPE India Official Tournament Studio.`;
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
-    toast.success("Opening WhatsApp with knockout tournament fixtures!");
+    safeOpenExternal(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "Opening WhatsApp with knockout tournament fixtures!");
   };
 
   // Quick load sample button

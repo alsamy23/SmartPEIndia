@@ -24,6 +24,7 @@ import {
   Trophy
 } from 'lucide-react';
 import { toast } from '../services/toast';
+import { safeCopyToClipboard, downloadBlobFile } from '../utils/safeBrowser';
 import { trackEvent } from '../services/analytics';
 import { 
   triggerNurtureStep, 
@@ -172,33 +173,31 @@ export const NurtureSequenceHub: React.FC<NurtureSequenceHubProps> = ({
     }
   };
 
-  const handleCopyHtml = () => {
+  const handleCopyHtml = async () => {
     if (!previewData) return;
-    navigator.clipboard.writeText(previewData.html);
-    setCopiedHtml(true);
-    toast.success(`Part ${selectedStep} HTML copied to clipboard!`);
-    setTimeout(() => setCopiedHtml(false), 2500);
+    const ok = await safeCopyToClipboard(previewData.html, `Part ${selectedStep} HTML copied to clipboard!`);
+    if (ok) {
+      setCopiedHtml(true);
+      setTimeout(() => setCopiedHtml(false), 2500);
+    }
   };
 
-  const handleCopyText = () => {
+  const handleCopyText = async () => {
     if (!previewData) return;
-    navigator.clipboard.writeText(`Subject: ${previewData.subject}\n\n${previewData.text}`);
-    setCopiedText(true);
-    toast.success(`Part ${selectedStep} plain text copied!`);
-    setTimeout(() => setCopiedText(false), 2500);
+    const ok = await safeCopyToClipboard(
+      `Subject: ${previewData.subject}\n\n${previewData.text}`,
+      `Part ${selectedStep} plain text copied!`
+    );
+    if (ok) {
+      setCopiedText(true);
+      setTimeout(() => setCopiedText(false), 2500);
+    }
   };
 
   const handleDownloadHtml = () => {
     if (!previewData) return;
     const blob = new Blob([previewData.html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Smart_PE_Nurture_Part_${selectedStep}_${previewData.triggerDay}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadBlobFile(blob, `Smart_PE_Nurture_Part_${selectedStep}_${previewData.triggerDay}.html`);
     toast.success('Downloaded HTML file!');
   };
 

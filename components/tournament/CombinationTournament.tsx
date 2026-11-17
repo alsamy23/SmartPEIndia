@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { toast } from '../../services/toast.ts';
 import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
+import { safeOpenExternal } from '../../utils/safeBrowser.ts';
 
 interface CombinationTournamentProps {
   tournamentName: string;
@@ -164,8 +165,7 @@ export const CombinationTournament: React.FC<CombinationTournamentProps> = ({
 Official CBSE PE Unit 1 format.`;
 
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
-    toast.success("Opening WhatsApp with combination fixtures summary!");
+    safeOpenExternal(url, "Opening WhatsApp with combination fixtures summary!");
   };
 
   return (

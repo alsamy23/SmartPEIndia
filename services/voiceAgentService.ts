@@ -4,6 +4,8 @@
  * and conversational guidance for Physical Education teachers and sports coaches.
  */
 
+import { callAIBase } from './geminiService';
+
 export interface VoiceFeatureAction {
   tabId: string;
   featureTitle: string;
@@ -402,32 +404,24 @@ ${JSON.stringify(catalogSummary, null, 2)}
   "screenGuidance": "1 sentence explaining where on that screen to look or click (e.g. 'Click Add Player at the top to score 20 skill levels')."
 }`;
 
-      const response = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { text: `${systemPrompt}\n\nUser Voice Query: "${spokenQuery}"` }
-              ]
-            }
-          ],
-          config: {
-            responseMimeType: 'application/json',
-            temperature: 0.2
+      const rawData = await callAIBase({
+        model: 'gemini-3.1-flash-lite',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: `${systemPrompt}\n\nUser Voice Query: "${spokenQuery}"` }
+            ]
           }
-        })
-      });
+        ],
+        config: {
+          responseMimeType: 'application/json',
+          temperature: 0.2
+        }
+      }, 1);
 
-      if (!response.ok) {
-        throw new Error(`AI request failed with status ${response.status}`);
-      }
+      let text = rawData?.text || rawData?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
 
-      const rawData = await response.json();
-      let text = rawData?.candidates?.[0]?.content?.parts?.[0]?.text || rawData?.text || '{}';
-      
       // Clean possible markdown code fences
       text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       const parsed = JSON.parse(text);

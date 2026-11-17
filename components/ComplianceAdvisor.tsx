@@ -1,14 +1,53 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ShieldCheck, Search, Info, CheckCircle2, AlertCircle, FileText, Loader2 } from 'lucide-react';
 import { BoardType } from '../types.ts';
 import { getStateRegulationInsights } from '../services/geminiService.ts';
+import { exportToPdf, exportToWord } from '../lib/exportUtils.ts';
+import { toast } from '../services/toast.ts';
 
 const ComplianceAdvisor: React.FC = () => {
   const [state, setState] = useState('Maharashtra');
   const [board, setBoard] = useState<BoardType>(BoardType.STATE);
   const [loading, setLoading] = useState(false);
   const [insights, setInsights] = useState<string | null>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const handleDownloadManual = () => {
+    if (insights && reportRef.current) {
+      exportToPdf(reportRef.current, `${state}_${board}_Compliance_Analysis`);
+      toast.success('Downloading your compliance report PDF...');
+      return;
+    }
+
+    const html = `
+      <html>
+        <head><meta charset="utf-8"><title>CBSE HPE &amp; NEP-2020 Reference Manual</title></head>
+        <body style="font-family: Arial, sans-serif; padding: 32px; color: #0f172a; line-height: 1.6;">
+          <h1>Health &amp; Physical Education (HPE) Compliance Quick Reference</h1>
+          <p><strong>Selected State:</strong> ${state} | <strong>Education Board:</strong> ${board}</p>
+          <hr />
+          <h2>1. Mandatory Daily PE &amp; Sports Time</h2>
+          <ul>
+            <li>Minimum 1 period (40–45 minutes) of Health &amp; Physical Education daily for Grades I–XII under CBSE Mainstreaming HPE guidelines.</li>
+            <li>Equitable strand distribution across Games/Sports, Health &amp; Fitness, SEWA, and Health &amp; Activity Card maintenance.</li>
+          </ul>
+          <h2>2. Assessment &amp; Health Card Maintenance</h2>
+          <ul>
+            <li>Maintain annual Health &amp; Activity Cards recording BMI, Khelo India fitness battery scores, and participation logs.</li>
+            <li>Record formative &amp; summative assessments before annual board result submissions.</li>
+          </ul>
+          <h2>3. NEP 2020 Physical Literacy Alignment</h2>
+          <ul>
+            <li>Integrate yoga, indigenous games, inclusive Adapted PE modifications, and age-appropriate motor progression across Foundational, Preparatory, Middle, and Secondary stages.</li>
+          </ul>
+          <p style="margin-top:24px;color:#475569;font-size:12px;">Prepared by SmartPE India. Verify specific state circulars with your District Education Officer (DEO).</p>
+        </body>
+      </html>
+    `;
+    exportToWord(html, `${state}_${board}_HPE_Compliance_Guide.doc`);
+    toast.success('HPE & NEP-2020 compliance reference guide downloaded!');
+  };
 
   const handleAnalyze = async () => {
     setLoading(true);
@@ -69,10 +108,14 @@ const ComplianceAdvisor: React.FC = () => {
 
           <div className="bg-orange-500 p-8 rounded-[2.5rem] text-white shadow-xl shadow-orange-500/20">
             <h4 className="font-black text-lg mb-2 uppercase tracking-tight">Need Manual?</h4>
-            <p className="text-orange-100 text-sm mb-6 leading-relaxed">Download official HPE (Health and Physical Education) guidelines for CBSE schools.</p>
-            <button className="flex items-center space-x-2 bg-white text-orange-600 font-black px-6 py-3 rounded-2xl text-xs hover:bg-orange-50 transition-colors uppercase">
+            <p className="text-orange-100 text-sm mb-6 leading-relaxed">Download official HPE (Health and Physical Education) guidelines or your generated compliance summary.</p>
+            <button
+              type="button"
+              onClick={handleDownloadManual}
+              className="flex items-center space-x-2 bg-white text-orange-600 font-black px-6 py-3 rounded-2xl text-xs hover:bg-orange-50 transition-colors uppercase"
+            >
               <FileText size={16} />
-              <span>Download PDF</span>
+              <span>{insights ? 'Download Report PDF' : 'Download HPE Guide'}</span>
             </button>
           </div>
         </div>
@@ -95,7 +138,7 @@ const ComplianceAdvisor: React.FC = () => {
               <p className="text-slate-400 font-medium">Matching your board with latest regulatory updates...</p>
             </div>
           ) : (
-            <div className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-slate-100 h-full animate-in fade-in zoom-in-95 duration-500 overflow-y-auto">
+            <div ref={reportRef} className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-slate-100 h-full animate-in fade-in zoom-in-95 duration-500 overflow-y-auto">
               <div className="flex items-center space-x-3 mb-8 pb-6 border-b border-slate-50">
                 <div className="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600">
                   <Info size={24} />

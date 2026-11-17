@@ -9,6 +9,7 @@ import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { toast } from '../../services/toast.ts';
 import { trackEvent } from '../../services/analytics.ts';
+import { safeOpenExternal, downloadBlobFile } from '../../utils/safeBrowser.ts';
 
 export interface ClassicSlot {
   slotIndex: number;
@@ -66,8 +67,7 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
 Official CBSE Physical Education Subject Code 048 format.
 Generated via SmartPE India Official Tournament Studio.`;
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
-    toast.success("Opening WhatsApp with tournament bracket draw!");
+    safeOpenExternal(url, "Opening WhatsApp with tournament bracket draw!");
   };
 
   // Compute bracket power of 2
@@ -429,12 +429,7 @@ Generated via SmartPE India Official Tournament Studio.`;
       `;
 
       const blob = new Blob(['\ufeff', wordHtml], { type: 'application/msword' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Official_Fixture_${isA3 ? 'A3' : 'A4'}.doc`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlobFile(blob, `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Official_Fixture_${isA3 ? 'A3' : 'A4'}.doc`);
       toast.dismiss('classic-word');
       toast.success(`Word document (.doc) exported successfully (${isA3 ? 'A3' : 'A4'} 1-Page Bracket + Schedule)!`);
     } catch (err) {
@@ -539,7 +534,7 @@ Official CBSE PE Subject Code 048 draw sheet.`;
       const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(
         captionText + '\n\n📄 _(Official Fixture PDF has been downloaded to your device - please attach it now to send)_'
       )}`;
-      window.open(waUrl, '_blank');
+      safeOpenExternal(waUrl);
     } catch (err) {
       console.error(err);
       toast.dismiss('classic-wa');

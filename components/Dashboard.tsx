@@ -2746,7 +2746,13 @@ const Dashboard: React.FC<{
         <div className="space-y-10">
           <div className="flex items-center justify-between border-b-4 border-slate-900 pb-6">
             <h3 className="text-4xl font-black uppercase tracking-tight text-[#0D2B52] font-display">Recent Activity</h3>
-            <button className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0D2B52] hover:text-[#164077]">Audit Log</button>
+            <button
+              type="button"
+              onClick={() => onNavigate?.('logs')}
+              className="text-[10px] font-black uppercase tracking-[0.3em] text-[#0D2B52] hover:text-[#164077]"
+            >
+              Audit Log
+            </button>
           </div>
           
           <div className="space-y-6">

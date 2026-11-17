@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Trophy, Save, Upload, Shield, Award, Medal, Users, UserPlus } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Trophy, Save, Upload, Shield, Award, Medal, Users, UserPlus, Plus, X } from 'lucide-react';
 import { auth, db } from '../services/firebase.ts';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { fitnessService, SchoolMember } from '../services/fitnessService.ts';
@@ -75,6 +75,19 @@ const SportsDayTracker: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [schoolId, setSchoolId] = useState<string | null>(null);
   const [isEditingSettings, setIsEditingSettings] = useState(false);
+  const [isAddingHouse, setIsAddingHouse] = useState(false);
+  const [newHouseName, setNewHouseName] = useState('');
+  const [isAddingEvent, setIsAddingEvent] = useState(false);
+  const [newEventName, setNewEventName] = useState('');
+  const [newEventCategory, setNewEventCategory] = useState('SENIORS');
+  const [newEventGender, setNewEventGender] = useState('B');
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
@@ -182,7 +195,8 @@ const SportsDayTracker: React.FC = () => {
     
     if (!schoolId || !auth.currentUser) {
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => setSaved(false), 3000);
       return;
     }
     
@@ -198,7 +212,8 @@ const SportsDayTracker: React.FC = () => {
       });
       
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => setSaved(false), 3000);
     } catch (err) {
       console.error("Failed to save sports day data:", err);
       toast.error("Failed to save data. Please check permissions.");
@@ -217,13 +232,23 @@ const SportsDayTracker: React.FC = () => {
     return (base || 0) + getHouseTotal(house);
   };
 
-  const handleAddHouse = () => {
-    const newHouse = prompt("Enter new house name:");
-    if (newHouse && !houses.includes(newHouse)) {
-      setHouses([...houses, newHouse]);
-      setBaseScores({ ...baseScores, [newHouse]: 0 });
-      setSaved(false);
+  const handleAddHouse = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const cleaned = newHouseName.trim().toUpperCase();
+    if (!cleaned) {
+      toast.error("Please enter a house name.");
+      return;
     }
+    if (houses.some(h => h.toUpperCase() === cleaned)) {
+      toast.error(`House "${cleaned}" already exists.`);
+      return;
+    }
+    setHouses([...houses, cleaned]);
+    setBaseScores({ ...baseScores, [cleaned]: 0 });
+    setNewHouseName('');
+    setIsAddingHouse(false);
+    setSaved(false);
+    toast.success(`House "${cleaned}" added!`);
   };
 
   const handleRemoveHouse = (houseToRemove: string) => {
@@ -233,16 +258,22 @@ const SportsDayTracker: React.FC = () => {
     });
   };
 
-  const handleAddEvent = () => {
-    const name = prompt("Enter event name (e.g. 100 MTS):");
-    const category = prompt("Enter category (e.g. SENIORS, Grade 5):");
-    const gender = prompt("Enter B/G (Boys/Girls/Mixed):");
-    if (name && category && gender) {
-      const newEvent = { id: Date.now().toString(), name, category, gender };
-      houses.forEach(h => newEvent[h as keyof typeof newEvent] = 0 as never);
-      setEvents([...events, newEvent]);
-      setSaved(false);
+  const handleAddEvent = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const name = newEventName.trim().toUpperCase();
+    const category = newEventCategory.trim().toUpperCase();
+    const gender = newEventGender.trim().toUpperCase();
+    if (!name || !category || !gender) {
+      toast.error("Please fill in event name, category, and gender.");
+      return;
     }
+    const newEvent: any = { id: Date.now().toString(), name, category, gender };
+    houses.forEach(h => { newEvent[h] = 0; });
+    setEvents([...events, newEvent]);
+    setNewEventName('');
+    setIsAddingEvent(false);
+    setSaved(false);
+    toast.success(`Event "${name}" added!`);
   };
 
   const handleRemoveEvent = (idToRemove: string) => {
@@ -296,25 +327,76 @@ const SportsDayTracker: React.FC = () => {
       )}
 
       {isEditingSettings && (
-        <div className="mb-10 bg-slate-50 p-6 rounded-2xl border border-slate-200 animate-in fade-in slide-in-from-top-4">
-          <h3 className="text-xl font-black text-slate-800 mb-4">Tracker Settings</h3>
+        <div className="mb-10 bg-slate-50 p-6 rounded-2xl border border-slate-200 animate-in fade-in slide-in-from-top-4 space-y-6">
+          <h3 className="text-xl font-black text-slate-800">Tracker Settings</h3>
           
-          <div className="mb-6">
+          <div>
             <h4 className="font-bold text-slate-700 mb-2">Houses</h4>
             <div className="flex flex-wrap gap-2 mb-3">
               {houses.map(house => (
                 <div key={house} className="bg-white border border-slate-200 rounded-lg px-4 py-2 flex items-center gap-2">
                   <span className="font-bold text-sm text-indigo-700">{house}</span>
-                  <button onClick={() => handleRemoveHouse(house)} className="text-red-500 hover:text-red-700 font-black px-1">&times;</button>
+                  <button type="button" onClick={() => handleRemoveHouse(house)} className="text-red-500 hover:text-red-700 font-black px-1">&times;</button>
                 </div>
               ))}
-              <button onClick={handleAddHouse} className="bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg px-4 py-2 text-sm font-bold hover:bg-indigo-200">+ Add House</button>
+              {!isAddingHouse && (
+                <button type="button" onClick={() => setIsAddingHouse(true)} className="bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg px-4 py-2 text-sm font-bold hover:bg-indigo-200">+ Add House</button>
+              )}
             </div>
+            {isAddingHouse && (
+              <form onSubmit={handleAddHouse} className="flex flex-wrap items-center gap-2 bg-white p-3 rounded-xl border border-indigo-200">
+                <input
+                  type="text"
+                  value={newHouseName}
+                  onChange={e => setNewHouseName(e.target.value)}
+                  placeholder="House name (e.g. JUPITER)"
+                  className="flex-1 min-w-[180px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-black uppercase">Add</button>
+                <button type="button" onClick={() => { setIsAddingHouse(false); setNewHouseName(''); }} className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold">Cancel</button>
+              </form>
+            )}
           </div>
 
           <div>
-             <h4 className="font-bold text-slate-700 mb-2">Events</h4>
-             <button onClick={handleAddEvent} className="bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg px-4 py-2 text-sm font-bold hover:bg-indigo-200">+ Add New Event</button>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-bold text-slate-700">Events</h4>
+              {!isAddingEvent && (
+                <button type="button" onClick={() => setIsAddingEvent(true)} className="bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg px-4 py-2 text-sm font-bold hover:bg-indigo-200">+ Add New Event</button>
+              )}
+            </div>
+            {isAddingEvent && (
+              <form onSubmit={handleAddEvent} className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-4 rounded-xl border border-indigo-200">
+                <input
+                  type="text"
+                  value={newEventName}
+                  onChange={e => setNewEventName(e.target.value)}
+                  placeholder="Event name (e.g. 100 MTS)"
+                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+                <input
+                  type="text"
+                  value={newEventCategory}
+                  onChange={e => setNewEventCategory(e.target.value)}
+                  placeholder="Category (e.g. SENIORS)"
+                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+                <select
+                  value={newEventGender}
+                  onChange={e => setNewEventGender(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-400"
+                >
+                  <option value="B">Boys (B)</option>
+                  <option value="G">Girls (G)</option>
+                  <option value="MIX">Mixed (MIX)</option>
+                  <option value="ALL">All</option>
+                </select>
+                <div className="flex items-center gap-2">
+                  <button type="submit" className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-black uppercase">Add Event</button>
+                  <button type="button" onClick={() => { setIsAddingEvent(false); setNewEventName(''); }} className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold">Cancel</button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

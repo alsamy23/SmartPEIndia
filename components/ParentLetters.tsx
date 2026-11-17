@@ -17,6 +17,7 @@ import {
 import { Language } from '../types.ts';
 import { generateParentLetter } from '../services/geminiService.ts';
 import { storageService } from '../services/storageService.ts';
+import { safeOpenExternal } from '../utils/safeBrowser.ts';
 
 const PURPOSES = [
   "Progress Update",
@@ -78,7 +79,7 @@ const ParentLetters: React.FC = () => {
     if (!result) return;
     const text = `Parent Letter for ${studentName}\n\n${result}`;
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    safeOpenExternal(url, 'Opening WhatsApp...');
   };
 
   const reset = () => {

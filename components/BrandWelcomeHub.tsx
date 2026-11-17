@@ -30,6 +30,7 @@ import { trackEvent } from '../services/analytics';
 import { sendAutomatedWelcomeEmail, sendFeatureAnnouncementEmail, getEmailConfigStatus, generateWelcomeEmailHtml } from '../services/emailService';
 import NurtureSequenceHub from './NurtureSequenceHub';
 import BrevoSetupHub from './BrevoSetupHub';
+import { safeCopyToClipboard, safeOpenExternal, downloadBlobFile } from '../utils/safeBrowser';
 
 interface BrandWelcomeHubProps {
   userEmail?: string | null;
@@ -65,38 +66,39 @@ export const BrandWelcomeHub: React.FC<BrandWelcomeHubProps> = ({
     setEmailSubject(generatedEmail.subject);
   }, [generatedEmail.subject]);
 
-  const handleCopyText = () => {
-    navigator.clipboard.writeText(`Subject: ${emailSubject}\n\n${generatedEmail.text}`);
-    setCopiedEmail(true);
-    toast.success('Welcome Email plain-text copied to clipboard!');
-    trackEvent('resource_viewed', { resource_name: 'welcome_email_template_text', category: 'onboarding' });
-    setTimeout(() => setCopiedEmail(false), 2500);
+  const handleCopyText = async () => {
+    const ok = await safeCopyToClipboard(`Subject: ${emailSubject}\n\n${generatedEmail.text}`);
+    if (ok) {
+      setCopiedEmail(true);
+      toast.success('Welcome Email plain-text copied to clipboard!');
+      trackEvent('resource_viewed', { resource_name: 'welcome_email_template_text', category: 'onboarding' });
+      setTimeout(() => setCopiedEmail(false), 2500);
+    } else {
+      toast.error('Unable to copy text automatically.');
+    }
   };
 
-  const handleCopyHtml = () => {
-    navigator.clipboard.writeText(generatedEmail.html);
-    setCopiedHtml(true);
-    toast.success('Welcome Email HTML Template copied to clipboard! Ready to paste into any email client or CRM.');
-    trackEvent('resource_viewed', { resource_name: 'welcome_email_template_html', category: 'onboarding' });
-    setTimeout(() => setCopiedHtml(false), 2500);
+  const handleCopyHtml = async () => {
+    const ok = await safeCopyToClipboard(generatedEmail.html);
+    if (ok) {
+      setCopiedHtml(true);
+      toast.success('Welcome Email HTML Template copied to clipboard! Ready to paste into any email client or CRM.');
+      trackEvent('resource_viewed', { resource_name: 'welcome_email_template_html', category: 'onboarding' });
+      setTimeout(() => setCopiedHtml(false), 2500);
+    } else {
+      toast.error('Unable to copy HTML automatically.');
+    }
   };
 
   const handleDownloadHtmlFile = () => {
     const blob = new Blob([generatedEmail.html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Smart_PE_India_Welcome_Email_${customRecipientName.replace(/\s+/g, '_')}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadBlobFile(blob, `Smart_PE_India_Welcome_Email_${customRecipientName.replace(/\s+/g, '_')}.html`);
     toast.success('Downloaded Welcome Email as .html file!');
   };
 
   const handleSendMailto = () => {
     const mailtoUrl = `mailto:${recipientEmail}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(generatedEmail.text)}`;
-    window.open(mailtoUrl, '_blank');
+    safeOpenExternal(mailtoUrl);
     trackEvent('tool_used', { tool_name: 'send_welcome_email', category: 'onboarding' });
   };
 

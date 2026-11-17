@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { VivaQuestionPrompt, Student } from '../../types.ts';
+import { safeCopyToClipboard } from '../../utils/safeBrowser.ts';
 
 interface PracticalVivaAssistantModalProps {
   student?: Student | null;
@@ -200,10 +201,15 @@ export const PracticalVivaAssistantModal: React.FC<PracticalVivaAssistantModalPr
     setShowAnswerMap(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleCopyQuestion = (q: VivaQuestionPrompt) => {
-    navigator.clipboard.writeText(`CBSE Viva Question: ${q.question}\nExpected Answer: ${q.expectedAnswer}`);
-    setCopiedId(q.id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const handleCopyQuestion = async (q: VivaQuestionPrompt) => {
+    const ok = await safeCopyToClipboard(
+      `CBSE Viva Question: ${q.question}\nExpected Answer: ${q.expectedAnswer}`,
+      'Viva question & answer copied!'
+    );
+    if (ok) {
+      setCopiedId(q.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
   };
 
   // Filtered list

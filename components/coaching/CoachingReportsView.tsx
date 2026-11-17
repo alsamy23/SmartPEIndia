@@ -39,7 +39,7 @@ import {
 } from '../../services/coachingExcelReportService';
 import { SchoolManagementExcelModal } from './SchoolManagementExcelModal';
 import { StudentProgressDetailModal } from './StudentProgressDetailModal';
-import { showToast } from '../../services/toast';
+import { showToast, toast } from '../../services/toast';
 
 interface CoachingReportsViewProps {
   onViewReport: (player: PlayerProfileData, assessment: PlayerAssessmentRecord) => void;
@@ -114,11 +114,11 @@ export const CoachingReportsView: React.FC<CoachingReportsViewProps> = ({
   }, [players]);
 
   const handleDelete = (id: string, name: string) => {
-    if (window.confirm(`Delete merit report record for ${name}?`)) {
+    toast.confirm(`Delete merit report record for ${name}?`, () => {
       academyService.deleteAssessment(id);
       refreshData();
       showToast('Assessment deleted', 'success');
-    }
+    });
   };
 
   // Preview or generate a quick sample merit report for any chosen sport category

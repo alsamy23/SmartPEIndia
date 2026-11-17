@@ -39,8 +39,6 @@ export const SchoolManagementExcelModal: React.FC<SchoolManagementExcelModalProp
   assessments,
   initialSportFilter = 'all'
 }) => {
-  if (!isOpen) return null;
-
   const resolvedPlayers = players || academyService.getPlayers();
   const resolvedAssessments = assessments || academyService.getAssessments();
 
@@ -51,6 +49,8 @@ export const SchoolManagementExcelModal: React.FC<SchoolManagementExcelModalProp
   const [termTitle, setTermTitle] = useState('Term Evaluation & Student Development Review');
   const [sportFilter, setSportFilter] = useState<string>(initialSportFilter);
   const [isExporting, setIsExporting] = useState(false);
+
+  if (!isOpen) return null;
 
   // Compute live scope metrics
   const targetPlayers = sportFilter === 'all' 

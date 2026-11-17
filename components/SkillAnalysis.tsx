@@ -17,6 +17,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { safeCopyToClipboard } from '../utils/safeBrowser.ts';
 
 const SkillAnalysis: React.FC = () => {
   const [delay, setDelay] = useState(10); // Default 10s delay
@@ -28,9 +29,14 @@ const SkillAnalysis: React.FC = () => {
   
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
   const livePreviewRef = useRef<HTMLVideoElement>(null);
+  const masterMonitorRef = useRef<HTMLDivElement>(null);
+  const reviewVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const playbackTimeoutRefs = useRef<any[]>([]);
+  const initBufferingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reviewVideoUrlRef = useRef<string | null>(null);
   const videoUrlsRef = useRef<string[]>([]);
   const mediaSources = useRef<(MediaSource | null)[]>([]);
   const sourceBuffers = useRef<(SourceBuffer | null)[]>([]);
@@ -41,6 +47,12 @@ const SkillAnalysis: React.FC = () => {
     isMounted.current = true;
     return () => {
       isMounted.current = false;
+      if (initBufferingTimeoutRef.current) clearTimeout(initBufferingTimeoutRef.current);
+      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+      if (reviewVideoUrlRef.current) {
+        try { URL.revokeObjectURL(reviewVideoUrlRef.current); } catch (e) {}
+        reviewVideoUrlRef.current = null;
+      }
       stopCamera();
     };
   }, []);
@@ -73,15 +85,17 @@ const SkillAnalysis: React.FC = () => {
       
       // Stop and restart buffering to re-align with new screen count or delay
       stopBuffering();
+      if (initBufferingTimeoutRef.current) clearTimeout(initBufferingTimeoutRef.current);
       
       // Short delay to ensure video elements are ready
-      setTimeout(() => {
+      initBufferingTimeoutRef.current = setTimeout(() => {
         if (isMounted.current && streamRef.current) {
           setupMediaSources();
           startDelayedBuffering(streamRef.current);
         }
       }, 500);
     } else {
+      if (initBufferingTimeoutRef.current) clearTimeout(initBufferingTimeoutRef.current);
       stopBuffering();
     }
   }, [isLive, numScreens]); // Re-setup if live status or screen count changes
@@ -121,6 +135,10 @@ const SkillAnalysis: React.FC = () => {
   };
 
   const stopBufferingOnly = () => {
+    if (initBufferingTimeoutRef.current) {
+      clearTimeout(initBufferingTimeoutRef.current);
+      initBufferingTimeoutRef.current = null;
+    }
     playbackTimeoutRefs.current.forEach(t => clearTimeout(t));
     playbackTimeoutRefs.current = [];
     
@@ -208,8 +226,9 @@ const SkillAnalysis: React.FC = () => {
     
     try {
       const mimeType = 'video/webm; codecs="vp8"';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        throw new Error("VP8 codec not supported");
+      if (typeof MediaSource === 'undefined' || !MediaRecorder.isTypeSupported(mimeType)) {
+        startSimpleDelayedBuffering(stream);
+        return;
       }
 
       const recorder = new MediaRecorder(stream, { mimeType });
@@ -272,8 +291,8 @@ const SkillAnalysis: React.FC = () => {
 
       recorder.start(chunkDuration);
     } catch (err) {
-      console.error("Recorder initialization error:", err);
-      setError("High-performance replay failed. Try a different browser.");
+      console.warn("MediaSource VP8 replay unavailable, using fallback replay:", err);
+      startSimpleDelayedBuffering(stream);
     }
   };
 
@@ -334,12 +353,26 @@ const SkillAnalysis: React.FC = () => {
       if (navigator.share) {
         await navigator.share(shareData);
       } else {
-        await navigator.clipboard.writeText(`${shareData.text} - ${shareData.url}`);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        const ok = await safeCopyToClipboard(`${shareData.text} - ${shareData.url}`, 'Lab link & code copied!');
+        if (ok && isMounted.current) {
+          setCopied(true);
+          if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+          copiedTimeoutRef.current = setTimeout(() => {
+            if (isMounted.current) setCopied(false);
+          }, 2000);
+        }
       }
-    } catch (err) {
-      console.error("Error sharing:", err);
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        const ok = await safeCopyToClipboard(`${shareData.text} - ${shareData.url}`, 'Lab link & code copied!');
+        if (ok && isMounted.current) {
+          setCopied(true);
+          if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+          copiedTimeoutRef.current = setTimeout(() => {
+            if (isMounted.current) setCopied(false);
+          }, 2000);
+        }
+      }
     }
   };
 
@@ -365,6 +398,10 @@ const SkillAnalysis: React.FC = () => {
         try {
           const blob = new Blob(sessionChunksRef.current, { type: 'video/webm' });
           const url = URL.createObjectURL(blob);
+          if (reviewVideoUrlRef.current) {
+            try { URL.revokeObjectURL(reviewVideoUrlRef.current); } catch (e) {}
+          }
+          reviewVideoUrlRef.current = url;
           setReviewVideoUrl(url);
           // Auto-download is handled by a separate download button in the review modal
         } catch (e) {
@@ -628,7 +665,7 @@ const SkillAnalysis: React.FC = () => {
 
           {/* Master Preview */}
           {isLive && (
-            <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-900 flex items-center justify-between">
+            <div ref={masterMonitorRef} className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-900 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="relative w-32 aspect-video bg-slate-900 rounded-xl overflow-hidden border-2 border-slate-900">
                   <video 
@@ -649,7 +686,19 @@ const SkillAnalysis: React.FC = () => {
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Real-time reference</p>
                 </div>
               </div>
-              <button className="p-4 bg-slate-50 border-2 border-slate-900 rounded-2xl hover:bg-slate-100 transition-all">
+              <button
+                type="button"
+                onClick={() => {
+                  const target = livePreviewRef.current || masterMonitorRef.current;
+                  if (document.fullscreenElement) {
+                    document.exitFullscreen().catch(() => {});
+                  } else if (target?.requestFullscreen) {
+                    target.requestFullscreen().catch(() => {});
+                  }
+                }}
+                className="p-4 bg-slate-50 border-2 border-slate-900 rounded-2xl hover:bg-slate-100 transition-all"
+                title="Toggle Fullscreen Monitor"
+              >
                 <Maximize2 size={20} />
               </button>
             </div>
@@ -723,6 +772,7 @@ const SkillAnalysis: React.FC = () => {
               exit={{ opacity: 0 }}
               onClick={() => {
                 URL.revokeObjectURL(reviewVideoUrl);
+                reviewVideoUrlRef.current = null;
                 setReviewVideoUrl(null);
               }}
               className="absolute inset-0 bg-slate-900/90 backdrop-blur-md"
@@ -743,6 +793,7 @@ const SkillAnalysis: React.FC = () => {
                   <button 
                     onClick={() => {
                       URL.revokeObjectURL(reviewVideoUrl);
+                      reviewVideoUrlRef.current = null;
                       setReviewVideoUrl(null);
                     }}
                     className="p-3 hover:bg-slate-100 rounded-2xl transition-all"
@@ -754,6 +805,7 @@ const SkillAnalysis: React.FC = () => {
                 {/* Video Player Area */}
                 <div className="flex-1 bg-black relative flex items-center justify-center overflow-hidden">
                   <video 
+                    ref={reviewVideoRef}
                     src={reviewVideoUrl}
                     className="max-h-full max-w-full"
                     controls
@@ -769,7 +821,7 @@ const SkillAnalysis: React.FC = () => {
                   <div className="flex items-center gap-4">
                     <button 
                       onClick={() => {
-                        const v = document.querySelector('video[src="' + reviewVideoUrl + '"]') as HTMLVideoElement;
+                        const v = reviewVideoRef.current;
                         if (v) {
                           const newRate = playbackSpeed === 1 ? 0.5 : 1;
                           setPlaybackSpeed(newRate);

@@ -80,20 +80,25 @@ export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
         throw new Error("AI service authentication error. Please try again or refresh the page.");
       }
 
+      const isNonRetryableClientError =
+        response.status >= 400 && response.status < 500;
+
       const error: any = new Error(errorMessage);
+      error.status = response.status;
+      error.nonRetryable = isNonRetryableClientError || isQuotaError || isInvalidKeyError;
       if (errorData?.originalError) error.originalError = errorData.originalError;
-      
-      if (retries > 0 && response.status >= 500) {
+
+      if (retries > 0 && !error.nonRetryable && response.status >= 500) {
         return callAIBase(payload, retries - 1);
       }
       throw error;
     }
-    
+
     const text = await response.text();
     if (!text) {
       throw new Error("Empty response from server.");
     }
-    
+
     let parsed;
     try {
       parsed = JSON.parse(text);
@@ -104,19 +109,26 @@ export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
     return parsed;
   } catch (error: any) {
     clearTimeout(timeoutId);
-    
+
     if (error.name === 'AbortError') {
       throw new Error("The AI took too long to respond (Timeout). Please try a simpler request or check your internet connection.");
     }
 
-    if (retries > 0) {
+    if (retries > 0 && !error?.nonRetryable && error?.name !== 'AbortError') {
       return callAIBase(payload, retries - 1);
     }
+
+    const contentPreview =
+      typeof payload?.contents === 'string'
+        ? payload.contents.slice(0, 150)
+        : Array.isArray(payload?.contents)
+          ? JSON.stringify(payload.contents).slice(0, 150)
+          : undefined;
 
     // Report failure to server telemetry (alerts admin via email & WhatsApp)
     reportAIFailure(error, 'AI Core Service', {
       model: payload?.model,
-      promptSnippet: typeof payload?.prompt === 'string' ? payload.prompt.slice(0, 150) : undefined
+      promptSnippet: contentPreview
     }).catch(() => {});
 
     throw error;
@@ -2202,7 +2214,10 @@ export const generateParentLetter = async (
     }
   });
 
-  const rawText = response.text || '';
+  const rawText = (response?.text || '').trim();
+  if (!rawText) {
+    throw new Error('The AI service returned an empty letter draft. Please try again.');
+  }
   // Fill in the actual names locally on the device without ever sending student PII over the wire
   return rawText
     .replace(/\{\{STUDENT_NAME\}\}/g, studentName || 'Student')

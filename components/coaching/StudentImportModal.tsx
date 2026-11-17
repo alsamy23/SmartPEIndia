@@ -30,6 +30,7 @@ import { offlineCacheService } from '../../services/offlineCacheService';
 import { Student } from '../../types';
 import { showToast } from '../../services/toast';
 import { auth } from '../../services/firebase';
+import { parseCsvLine, downloadBlobFile } from '../../utils/safeBrowser';
 
 interface StudentImportModalProps {
   isOpen: boolean;
@@ -174,7 +175,7 @@ export const StudentImportModal: React.FC<StudentImportModalProps> = ({
     const delimiter = sampleLine.includes('\t') ? '\t' : sampleLine.includes(';') ? ';' : ',';
 
     const headerCols = hasHeader 
-      ? rawLines[0].split(delimiter).map(c => c.trim().toLowerCase().replace(/['"]/g, ''))
+      ? (delimiter === ',' ? parseCsvLine(rawLines[0]) : rawLines[0].split(delimiter)).map(c => c.trim().toLowerCase().replace(/['"]/g, ''))
       : [];
 
     const nameIdx = headerCols.findIndex(c => c.includes('name') || c.includes('student') || c.includes('athlete'));
@@ -190,7 +191,7 @@ export const StudentImportModal: React.FC<StudentImportModalProps> = ({
     const parsed: ParsedCsvAthlete[] = [];
 
     dataLines.forEach((line) => {
-      const parts = line.split(delimiter).map(p => p.trim().replace(/^["']|["']$/g, ''));
+      const parts = (delimiter === ',' ? parseCsvLine(line) : line.split(delimiter)).map(p => p.trim().replace(/^["']|["']$/g, ''));
       if (parts.length === 0 || !parts[0]) return;
 
       let name = '';
@@ -337,14 +338,8 @@ Tanvi Joshi,Class 8,2012-07-14,Yoga & Fitness,Female,9876543219,None
 Vikram Chauhan,Class 11,2009-12-01,Kabaddi,Male,9876543220,None`;
 
   const handleDownloadTemplate = () => {
-    const blob = new Blob([SAMPLE_CSV_CONTENT], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'smartpe_age_category_students_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const blob = new Blob(['\uFEFF' + SAMPLE_CSV_CONTENT], { type: 'text/csv;charset=utf-8;' });
+    downloadBlobFile(blob, 'smartpe_age_category_students_template.csv');
     showToast('Downloaded Academy Students CSV template with Name, Class & Date of Birth!', 'info');
   };
 

@@ -17,6 +17,7 @@ import {
   Clock
 } from 'lucide-react';
 import { toast } from '../services/toast';
+import { safeCopyToClipboard } from '../utils/safeBrowser';
 import { getBrevoLiveStatus, sendBrevoTestEmail, BrevoLiveStatus } from '../services/emailService';
 
 interface BrevoSetupHubProps {
@@ -88,11 +89,12 @@ BREVO_API_KEY=your_brevo_v3_api_key_here
 FROM_EMAIL="SmartPE India <admin@smartpeindia.com>"
 EMAIL_PROVIDER=brevo`;
 
-  const handleCopyEnv = () => {
-    navigator.clipboard.writeText(envSnippet);
-    setCopiedEnv(true);
-    toast.success('.env configuration copied to clipboard!');
-    setTimeout(() => setCopiedEnv(false), 3000);
+  const handleCopyEnv = async () => {
+    const ok = await safeCopyToClipboard(envSnippet, '.env configuration copied to clipboard!');
+    if (ok) {
+      setCopiedEnv(true);
+      setTimeout(() => setCopiedEnv(false), 3000);
+    }
   };
 
   return (

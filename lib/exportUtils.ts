@@ -5,6 +5,7 @@
 
 import * as htmlToImage from 'html-to-image';
 import { jsPDF } from 'jspdf';
+import { toast } from '../services/toast';
 
 export const exportToPdf = async (element: HTMLElement | null, filename: string) => {
   if (!element) {
@@ -71,7 +72,7 @@ export const exportToPdf = async (element: HTMLElement | null, filename: string)
     console.log("PDF export completed successfully");
   } catch (err: any) {
     console.error("PDF export failed:", err);
-    alert(`Failed to export PDF: ${err?.message || err}. Try printing the page instead (Ctrl+P / Cmd+P).`);
+    toast.error(`PDF export fallback: ${err?.message || err}. Opening browser print dialog.`);
     window.print();
   } finally {
     // Ensure hidden elements are restored even if an error occurs
@@ -91,13 +92,13 @@ export const exportToWord = (htmlContent: string, filename: string) => {
     
     // Cleanup
     setTimeout(() => {
-        document.body.removeChild(link);
+        if (link.parentNode) document.body.removeChild(link);
         URL.revokeObjectURL(url);
-    }, 100);
+    }, 150);
     console.log("Word export triggered successfully");
   } catch (err) {
     console.error("Word export failed:", err);
-    alert("Failed to export Word document.");
+    toast.error("Failed to export Word document.");
   }
 };
 
@@ -255,7 +256,7 @@ export const exportYearlyPlanToIcs = (
   }
 ) => {
   if (!plan || !plan.terms || !Array.isArray(plan.terms) || plan.terms.length === 0) {
-    alert("No yearly plan curriculum available to export.");
+    toast.error("No yearly plan curriculum available to export.");
     return;
   }
 
@@ -359,7 +360,7 @@ export const exportYearlyPlanToIcs = (
     console.log(`Calendar .ics export completed with ${eventCount} curriculum events.`);
   } catch (err) {
     console.error("Calendar .ics export failed:", err);
-    alert("Failed to export calendar (.ics) file.");
+    toast.error("Failed to export calendar (.ics) file.");
   }
 };
 

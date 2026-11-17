@@ -9,6 +9,7 @@ import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { toast } from '../../services/toast.ts';
 import { trackEvent } from '../../services/analytics.ts';
+import { safeOpenExternal, downloadBlobFile } from '../../utils/safeBrowser.ts';
 
 export type PaperSize = 'A4' | 'A3';
 export type Orientation = 'landscape' | 'portrait';
@@ -486,12 +487,7 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
       `;
 
       const blob = new Blob(['\ufeff', fullDoc], { type: 'application/msword' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Official_Fixture_${paperSize}.doc`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlobFile(blob, `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Official_Fixture_${paperSize}.doc`);
 
       toast.dismiss('word-export');
       toast.success(`Word document (.doc) exported successfully (${paperSize} 1-Page Bracket + Schedule)!`);
@@ -565,7 +561,7 @@ Official CBSE Physical Education Code 048 Tournament Sheet.`;
       const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(
         captionMessage + '\n\n📄 _(Official Fixture PDF has been downloaded to your downloads folder. Please attach it now to send to this chat.)_'
       )}`;
-      window.open(waUrl, '_blank');
+      safeOpenExternal(waUrl);
       trackEvent('tool_used', { tool_name: 'Tournament WhatsApp PDF Share', category: format, sport, teamsCount: N });
     } catch (err) {
       console.error(err);
@@ -626,7 +622,7 @@ Official CBSE Physical Education Code 048 Tournament Sheet.`;
       const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(
         captionMessage + '\n\n🖼️ _(Bracket image downloaded to your device - attach it now to send)_'
       )}`;
-      window.open(waUrl, '_blank');
+      safeOpenExternal(waUrl);
     } catch (err) {
       console.error(err);
       toast.dismiss('wa-img');
@@ -669,8 +665,7 @@ ${schedulePreview}
 
     const encodedText = encodeURIComponent(message);
     const waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
-    window.open(waUrl, '_blank');
-    toast.success("Opening WhatsApp with tournament bulletin!");
+    safeOpenExternal(waUrl, "Opening WhatsApp with tournament bulletin!");
   };
 
   // Download High-Resolution Image (.PNG)

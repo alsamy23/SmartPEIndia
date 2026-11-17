@@ -56,14 +56,19 @@ RULES:
 }`;
 
   try {
-    const aiResponse = await (callAIBase as any)({
-      prompt,
+    const aiResponse = await callAIBase({
+      model: 'gemini-3.1-flash-lite',
+      contents: prompt,
       config: {
         responseMimeType: "application/json"
       }
-    });
+    }, 1);
 
-    const parsed = JSON.parse(aiResponse.text || "{}");
+    const cleanedText = String(aiResponse?.text || '{}')
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/g, '')
+      .trim();
+    const parsed = JSON.parse(cleanedText || "{}");
     return {
       whatIsGoingWell: parsed.whatIsGoingWell || [
         `Demonstrates enthusiastic engagement in ${profile.grade} PE sessions.`,

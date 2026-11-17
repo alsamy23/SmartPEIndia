@@ -58,6 +58,7 @@ import { auth } from '../services/firebase.ts';
 import { toast } from '../services/toast.ts';
 import { reportFitnessTestFailure } from '../services/telemetryService.ts';
 import GamesProficiencyGenerator from './GamesProficiencyGenerator.tsx';
+import { downloadCsvFile, parseCsvLine } from '../utils/safeBrowser.ts';
 import { TestGuideModal } from './fitness/TestGuideModal.tsx';
 import { TestVideoModal } from './fitness/TestVideoModal.tsx';
 import { BMISpectrumGauge } from './fitness/BMISpectrumGauge.tsx';
@@ -1108,22 +1109,18 @@ const FitnessTests: React.FC = () => {
     
     const rows = filteredStudentsForSelect.map(s => [
       s.rollNumber || '',
-      `"${s.name}"`,
+      s.name,
       s.grade || '',
       s.section || '',
       s.gender || '',
       ...currentTests.map(t => batchScores[`${s.id}_${t.id}`] || '')
     ]);
 
-    const csvStr = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Fitness_Data_Grid_Gr${selectedGradeFilter}_Sec${selectedSectionFilter}_${selectedTerm}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsvFile(
+      `Fitness_Data_Grid_Gr${selectedGradeFilter}_Sec${selectedSectionFilter}_${selectedTerm}.csv`,
+      headers,
+      rows
+    );
     toast.success("Spreadsheet CSV exported successfully!");
   };
 
@@ -1146,7 +1143,7 @@ const FitnessTests: React.FC = () => {
         let importedCount = 0;
 
         for (let i = 1; i < lines.length; i++) {
-          const row = lines[i].split(',').map(cell => cell.trim().replace(/^"|"$/g, ''));
+          const row = parseCsvLine(lines[i]);
           const rollNum = row[0];
           const studentName = row[1]?.toLowerCase();
 

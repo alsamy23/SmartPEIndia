@@ -64,6 +64,7 @@ import {
 import { coachingExcelReportService } from '../services/coachingExcelReportService';
 import { PlayerProfileData, PlayerAssessmentRecord } from '../services/academyService';
 import { toast } from '../services/toast';
+import { safeCopyToClipboard } from '../utils/safeBrowser';
 
 export const SportsCoachingAssessment: React.FC = () => {
   // Academic Coaching Cloud Program (Independent from School Database)
@@ -198,12 +199,16 @@ export const SportsCoachingAssessment: React.FC = () => {
     }));
   };
 
-  const handleCopyInviteCode = () => {
+  const handleCopyInviteCode = async () => {
     if (!academicProgram?.inviteCode) return;
-    navigator.clipboard.writeText(academicProgram.inviteCode);
-    setCopiedCode(true);
-    toast.success(`Invite Code ${academicProgram.inviteCode} copied! Share with your colleague teacher.`);
-    setTimeout(() => setCopiedCode(false), 2500);
+    const ok = await safeCopyToClipboard(
+      academicProgram.inviteCode,
+      `Invite Code ${academicProgram.inviteCode} copied! Share with your colleague teacher.`
+    );
+    if (ok) {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2500);
+    }
   };
 
   const handleManualCloudSync = async () => {
@@ -355,16 +360,18 @@ export const SportsCoachingAssessment: React.FC = () => {
   };
 
   const handleDeleteAthlete = (athleteId: string, athleteName: string) => {
-    sportsCoachingService.deleteAthlete(athleteId);
-    if (academicProgram?.id) {
-      academicCoachingCloudService.deleteCloudAthlete(athleteId);
-    }
-    const updatedList = sportsCoachingService.getAllAthletes();
-    setAthletes(updatedList);
-    if (selectedAthleteId === athleteId) {
-      setSelectedAthleteId(updatedList.length > 0 ? updatedList[0].id : '');
-    }
-    toast.info(`Athlete ${athleteName} removed.`);
+    toast.confirm(`Remove ${athleteName} from your coaching roster?`, () => {
+      sportsCoachingService.deleteAthlete(athleteId);
+      if (academicProgram?.id) {
+        academicCoachingCloudService.deleteCloudAthlete(athleteId);
+      }
+      const updatedList = sportsCoachingService.getAllAthletes();
+      setAthletes(updatedList);
+      if (selectedAthleteId === athleteId) {
+        setSelectedAthleteId(updatedList.length > 0 ? updatedList[0].id : '');
+      }
+      toast.info(`Athlete ${athleteName} removed.`);
+    });
   };
 
   const handleSaveCoachProfile = (e: React.FormEvent) => {

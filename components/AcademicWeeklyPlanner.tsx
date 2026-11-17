@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, 
   Download, 
@@ -17,12 +17,28 @@ import {
 } from 'lucide-react';
 import { generateWeeklyAcademicPlan, WeeklyAcademicPlan, WeeklyAcademicPlanRow } from '../services/geminiService.ts';
 import { Language } from '../types.ts';
+import { downloadBlobFile } from '../utils/safeBrowser.ts';
+import { toast } from '../services/toast.ts';
 
 const AcademicWeeklyPlanner: React.FC = () => {
   // Navigation & load states
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const schoolName = (typeof window !== 'undefined' && localStorage.getItem('smartpe_school_name')) || 'SmartPE Partner School';
+
+  useEffect(() => {
+    return () => {
+      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+    };
+  }, []);
+
+  const showSuccessBanner = (msg: string, duration = 3000) => {
+    setSuccess(msg);
+    if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+    bannerTimerRef.current = setTimeout(() => setSuccess(null), duration);
+  };
 
   // Form input states
   const [classLabel, setClassLabel] = useState('Grade VI');
@@ -148,8 +164,7 @@ const AcademicWeeklyPlanner: React.FC = () => {
       }
       setClassLabel(`Grade ${selected.grade}`);
       
-      setSuccess(`Synced week topic "${selected.topic}" from Yearly Planner!`);
-      setTimeout(() => setSuccess(null), 3000);
+      showSuccessBanner(`Synced week topic "${selected.topic}" from Yearly Planner!`);
     }
   };
 
@@ -253,8 +268,7 @@ const AcademicWeeklyPlanner: React.FC = () => {
     localStorage.setItem('peWeeklyAcademicPlans', JSON.stringify(updated));
     setSelectedSavedIndex(updated.indexOf(planToSave));
     
-    setSuccess("Weekly Academic Planner saved successfully to your database!");
-    setTimeout(() => setSuccess(null), 3000);
+    showSuccessBanner("Weekly Academic Planner saved successfully to your database!");
   };
 
   // Load a saved plan from list
@@ -270,8 +284,7 @@ const AcademicWeeklyPlanner: React.FC = () => {
     setWeekNo(plan.weekNo || '1');
     setWeekOf(plan.weekOf || '04/06 to 12/06');
 
-    setSuccess(`Loaded planner for ${plan.classLabel} Week ${plan.weekNo}!`);
-    setTimeout(() => setSuccess(null), 2500);
+    showSuccessBanner(`Loaded planner for ${plan.classLabel} Week ${plan.weekNo}!`, 2500);
   };
 
   // Export to CSV
@@ -299,12 +312,8 @@ const AcademicWeeklyPlanner: React.FC = () => {
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `Weekly_Academic_Planner_${classLabel.replace(/\s+/g, '_')}_Week_${weekNo}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadBlobFile(blob, `Weekly_Academic_Planner_${classLabel.replace(/\s+/g, '_')}_Week_${weekNo}.csv`);
+    toast.success('Weekly planner exported to CSV!');
   };
 
   // Trigger standard browser print
@@ -493,7 +502,7 @@ const AcademicWeeklyPlanner: React.FC = () => {
         {/* Document Header block modeled after high-end academic plan */}
         <div className="text-center space-y-3 pb-6 border-b-2 border-slate-900">
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight uppercase">
-            SHRADDHA CHILDREN'S ACADEMY - KOTTIVAKKAM
+            {schoolName}
           </h1>
           <div className="bg-slate-900 text-white py-1.5 px-4 rounded-lg inline-block text-xs font-black tracking-widest uppercase">
             WEEKLY ACADEMIC PLANNER

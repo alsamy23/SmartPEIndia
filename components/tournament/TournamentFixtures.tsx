@@ -8,11 +8,16 @@ import RoundRobinLeague from './RoundRobinLeague.tsx';
 import CombinationTournament from './CombinationTournament.tsx';
 import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
 import { toast } from '../../services/toast.ts';
+import { safeOpenExternal } from '../../utils/safeBrowser.ts';
 
 export type FixtureMode = 'knockout' | 'roundrobin' | 'combination';
 
-export const TournamentFixtures: React.FC = () => {
-  const [fixtureMode, setFixtureMode] = useState<FixtureMode>('knockout');
+export interface TournamentFixturesProps {
+  initialMode?: FixtureMode;
+}
+
+export const TournamentFixtures: React.FC<TournamentFixturesProps> = ({ initialMode = 'knockout' }) => {
+  const [fixtureMode, setFixtureMode] = useState<FixtureMode>(initialMode);
 
   // Shared Tournament State across formats
   const [tournamentName, setTournamentName] = useState('Football U-11 Championship');
@@ -37,8 +42,7 @@ export const TournamentFixtures: React.FC = () => {
 Official CBSE Physical Education Subject Code 048 format.
 Generated via SmartPE India Official Tournament Studio.`;
     const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(waUrl, '_blank');
-    toast.success("Opening WhatsApp with tournament summary!");
+    safeOpenExternal(waUrl, "Opening WhatsApp with tournament summary!");
   };
 
   return (

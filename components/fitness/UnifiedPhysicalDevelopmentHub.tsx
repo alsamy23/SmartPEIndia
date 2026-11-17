@@ -961,11 +961,12 @@ export const UnifiedPhysicalDevelopmentHub: React.FC<UnifiedPhysicalDevelopmentH
                       Log Reassessment
                     </button>
                     <button
-                      onClick={async () => {
-                        if (window.confirm("Remove this intervention?")) {
+                      onClick={() => {
+                        toast.confirm("Remove this intervention?", async () => {
                           await physicalDevelopmentStorage.deleteIntervention(item.id);
                           setInterventions(prev => prev.filter(i => i.id !== item.id));
-                        }
+                          toast.success("Intervention removed.");
+                        });
                       }}
                       className="text-xs text-slate-400 hover:text-red-600"
                     >

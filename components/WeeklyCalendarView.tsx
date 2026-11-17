@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { trackEvent } from '../services/analytics.ts';
 import { toast } from '../services/toast.ts';
+import { callAIBase } from '../services/geminiService.ts';
+import { exportToWord } from '../lib/exportUtils.ts';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Re-use same type interface for workloads
@@ -196,7 +198,7 @@ export const WeeklyCalendarView: React.FC = () => {
     localStorage.setItem('smartpe_workloads', JSON.stringify(DEFAULT_WORKLOADS));
   }, []);
 
-  // Sync state between tabs and on changes
+  // Sync state between tabs and on focus/custom workload updates
   useEffect(() => {
     const handleSync = () => {
       const saved = localStorage.getItem('smartpe_workloads');
@@ -212,10 +214,12 @@ export const WeeklyCalendarView: React.FC = () => {
       }
     };
     window.addEventListener('storage', handleSync);
-    const interval = setInterval(handleSync, 2000);
+    window.addEventListener('focus', handleSync);
+    window.addEventListener('smartpe_workloads_updated', handleSync);
     return () => {
       window.removeEventListener('storage', handleSync);
-      clearInterval(interval);
+      window.removeEventListener('focus', handleSync);
+      window.removeEventListener('smartpe_workloads_updated', handleSync);
     };
   }, []);
 
@@ -318,23 +322,17 @@ Return exactly a valid JSON object matching this structure (no markdown envelope
 }`;
 
     try {
-      const response = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'gemini-3.7-flash',
-          contents: prompt
-        })
-      });
+      const resJson = await callAIBase({
+        model: 'gemini-3.1-flash-lite',
+        contents: prompt
+      }, 1);
 
-      if (!response.ok) {
-        throw new Error('AI Engine took too long to compile.');
+      const text = resJson?.text || '';
+      if (!text) {
+        throw new Error('AI Engine returned empty response.');
       }
 
-      const resJson = await response.json();
-      let text = resJson.text;
-      
-      let cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
       const parsedPlan = JSON.parse(cleanText);
 
       // Save into workloads
@@ -804,11 +802,33 @@ Return exactly a valid JSON object matching this structure (no markdown envelope
               <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-150 print:hidden">
                 <button
                   onClick={() => {
-                    toast.success('Laminated Physical printable PDF download initiated.');
+                    if (!selectedSlot) return;
+                    const html = `
+                      <html>
+                        <head><meta charset="utf-8"><title>${selectedSlot.game} Lesson Plan</title></head>
+                        <body style="font-family: Arial, sans-serif; padding: 24px; color: #0f172a;">
+                          <h1 style="margin-bottom: 4px;">${selectedSlot.game} &mdash; ${selectedSlot.className}</h1>
+                          <p style="color: #4f46e5; font-weight: bold; margin-top: 0;">${selectedSlot.skill}</p>
+                          <p><strong>Schedule:</strong> ${selectedSlot.day} &bull; Period ${selectedSlot.periodNum} (${selectedSlot.duration})</p>
+                          <hr />
+                          <h3>Lesson Objective</h3>
+                          <p>${selectedSlot.objective}</p>
+                          <h3>Warm-Up (10 mins)</h3>
+                          <p>${selectedSlot.details.warmup}</p>
+                          <h3>Main Activity Track (25 mins)</h3>
+                          <p>${selectedSlot.details.mainDrill}</p>
+                          <h3>Cooldown &amp; Review (10 mins)</h3>
+                          <p>${selectedSlot.details.cooldown}</p>
+                        </body>
+                      </html>
+                    `;
+                    const safeName = `${selectedSlot.day}_P${selectedSlot.periodNum}_${selectedSlot.game}`.replace(/[^a-z0-9_-]+/gi, '_');
+                    exportToWord(html, `${safeName}_Lesson_Plan.doc`);
+                    toast.success('Lesson plan downloaded successfully!');
                     trackEvent('resource_downloaded', {
-                      resource_name: selectedSlot?.skill || 'Weekly Calendar Lesson Plan',
+                      resource_name: selectedSlot.skill || 'Weekly Calendar Lesson Plan',
                       resource_type: 'Lesson Plan',
-                      format: 'PDF'
+                      format: 'DOC'
                     });
                   }}
                   className="px-5 py-3 border-2 border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5"

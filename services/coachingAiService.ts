@@ -1,3 +1,4 @@
+import { callAIBase } from './geminiService';
 import { CoachingSportId, PlayerProfileData, PlayerAssessmentRecord, SPORT_TEMPLATES } from './academyService';
 
 export interface AiCoachingRecommendationResult {
@@ -67,28 +68,20 @@ Return ONLY valid JSON matching this exact structure:
 }`;
 
   try {
-    const response = await fetch(`/api/ai/generate?t=${Date.now()}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gemini-3.7-flash',
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.3
-        }
-      })
-    });
+    const data = await callAIBase({
+      model: 'gemini-3.1-flash-lite',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        responseMimeType: 'application/json',
+        temperature: 0.3
+      }
+    }, 1);
 
-    if (!response.ok) {
-      throw new Error(`AI Service returned ${response.status}`);
+    let text = data?.text || data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    text = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    if (!text) {
+      throw new Error('Empty AI recommendation response');
     }
-
-    const data = await response.json();
-    let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    
-    // Clean code fences if present
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(text) as AiCoachingRecommendationResult;
     return parsed;
   } catch (error) {

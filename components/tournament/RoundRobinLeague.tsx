@@ -9,6 +9,7 @@ import { toast } from '../../services/toast.ts';
 import { trackEvent } from '../../services/analytics.ts';
 import { PRESET_SCHOOLS } from './KnockoutBracket.tsx';
 import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
+import { safeOpenExternal } from '../../utils/safeBrowser.ts';
 
 export interface RoundRobinMatch {
   id: number;
@@ -102,8 +103,7 @@ ${sample}
 ${matches.length > 5 ? `\n• ... and ${matches.length - 5} more matches.` : ''}
 
 Generated via SmartPE India Official Tournament Studio.`;
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
-    toast.success("Opening WhatsApp with league schedule!");
+    safeOpenExternal(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "Opening WhatsApp with league schedule!");
   };
 
   // Team roster handlers
