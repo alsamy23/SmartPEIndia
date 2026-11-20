@@ -5,6 +5,7 @@ import { BoardType } from '../types.ts';
 import { getStateRegulationInsights } from '../services/geminiService.ts';
 import { exportToPdf, exportToWord } from '../lib/exportUtils.ts';
 import { toast } from '../services/toast.ts';
+import { trackEvent } from '../services/analytics.ts';
 
 const ComplianceAdvisor: React.FC = () => {
   const [state, setState] = useState('Maharashtra');
@@ -15,6 +16,11 @@ const ComplianceAdvisor: React.FC = () => {
 
   const handleDownloadManual = () => {
     if (insights && reportRef.current) {
+      trackEvent('resource_downloaded', {
+        resource_name: `${state} ${board} Compliance Guide`,
+        resource_type: 'State Compliance',
+        format: 'PDF'
+      });
       exportToPdf(reportRef.current, `${state}_${board}_Compliance_Analysis`);
       toast.success('Downloading your compliance report PDF...');
       return;
@@ -46,6 +52,11 @@ const ComplianceAdvisor: React.FC = () => {
       </html>
     `;
     exportToWord(html, `${state}_${board}_HPE_Compliance_Guide.doc`);
+    trackEvent('resource_downloaded', {
+      resource_name: `${state} ${board} Compliance Guide`,
+      resource_type: 'State Compliance',
+      format: 'Word'
+    });
     toast.success('HPE & NEP-2020 compliance reference guide downloaded!');
   };
 

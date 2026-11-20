@@ -1,3 +1,5 @@
+import { recordUsageEventToFirestore, UsageEventType } from './superAdminService.ts';
+
 declare global {
   interface Window {
     gtag?: (
@@ -151,7 +153,8 @@ function sanitizeAnalyticsParams(params?: Record<string, any>): Record<string, a
 }
 
 /**
- * Safely track custom GA4 events using window.gtag with data-minimization guardrails.
+ * Safely track custom GA4 events using window.gtag with data-minimization guardrails,
+ * and mirror sanitized tool/download usage into Firestore usage_events for Super Admin insights.
  */
 export function trackEvent<K extends keyof AnalyticsEventParams>(
   eventName: K,
@@ -165,6 +168,27 @@ export function trackEvent<K extends keyof AnalyticsEventParams>(
       console.log(`[Analytics] Event: ${eventName}`, sanitized);
     } else {
       console.log(`[Analytics Offline] Event: ${eventName}`, sanitized);
+    }
+
+    if (
+      eventName === 'tool_used' ||
+      eventName === 'resource_downloaded' ||
+      eventName === 'resource_viewed' ||
+      eventName === 'resource_shared'
+    ) {
+      const featureName =
+        sanitized.tool_name ||
+        sanitized.resource_name ||
+        sanitized.resource_type ||
+        sanitized.feature_name ||
+        String(eventName);
+
+      recordUsageEventToFirestore({
+        eventType: eventName as UsageEventType,
+        featureName: String(featureName),
+        category: sanitized.category || sanitized.resource_type,
+        format: sanitized.format || sanitized.channel
+      }).catch(() => {});
     }
   } catch (error) {
     console.warn('[Analytics] Error tracking event:', error);

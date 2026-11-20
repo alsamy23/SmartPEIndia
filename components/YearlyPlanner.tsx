@@ -32,6 +32,7 @@ import {
 import { BoardType, YearlyPlan, Language, LessonPlan } from '../types.ts';
 import { generateYearlyPlan, generateLessonPlan, buildComprehensiveYearlyPlanFallback } from '../services/geminiService.ts';
 import { exportToPdf, exportToWord, exportYearlyPlanToIcs } from '../lib/exportUtils.ts';
+import { trackEvent } from '../services/analytics.ts';
 import { toast } from '../services/toast.ts';
 import { downloadBlobFile } from '../utils/safeBrowser.ts';
 
@@ -929,6 +930,11 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
   };
 
   const handleExportPdf = () => {
+    trackEvent('resource_downloaded', {
+      resource_name: `Yearly Plan Grade ${grade} (${board})`,
+      resource_type: 'Yearly Planner',
+      format: 'PDF'
+    });
     exportToPdf(contentRef.current, `PE_Yearly_Plan_Grade${grade}_${board}`).catch(err => {
       console.error("PDF Export error:", err);
     });
@@ -939,6 +945,11 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
       toast.error("No data available to export.");
       return;
     }
+    trackEvent('resource_downloaded', {
+      resource_name: `Yearly Plan Grade ${grade} (${board})`,
+      resource_type: 'Yearly Planner',
+      format: 'Word'
+    });
 
     let html = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>
@@ -1032,6 +1043,11 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     downloadBlobFile(blob, `PE_Yearly_Plan_Grade${grade}.csv`);
+    trackEvent('resource_downloaded', {
+      resource_name: `Yearly Plan Grade ${grade} (${board})`,
+      resource_type: 'Yearly Planner',
+      format: 'CSV'
+    });
     toast.success("Yearly plan CSV exported!");
   };
 
@@ -1041,6 +1057,11 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
       return;
     }
 
+    trackEvent('resource_downloaded', {
+      resource_name: `Yearly Plan Calendar Grade ${grade} (${board})`,
+      resource_type: 'Yearly Planner',
+      format: 'ICS'
+    });
     exportYearlyPlanToIcs(plan, {
       term1Focus,
       term2Focus,

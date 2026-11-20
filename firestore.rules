@@ -458,6 +458,78 @@ service cloud.firestore {
       allow delete: if isSuperAdmin() || (isAuthenticated() && resource != null && resource.data.uid == request.auth.uid);
     }
 
+    // 18b. Sanitized Usage Events (Tool Usage & Downloads - Zero Student PII)
+    function isValidDocId(id) {
+      return id is string && id.size() > 0 && id.size() <= 160 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUsageEvent(data) {
+      return data.keys().hasAll(['id', 'uid', 'eventType', 'featureName', 'timestamp']) &&
+        data.keys().hasOnly([
+          'id', 'uid', 'userEmail', 'userName', 'schoolName', 'workspaceType',
+          'eventType', 'featureName', 'category', 'format', 'timestamp'
+        ]) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 160 &&
+        data.uid is string && data.uid == request.auth.uid &&
+        data.eventType in ['tool_used', 'resource_downloaded', 'resource_viewed', 'resource_shared'] &&
+        data.featureName is string && data.featureName.size() > 0 && data.featureName.size() <= 160 &&
+        data.timestamp is string && data.timestamp.size() > 0 && data.timestamp.size() <= 64 &&
+        (!('userEmail' in data) || (data.userEmail is string && data.userEmail.size() <= 200)) &&
+        (!('userName' in data) || (data.userName is string && data.userName.size() <= 160)) &&
+        (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 200)) &&
+        (!('workspaceType' in data) || data.workspaceType in ['school', 'academy']) &&
+        (!('category' in data) || (data.category is string && data.category.size() <= 100)) &&
+        (!('format' in data) || (data.format is string && data.format.size() <= 40));
+    }
+
+    match /usage_events/{eventId} {
+      allow list: if isSuperAdmin();
+      allow get: if isValidDocId(eventId) && isSuperAdmin();
+      allow create: if isAuthenticated() && isValidDocId(eventId) && isValidUsageEvent(request.resource.data);
+      allow update, delete: if isValidDocId(eventId) && isSuperAdmin();
+    }
+
+    // 18c. Teacher Feedback: Authenticated teachers submit feedback; Super Admin reviews and manages all
+    function isValidTeacherFeedback(data) {
+      return data.keys().hasAll(['id', 'uid', 'teacherName', 'category', 'rating', 'message', 'status', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'uid', 'teacherName', 'teacherEmail', 'schoolName', 'workspaceType',
+          'category', 'rating', 'message', 'status', 'adminNote', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 160 &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 160 &&
+        data.teacherName is string && data.teacherName.size() > 0 && data.teacherName.size() <= 120 &&
+        data.category is string && data.category.size() > 0 && data.category.size() <= 80 &&
+        data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+        data.message is string && data.message.size() >= 3 && data.message.size() <= 2000 &&
+        data.status in ['new', 'reviewed', 'resolved'] &&
+        data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 64 &&
+        (!('teacherEmail' in data) || (data.teacherEmail is string && data.teacherEmail.size() <= 200)) &&
+        (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 200)) &&
+        (!('workspaceType' in data) || data.workspaceType in ['school', 'academy']) &&
+        (!('adminNote' in data) || (data.adminNote is string && data.adminNote.size() <= 500)) &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    match /teacher_feedback/{feedbackId} {
+      allow list: if isSuperAdmin() || (isAuthenticated() && resource.data.uid == request.auth.uid);
+      allow get: if isValidDocId(feedbackId) && (isSuperAdmin() || (isAuthenticated() && resource.data.uid == request.auth.uid));
+      allow create: if isAuthenticated() &&
+        isValidDocId(feedbackId) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status == 'new' &&
+        isValidTeacherFeedback(request.resource.data);
+      allow update: if isValidDocId(feedbackId) &&
+        isSuperAdmin() &&
+        isValidTeacherFeedback(request.resource.data) &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isValidDocId(feedbackId) && (
+        isSuperAdmin() ||
+        (isAuthenticated() && resource != null && resource.data.uid == request.auth.uid)
+      );
+    }
+
     // 19. Default fallback: Deny all by default unless super admin
     match /{document=**} {
       allow read, write: if isSuperAdmin();

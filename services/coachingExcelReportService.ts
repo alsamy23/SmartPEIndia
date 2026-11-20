@@ -14,6 +14,7 @@ import {
   AssessmentRecord, 
   SPORTS_REGISTRY 
 } from './sportsCoachingService';
+import { trackEvent } from './analytics';
 
 export interface ManagementReportOptions {
   programName?: string;
@@ -699,6 +700,11 @@ export const coachingExcelReportService = {
         window.URL.revokeObjectURL(url);
       }, 250);
 
+      trackEvent('resource_downloaded', {
+        resource_name: 'Coaching Progress Workbook',
+        resource_type: 'Coaching & Academy',
+        format: 'xlsx'
+      });
       return true;
     } catch (err) {
       console.error('Failed to export school management excel report:', err);
@@ -823,6 +829,11 @@ export const coachingExcelReportService = {
         window.URL.revokeObjectURL(url);
       }, 250);
 
+      trackEvent('resource_downloaded', {
+        resource_name: 'Coaching Player Report Card',
+        resource_type: 'Coaching & Academy',
+        format: 'xlsx'
+      });
       return true;
     } catch (err) {
       console.error('Failed to export individual student excel report:', err);
@@ -1122,6 +1133,11 @@ export const coachingExcelReportService = {
         window.URL.revokeObjectURL(url);
       }, 250);
 
+      trackEvent('resource_downloaded', {
+        resource_name: 'Coaching Assessment Workbook',
+        resource_type: 'Coaching & Academy',
+        format: 'xlsx'
+      });
       return true;
     } catch (err) {
       console.error('Failed to export universal coaching excel report:', err);

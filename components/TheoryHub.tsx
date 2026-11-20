@@ -24,6 +24,7 @@ import { generateTheoryContent, generateMindMap } from '../services/geminiServic
 import { getComprehensiveMindMapFallback, getComprehensiveTheoryFallback } from '../services/cbseTheoryDatabase.ts';
 import { storageService } from '../services/storageService.ts';
 import { exportToPdf, exportToWord } from '../lib/exportUtils.ts';
+import { trackEvent } from '../services/analytics.ts';
 import { useRef } from 'react';
 
 const CHAPTERS_9 = [
@@ -99,6 +100,11 @@ const TheoryHub: React.FC = () => {
   };
 
   const handleExportPdf = () => {
+    trackEvent('resource_downloaded', {
+      resource_name: result?.title || `Theory Grade ${grade}`,
+      resource_type: 'Theory Master',
+      format: 'PDF'
+    });
     exportToPdf(contentRef.current, `Theory_${result?.title}_Grade${grade}`).catch(err => {
       console.error("PDF Export error:", err);
     });
@@ -106,6 +112,11 @@ const TheoryHub: React.FC = () => {
 
   const handleExportWord = () => {
     if (!result) return;
+    trackEvent('resource_downloaded', {
+      resource_name: result.title || `Theory Grade ${grade}`,
+      resource_type: 'Theory Master',
+      format: 'Word'
+    });
     
     const html = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>

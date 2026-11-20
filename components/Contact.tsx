@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Mail, CheckCircle2, MessageSquare, AlertCircle, FileText, Send, HelpCircle, Loader2 } from 'lucide-react';
 import { BRAND_EMAILS } from '../types';
 import { reportUserFeedback } from '../services/telemetryService.ts';
+import { auth } from '../services/firebase.ts';
+import { submitTeacherFeedback } from '../services/superAdminService.ts';
 import { toast } from '../services/toast.ts';
 
 interface ContactProps {
@@ -45,6 +47,16 @@ const Contact: React.FC<ContactProps> = ({ onNavigate }) => {
           module: 'Contact Page'
         }
       );
+      if (auth.currentUser) {
+        await submitTeacherFeedback({
+          category: formData.topic,
+          rating: 5,
+          message: formData.message.trim(),
+          teacherName: formData.name.trim(),
+          teacherEmail: formData.senderEmail.trim(),
+          schoolName: formData.schoolName.trim()
+        }).catch(() => {});
+      }
       setSubmitted(true);
       toast.success('Message delivered directly to the SmartPE India team!');
       if (resetTimerRef.current !== null) {

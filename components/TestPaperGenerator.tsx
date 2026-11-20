@@ -167,6 +167,11 @@ const TestPaperGenerator: React.FC = () => {
   };
 
   const handleExportPdf = () => {
+    trackEvent('resource_downloaded', {
+      resource_name: result?.title || `PE Question Paper Grade ${grade}`,
+      resource_type: 'Question Paper',
+      format: 'PDF'
+    });
     exportToPdf(contentRef.current, `TestPaper_${topic.slice(0, 15)}_${grade}`).catch(err => {
       console.error("PDF Export error:", err);
     });
@@ -191,6 +196,11 @@ https://smartpeindia.app/testpaper`;
 
   const handleExportWord = () => {
     if (!result) return;
+    trackEvent('resource_downloaded', {
+      resource_name: result.title || `PE Question Paper Grade ${grade}`,
+      resource_type: 'Question Paper',
+      format: 'Word'
+    });
     
     let html = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>

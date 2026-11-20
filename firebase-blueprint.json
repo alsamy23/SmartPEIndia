@@ -351,6 +351,46 @@
         "timestamp": { "type": "string" }
       },
       "required": ["id", "uid", "timestamp"]
+    },
+    "UsageEvent": {
+      "title": "UsageEvent",
+      "description": "Sanitized app feature usage and download telemetry (strictly zero student PII)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 160 },
+        "uid": { "type": "string", "maxLength": 160 },
+        "userEmail": { "type": "string", "maxLength": 200 },
+        "userName": { "type": "string", "maxLength": 160 },
+        "schoolName": { "type": "string", "maxLength": 200 },
+        "workspaceType": { "type": "string", "enum": ["school", "academy"] },
+        "eventType": { "type": "string", "enum": ["tool_used", "resource_downloaded", "resource_viewed", "resource_shared"] },
+        "featureName": { "type": "string", "maxLength": 160 },
+        "category": { "type": "string", "maxLength": 100 },
+        "format": { "type": "string", "maxLength": 40 },
+        "timestamp": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "uid", "eventType", "featureName", "timestamp"]
+    },
+    "TeacherFeedback": {
+      "title": "TeacherFeedback",
+      "description": "Educator product feedback, ratings, and feature suggestions submitted to Super Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 160 },
+        "uid": { "type": "string", "maxLength": 160 },
+        "teacherName": { "type": "string", "maxLength": 120 },
+        "teacherEmail": { "type": "string", "maxLength": 200 },
+        "schoolName": { "type": "string", "maxLength": 200 },
+        "workspaceType": { "type": "string", "enum": ["school", "academy"] },
+        "category": { "type": "string", "maxLength": 80 },
+        "rating": { "type": "number" },
+        "message": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["new", "reviewed", "resolved"] },
+        "adminNote": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "uid", "teacherName", "category", "rating", "message", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -371,6 +411,8 @@
     "/privacy_audit_logs/{logId}": { "schema": "PrivacyAuditLog", "description": "Sanitized privacy and deletion audit logs" },
     "/login_activity/{logId}": { "schema": "LoginActivity", "description": "User sign-in activity logs" },
     "/workloads/{workloadId}": { "schema": "DepartmentWorkload", "description": "Teacher workload schedules and curriculum setups" },
-    "/sportsDays/{schoolId}": { "schema": "SportsDay", "description": "Sports Day tracker data for schools" }
+    "/sportsDays/{schoolId}": { "schema": "SportsDay", "description": "Sports Day tracker data for schools" },
+    "/usage_events/{eventId}": { "schema": "UsageEvent", "description": "Sanitized educator tool usage and download events" },
+    "/teacher_feedback/{feedbackId}": { "schema": "TeacherFeedback", "description": "Teacher feedback and ratings for Super Admin review" }
   }
 }

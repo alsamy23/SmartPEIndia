@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { generateUnitPlan } from '../services/geminiService.ts';
 import { exportToPdf, exportToWord } from '../lib/exportUtils.ts';
+import { trackEvent } from '../services/analytics.ts';
 
 const UnitPlannerTool: React.FC = () => {
   const [topic, setTopic] = useState('Volleyball: Serving & Spiking Techniques');
@@ -60,6 +61,11 @@ const UnitPlannerTool: React.FC = () => {
 
   const handleExportPdf = () => {
     if (!unitPlan) return;
+    trackEvent('resource_downloaded', {
+      resource_name: unitPlan.unitTitle || `Unit Plan ${grade}`,
+      resource_type: 'Unit Plan',
+      format: 'PDF'
+    });
     exportToPdf(contentRef.current, `Unit_Plan_${unitPlan.unitTitle?.replace(/\s+/g, '_')}_${grade}`).catch(err => {
       console.error("PDF export error:", err);
     });
@@ -67,6 +73,11 @@ const UnitPlannerTool: React.FC = () => {
 
   const handleExportWord = () => {
     if (!unitPlan) return;
+    trackEvent('resource_downloaded', {
+      resource_name: unitPlan.unitTitle || `Unit Plan ${grade}`,
+      resource_type: 'Unit Plan',
+      format: 'Word'
+    });
     const lessonsHtml = (unitPlan.weeklyBreakdown || []).map((l: any) => `
       <div style="margin-bottom: 20px; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
         <h3 style="color: #4338ca; margin-top: 0;">Lesson ${l.week}: ${l.focus}</h3>

@@ -35,7 +35,8 @@ import {
   Shield, 
   Video, 
   Terminal,
-  School
+  School,
+  MessageSquareHeart
 } from 'lucide-react';
 import Dashboard from './components/Dashboard.tsx';
 import AIPlanner from './components/AIPlanner.tsx';
@@ -84,6 +85,8 @@ import { VoiceAgentModal } from './components/VoiceAgentModal.tsx';
 import { SpotlightBanner, SpotlightData } from './components/SpotlightBanner.tsx';
 import { FloatingVoiceAgentButton } from './components/FloatingVoiceAgentButton.tsx';
 import { UserSupportModal } from './components/UserSupportModal.tsx';
+import SuperAdminDashboard from './components/SuperAdminDashboard.tsx';
+import TeacherFeedbackModal from './components/TeacherFeedbackModal.tsx';
 import { logError } from './services/logService.ts';
 import { fitnessService } from './services/fitnessService.ts';
 import { offlineCacheService } from './services/offlineCacheService.ts';
@@ -94,7 +97,7 @@ import { toast, SHOW_TOAST_EVENT, SHOW_CONFIRM_EVENT, ToastConfig, ConfirmConfig
 import { userActivityService } from './services/userActivityService.ts';
 import { isBrandSuperAdmin } from './types.ts';
 
-type Tab = 'dashboard' | 'cbse-physical-education' | 'khelo-india-fitness-assessment' | 'ai-pe-lesson-planner' | 'physical-education-assessment' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'physical-development' | 'coaching-assessment' | 'coaching-academy' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'privacy' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
+type Tab = 'dashboard' | 'super-admin-dashboard' | 'cbse-physical-education' | 'khelo-india-fitness-assessment' | 'ai-pe-lesson-planner' | 'physical-education-assessment' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'physical-development' | 'coaching-assessment' | 'coaching-academy' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'privacy' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
 
 // Helper to determine initial tab from URL pathname, query, or hash
 const getInitialTab = (): Tab => {
@@ -139,6 +142,7 @@ const getInitialTab = (): Tab => {
     'teams': 'school-teams',
     'fitness-reports': 'fitness-reports',
     'school-admin': 'school-admin',
+    'super-admin': 'super-admin-dashboard',
     'pricing': 'subscription-plans',
     'welcome': 'brand-welcome',
     'privacy': 'privacy',
@@ -162,6 +166,13 @@ import { BoardType, Language } from './types.ts';
 // Static Navigation Catalog (Moved outside to ensure stable memory reference)
 const navigation = [
   { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
+
+  {
+    section: 'Super Admin',
+    items: [
+      { id: 'super-admin-dashboard', name: 'Super Admin Hub', icon: Shield, protected: true, superAdminOnly: true, subtitle: 'Registered schools, assigned teachers, app usage, downloads & teacher feedback.' },
+    ]
+  },
 
   { 
     section: 'Coaching & Academy',
@@ -298,6 +309,7 @@ interface SidebarProps {
   schoolLogo?: string | null;
   activeWorkspace: 'school' | 'academy';
   setActiveWorkspace: (ws: 'school' | 'academy') => void;
+  onOpenFeedback: () => void;
 }
 const Sidebar: React.FC<SidebarProps> = React.memo(({
   activeTab,
@@ -312,7 +324,8 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
   schoolName,
   schoolLogo,
   activeWorkspace,
-  setActiveWorkspace
+  setActiveWorkspace,
+  onOpenFeedback
 }) => {
   return (
     <aside className={`
@@ -399,7 +412,7 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
         </button>
       </div>
 
-      <nav className="mt-2 px-4 space-y-1.5 overflow-y-auto max-h-[calc(100vh-420px)] custom-scrollbar">
+      <nav className="mt-2 px-4 space-y-1.5 overflow-y-auto max-h-[calc(100vh-470px)] custom-scrollbar">
         {navigation.map((item, idx) => {
           if ('section' in item && item.items) {
             const visibleItems = item.items.filter(
@@ -459,7 +472,19 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
       </nav>
 
       {/* Profile Footer */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 bg-slate-950 border-t border-white/5">
+      <div className="absolute bottom-0 left-0 right-0 p-5 bg-slate-950 border-t border-white/5 space-y-2.5">
+        <button
+          type="button"
+          onClick={() => {
+            onOpenFeedback();
+            setIsSidebarOpen(false);
+          }}
+          className="w-full py-2.5 px-4 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+        >
+          <MessageSquareHeart size={15} className="text-amber-400" />
+          <span>Give Feedback</span>
+        </button>
+
         {user ? (
           <div className="w-full bg-white/5 rounded-[2rem] p-4 flex items-center space-x-4">
             <div className="relative">
@@ -582,24 +607,24 @@ const StickyHeader: React.FC<StickyHeaderProps> = React.memo(({
           </button>
         )}
 
-        {/* Super Admin Quick Access to User Logins & Live Activity */}
+        {/* Super Admin Quick Access to Complete Command Center */}
         {user && isBrandSuperAdmin(user.email) && (
           <button
             type="button"
-            onClick={() => {
-              localStorage.setItem('smartpe_admin_active_tab', 'directory');
-              window.dispatchEvent(new CustomEvent('open_superadmin_directory'));
-              handleTabChange('school-admin');
-            }}
-            className="hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900 border border-emerald-400/60 text-white text-xs font-black uppercase tracking-wider hover:bg-slate-800 transition-all shadow-sm cursor-pointer"
-            title="Super Admin: View All Registered Users & Live Logins"
+            onClick={() => handleTabChange('super-admin-dashboard')}
+            className={`hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border text-xs font-black uppercase tracking-wider transition-all shadow-sm cursor-pointer ${
+              activeTab === 'super-admin-dashboard'
+                ? 'bg-emerald-600 border-emerald-500 text-white'
+                : 'bg-slate-900 border-emerald-400/60 text-white hover:bg-slate-800'
+            }`}
+            title="Super Admin: Registered Schools, Assigned Teachers, App Usage, Downloads & Teacher Feedback"
           >
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <Users size={13} className="text-emerald-400" />
-            <span>Users & Logins</span>
+            <Shield size={13} className={activeTab === 'super-admin-dashboard' ? 'text-white' : 'text-emerald-400'} />
+            <span>Super Admin Hub</span>
           </button>
         )}
       </div>
@@ -685,6 +710,7 @@ const App: React.FC = () => {
   const [coachingReportId, setCoachingReportId] = useState<string | null>(null);
   const [highlightStudentId, setHighlightStudentId] = useState<string | null>(null);
   const [isVoiceAgentOpen, setIsVoiceAgentOpen] = useState(false);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [spotlightInfo, setSpotlightInfo] = useState<SpotlightData | null>(null);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [toasts, setToasts] = useState<ToastConfig[]>([]);
@@ -784,6 +810,17 @@ const App: React.FC = () => {
       if (currentUser) {
         setIsAuthView(false); // Reset auth view when user logs in
         userActivityService.recordUserPresence(currentUser).catch(() => {});
+
+        if (isBrandSuperAdmin(currentUser.email)) {
+          if (sessionStorage.getItem('smartpe_superadmin_landed') !== currentUser.uid) {
+            sessionStorage.setItem('smartpe_superadmin_landed', currentUser.uid);
+            const currentPath = window.location.pathname.replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase();
+            if (!currentPath || currentPath === 'dashboard') {
+              setActiveTab('super-admin-dashboard');
+            }
+          }
+        }
+
         if (sessionStorage.getItem('smartpe_show_onboarding') === 'true') {
           sessionStorage.removeItem('smartpe_show_onboarding');
           setShowOnboardingModal(true);
@@ -864,6 +901,7 @@ const App: React.FC = () => {
         offlineCacheService.clearSensitiveCacheOnLogout();
         setSchoolBranding({ schoolName: null, schoolLogo: null });
         sessionStorage.removeItem('welcome_notified');
+        sessionStorage.removeItem('smartpe_superadmin_landed');
       } catch (err) {
         console.error(err);
       }
@@ -999,7 +1037,11 @@ const App: React.FC = () => {
       'testpaper': 'Question Paper Generator',
       'skill-analysis': 'Skill Analysis Lab',
       'rules': 'Game Rules Bot',
-      'widgets': 'Classroom Widgets'
+      'widgets': 'Classroom Widgets',
+      'coaching-academy': 'Coaching & Academy',
+      'tournament-fixtures': 'Tournament Fixtures',
+      'physical-development': 'PE Fitness & Development',
+      'cbse-practical': 'CBSE Practical (30M)'
     };
     if (toolTabs[tabId]) {
       trackEvent('tool_used', { tool_name: toolTabs[tabId] });
@@ -1060,6 +1102,11 @@ const App: React.FC = () => {
 
     switch (activeTab) {
       case 'dashboard': return <Dashboard apiStatus={apiStatus} debugInfo={debugInfo} onTestConnection={handleTestConnection} isTesting={isTesting} onNavigate={handleTabChange} />;
+      case 'super-admin-dashboard':
+        if (isBrandSuperAdmin(user?.email)) {
+          return <SuperAdminDashboard onNavigate={handleTabChange} />;
+        }
+        return <Dashboard apiStatus={apiStatus} debugInfo={debugInfo} onTestConnection={handleTestConnection} isTesting={isTesting} onNavigate={handleTabChange} />;
       case 'cbse-physical-education': return <CbsePhysicalEducationPage onNavigate={handleTabChange} onOpenAuth={() => setIsAuthView(true)} />;
       case 'khelo-india-fitness-assessment': return <KheloIndiaFitnessPage onNavigate={handleTabChange} onOpenAuth={() => setIsAuthView(true)} />;
       case 'ai-pe-lesson-planner': return <AiLessonPlannerPage onNavigate={handleTabChange} onOpenAuth={() => setIsAuthView(true)} />;
@@ -1218,6 +1265,7 @@ const App: React.FC = () => {
           schoolLogo={schoolBranding.schoolLogo}
           activeWorkspace={activeWorkspace}
           setActiveWorkspace={setActiveWorkspace}
+          onOpenFeedback={() => setIsFeedbackModalOpen(true)}
         />
 
         {/* Content Area */}
@@ -1287,6 +1335,16 @@ const App: React.FC = () => {
 
           {/* Instant WhatsApp Support & Automated Problem Reporter */}
           <UserSupportModal />
+
+          {/* Teacher Feedback Modal */}
+          <TeacherFeedbackModal
+            isOpen={isFeedbackModalOpen}
+            onClose={() => setIsFeedbackModalOpen(false)}
+            onRequireLogin={() => {
+              setIsFeedbackModalOpen(false);
+              setIsAuthView(true);
+            }}
+          />
 
           {/* First-Signup Quick-Start Onboarding Modal */}
           <WelcomeOnboardingModal
