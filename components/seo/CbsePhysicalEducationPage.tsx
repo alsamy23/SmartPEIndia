@@ -216,7 +216,7 @@ export const CbsePhysicalEducationPage: React.FC<CbsePhysicalEducationPageProps>
       {/* Internal Cross-Linking Navigation */}
       <section className="bg-slate-100 rounded-3xl p-6 md:p-8 border-2 border-slate-300 space-y-4">
         <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-          Explore Related Physical Education Software Modules:
+          Explore Related PE Digital Platform Modules:
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button

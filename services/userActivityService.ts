@@ -20,7 +20,7 @@ export const userActivityService = {
    */
   recordUserLogin: async (
     user: FirebaseUser, 
-    extra?: { workspaceType?: string; orgName?: string; role?: string }
+    extra?: { workspaceType?: string; orgName?: string; role?: string; privacyAcceptedAt?: string; privacyVersion?: string }
   ): Promise<void> => {
     try {
       if (!user || !user.uid) return;
@@ -48,6 +48,10 @@ export const userActivityService = {
         workspaceType,
         schoolName,
         role: extra?.role || existingData.role || 'teacher',
+        ...(extra?.privacyAcceptedAt ? {
+          privacyAcceptedAt: extra.privacyAcceptedAt,
+          privacyVersion: extra.privacyVersion || '2026-11'
+        } : {}),
         updatedAt: nowIso
       }, { merge: true });
 

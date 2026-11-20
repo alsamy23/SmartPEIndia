@@ -1,13 +1,14 @@
 
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Loader2, Download, Printer, RotateCcw, Image as ImageIcon, Clock, GraduationCap, AlertCircle, PlayCircle, Layers, ClipboardList, Target, User, CalendarDays, BookOpen, PenTool, Languages, FileText, Save, CheckCircle2, ShieldCheck, WifiOff, ZapOff, KeyRound, X, ChevronRight } from 'lucide-react';
+import { Sparkles, Loader2, Download, Printer, RotateCcw, Image as ImageIcon, Clock, GraduationCap, AlertCircle, PlayCircle, Layers, ClipboardList, Target, User, CalendarDays, BookOpen, PenTool, Languages, FileText, Save, CheckCircle2, ShieldCheck, WifiOff, ZapOff, KeyRound, X, ChevronRight, Share2 } from 'lucide-react';
 import { LessonPlan, Language, BoardType } from '../types.ts';
 import { generateLessonPlan, generateLessonDiagram, normalizeLessonPlan } from '../services/geminiService.ts';
 import { storageService } from '../services/storageService.ts';
 import { offlineCacheService, PRELOADED_OFFLINE_LESSON_PLANS } from '../services/offlineCacheService.ts';
 import { exportToPdf, exportToWord } from '../lib/exportUtils.ts';
 import { trackEvent } from '../services/analytics.ts';
+import { safeOpenExternal } from '../utils/safeBrowser.ts';
 
 declare var html2pdf: any;
 
@@ -217,11 +218,33 @@ const AIPlanner: React.FC = () => {
         <div class="section-title">Differentiation & Assessment</div>
         <p><b>Differentiation:</b> ${plan.differentiation || 'N/A'}</p>
         <p><b>Assessment:</b> ${plan.criticalThinking || 'N/A'}</p>
+        <p style="margin-top:24px; border-top:1px solid #e5e7eb; padding-top:8px; font-size:10px; color:#6b7280; text-align:center;">
+          Generated via SmartPE India (https://smartpeindia.app/lesson-planner)
+        </p>
       </body>
       </html>
     `;
 
     exportToWord(html, `LessonPlan_${sport}_${grade}`);
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!plan) return;
+    const eqList = Array.isArray(plan.equipment) ? plan.equipment.slice(0, 4).join(', ') : (plan.equipment || 'Standard PE gear');
+    const text =
+`📋 *PE LESSON PLAN READY*
+🏅 *Sport:* ${sport} — ${plan.topic}
+🎓 *Class:* Grade ${grade} (${board}) | ⏱️ ${plan.duration}
+🎒 *Equipment:* ${eqList}
+
+Create free CBSE/ICSE PE lesson plans in 60 seconds:
+https://smartpeindia.app/lesson-planner`;
+    trackEvent('resource_shared', {
+      resource_type: 'Lesson Plan',
+      channel: 'WhatsApp'
+    });
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    safeOpenExternal(waUrl, "Opening WhatsApp to share lesson plan link!");
   };
 
   return (
@@ -472,6 +495,9 @@ const AIPlanner: React.FC = () => {
                     <button onClick={() => {setPlan(null); setLanguage('English');}} className="p-2.5 md:p-3 text-slate-400 hover:text-indigo-600 font-bold flex items-center space-x-2 text-xs md:text-sm">
                        <RotateCcw size={14} /> <span>Reset</span>
                     </button>
+                    <button onClick={handleShareWhatsApp} className="bg-[#25D366] text-white px-4 md:px-5 py-2.5 md:py-3 rounded-xl font-bold flex items-center space-x-2 hover:bg-[#20bd5a] transition-all shadow-md text-xs md:text-sm">
+                       <Share2 size={16} /> <span>Share on WhatsApp</span>
+                     </button>
                     <button onClick={handleExportWord} className="bg-blue-50 text-blue-700 px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-bold flex items-center space-x-2 hover:bg-blue-100 transition-all text-xs md:text-sm">
                        <FileText size={16} /> <span>Word</span>
                      </button>
@@ -668,6 +694,9 @@ const AIPlanner: React.FC = () => {
                        <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Assessment Opportunities</h5>
                        <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg">{typeof plan.criticalThinking === 'object' ? JSON.stringify(plan.criticalThinking) : plan.criticalThinking}</p>
                      </div>
+                  </div>
+                  <div className="pt-4 border-t border-slate-100 text-center text-[10px] font-bold text-slate-400">
+                    Prepared with SmartPE India • smartpeindia.app/lesson-planner
                   </div>
                </div>
              </div>

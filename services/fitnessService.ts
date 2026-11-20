@@ -585,10 +585,21 @@ export const KIFT_BATTERIES: KIFTBattery[] = [
   }
 ];
 
-// In-memory cache to prevent redundant Firestore reads and laggy UI tab switching
+// In-memory cache & multiplexed subscription registries to prevent redundant Firestore reads and laggy UI tab switching
 const schoolMemberCache: { [uid: string]: SchoolMember | null } = {};
 const schoolMemberInFlight: { [uid: string]: Promise<SchoolMember | null> | undefined } = {};
+const schoolMemberRefreshedThisSession = new Set<string>();
 const schoolCache: { [schoolId: string]: School | null } = {};
+
+interface MultiplexedChannel<T> {
+  callbacks: Set<(data: T[]) => void>;
+  unsubFirestore: (() => void) | null;
+  lastData: T[] | null;
+  hasSyncedFromServer: boolean;
+}
+
+const resultsChannels: Record<string, MultiplexedChannel<FitnessResult>> = {};
+const studentsChannels: Record<string, MultiplexedChannel<Student>> = {};
 
 export const fitnessService = {
   // School Management
@@ -688,10 +699,39 @@ export const fitnessService = {
     }
   },
 
+  getCachedSchoolMember: (uid: string): SchoolMember | null => {
+    if (schoolMemberCache[uid]) return schoolMemberCache[uid];
+    const cached = offlineCacheService.getMemberFromOfflineCache(uid);
+    if (cached) {
+      schoolMemberCache[uid] = cached;
+      return cached;
+    }
+    return null;
+  },
+
   getSchoolMember: async (uid: string): Promise<SchoolMember | null> => {
     if (schoolMemberCache[uid] !== undefined && schoolMemberCache[uid] !== null) {
       return schoolMemberCache[uid];
     }
+
+    // Seed immediately from localStorage cache on cold boot and refresh once in background
+    const localCached = offlineCacheService.getMemberFromOfflineCache(uid);
+    if (localCached && !schoolMemberRefreshedThisSession.has(uid)) {
+      schoolMemberCache[uid] = localCached;
+      schoolMemberRefreshedThisSession.add(uid);
+      // Quiet background refresh so role/schoolId stays up-to-date without blocking UI
+      getDoc(doc(db, 'schoolMembers', uid))
+        .then((snap) => {
+          if (snap.exists()) {
+            const fresh = snap.data() as SchoolMember;
+            schoolMemberCache[uid] = fresh;
+            offlineCacheService.saveMemberToOfflineCache(uid, fresh);
+          }
+        })
+        .catch(() => {});
+      return localCached;
+    }
+
     if (schoolMemberInFlight[uid]) {
       return schoolMemberInFlight[uid]!;
     }
@@ -701,6 +741,7 @@ export const fitnessService = {
         if (docSnap.exists()) {
           const res = docSnap.data() as SchoolMember;
           schoolMemberCache[uid] = res;
+          offlineCacheService.saveMemberToOfflineCache(uid, res);
           return res;
         }
 
@@ -742,6 +783,7 @@ export const fitnessService = {
             }
 
             schoolMemberCache[uid] = memberRecord;
+            offlineCacheService.saveMemberToOfflineCache(uid, memberRecord);
             return memberRecord;
           }
         }
@@ -767,6 +809,7 @@ export const fitnessService = {
               };
               await setDoc(doc(db, 'schoolMembers', uid), memberRecord, { merge: true });
               schoolMemberCache[uid] = memberRecord;
+              offlineCacheService.saveMemberToOfflineCache(uid, memberRecord);
               return memberRecord;
             }
           }
@@ -781,6 +824,7 @@ export const fitnessService = {
             email: auth.currentUser.email || ''
           };
           schoolMemberCache[uid] = fallbackRecord;
+          offlineCacheService.saveMemberToOfflineCache(uid, fallbackRecord);
           return fallbackRecord;
         }
 
@@ -1220,28 +1264,64 @@ export const fitnessService = {
   },
 
   subscribeToResults: (teacherId: string, schoolId: string | undefined, isAdmin: boolean, callback: (results: FitnessResult[]) => void) => {
-    let q;
+    const isSuper = isBrandSuperAdmin(auth.currentUser?.email);
     const effectiveSchoolId = schoolId || `personal_${teacherId}`;
-    if (isBrandSuperAdmin(auth.currentUser?.email)) {
-      q = query(
-        collection(db, 'results'), 
-        limit(5000)
-      );
+    const channelKey = isSuper ? '__super_all__' : effectiveSchoolId;
+
+    if (!resultsChannels[channelKey]) {
+      resultsChannels[channelKey] = {
+        callbacks: new Set(),
+        unsubFirestore: null,
+        lastData: null,
+        hasSyncedFromServer: false
+      };
+    }
+
+    const channel = resultsChannels[channelKey];
+    channel.callbacks.add(callback);
+
+    // Emit immediately from in-memory session cache or localStorage offline cache (<2ms)
+    if (channel.lastData !== null) {
+      callback(channel.lastData);
     } else {
-      q = query(
-        collection(db, 'results'), 
-        where('schoolId', '==', effectiveSchoolId),
-        limit(5000)
+      const cachedResults = offlineCacheService.getResultsFromOfflineCache(channelKey);
+      if (cachedResults.length > 0) {
+        channel.lastData = cachedResults;
+        callback(cachedResults);
+      }
+    }
+
+    // Open at most ONE live Firestore listener per school/scope
+    if (!channel.unsubFirestore) {
+      const q = isSuper
+        ? query(collection(db, 'results'), limit(5000))
+        : query(collection(db, 'results'), where('schoolId', '==', effectiveSchoolId), limit(5000));
+
+      channel.unsubFirestore = onSnapshot(
+        q,
+        (snapshot: any) => {
+          const results = snapshot.docs.map((doc: any) => doc.data() as FitnessResult);
+          results.sort((a: FitnessResult, b: FitnessResult) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          channel.lastData = results;
+          channel.hasSyncedFromServer = true;
+          offlineCacheService.saveResultsToOfflineCache(channelKey, results);
+          channel.callbacks.forEach(cb => cb(results));
+        },
+        (error: any) => {
+          console.warn("Firestore results subscription notice:", error?.message || error);
+          const fallback = channel.lastData ?? offlineCacheService.getResultsFromOfflineCache(channelKey);
+          channel.callbacks.forEach(cb => cb(fallback));
+        }
       );
     }
-    return onSnapshot(q, (snapshot: any) => {
-      const results = snapshot.docs.map((doc: any) => doc.data() as FitnessResult);
-      // Sort locally by date desc
-      results.sort((a: FitnessResult, b: FitnessResult) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      callback(results);
-    }, (error: any) => {
-      console.warn("Firestore results subscription notice:", error?.message || error);
-    });
+
+    return () => {
+      channel.callbacks.delete(callback);
+      if (channel.callbacks.size === 0 && channel.unsubFirestore) {
+        channel.unsubFirestore();
+        channel.unsubFirestore = null;
+      }
+    };
   },
 
   subscribeToStudentResults: (studentId: string, schoolId: string | undefined, callback: (results: FitnessResult[]) => void) => {
@@ -1281,30 +1361,62 @@ export const fitnessService = {
   },
 
   subscribeToStudents: (teacherId: string, schoolId: string | undefined, isAdmin: boolean, callback: (students: Student[]) => void) => {
-    let q;
+    const isSuper = isBrandSuperAdmin(auth.currentUser?.email);
     const effectiveSchoolId = schoolId || `personal_${teacherId}`;
-    if (isBrandSuperAdmin(auth.currentUser?.email)) {
-      q = query(collection(db, 'students'));
+    const channelKey = isSuper ? '__super_all__' : effectiveSchoolId;
+
+    if (!studentsChannels[channelKey]) {
+      studentsChannels[channelKey] = {
+        callbacks: new Set(),
+        unsubFirestore: null,
+        lastData: null,
+        hasSyncedFromServer: false
+      };
+    }
+
+    const channel = studentsChannels[channelKey];
+    channel.callbacks.add(callback);
+
+    // Immediately trigger callback from session memory or offline cache for instant non-blocking load
+    if (channel.lastData !== null) {
+      callback(channel.lastData);
     } else {
-      q = query(collection(db, 'students'), where('schoolId', '==', effectiveSchoolId));
+      const cachedStudents = offlineCacheService.getStudentsFromOfflineCache();
+      if (cachedStudents.length > 0) {
+        channel.lastData = cachedStudents;
+        callback(cachedStudents);
+      }
     }
 
-    // Immediately trigger callback with offline cache if available for instant non-blocking load
-    const cachedStudents = offlineCacheService.getStudentsFromOfflineCache();
-    if (cachedStudents.length > 0) {
-      callback(cachedStudents);
+    if (!channel.unsubFirestore) {
+      const q = isSuper
+        ? query(collection(db, 'students'))
+        : query(collection(db, 'students'), where('schoolId', '==', effectiveSchoolId));
+
+      channel.unsubFirestore = onSnapshot(
+        q,
+        (snapshot: any) => {
+          const data = snapshot.docs.map((doc: any) => doc.data() as Student);
+          channel.lastData = data;
+          channel.hasSyncedFromServer = true;
+          offlineCacheService.saveStudentsToOfflineCache(data);
+          channel.callbacks.forEach(cb => cb(data));
+        },
+        (error: any) => {
+          console.warn("Firestore students subscription notice (fallback to offline):", error?.message || error);
+          const offlineStudents = channel.lastData ?? offlineCacheService.getStudentsFromOfflineCache();
+          channel.callbacks.forEach(cb => cb(offlineStudents));
+        }
+      );
     }
 
-    return onSnapshot(q, (snapshot: any) => {
-      const data = snapshot.docs.map((doc: any) => doc.data() as Student);
-      // Cache latest students locally
-      offlineCacheService.saveStudentsToOfflineCache(data);
-      callback(data);
-    }, (error: any) => {
-      console.warn("Firestore students subscription notice (fallback to offline):", error?.message || error);
-      const offlineStudents = offlineCacheService.getStudentsFromOfflineCache();
-      callback(offlineStudents);
-    });
+    return () => {
+      channel.callbacks.delete(callback);
+      if (channel.callbacks.size === 0 && channel.unsubFirestore) {
+        channel.unsubFirestore();
+        channel.unsubFirestore = null;
+      }
+    };
   },
 
   subscribeToTeams: (teacherId: string, schoolId: string | undefined, isAdmin: boolean, callback: (teams: Team[]) => void) => {

@@ -1,7 +1,7 @@
 {
   "name": "Smart PE India",
   "short_name": "SmartPE",
-  "description": "India's #1 AI Platform for Physical Education Teachers, CBSE/ICSE Lesson Plans, Khelo India Fitness Test Calculator & School Sports Department Management.",
+  "description": "PE Digital Platform for Indian Schools — CBSE/ICSE Lesson Plans, Khelo India & SAI-Aligned Fitness Assessments, and School Sports Department Management.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0D2B52",

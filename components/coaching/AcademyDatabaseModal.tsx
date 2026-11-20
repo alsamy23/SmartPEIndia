@@ -100,7 +100,7 @@ export const AcademyDatabaseModal: React.FC<AcademyDatabaseModalProps> = ({
 
     const existing = academicCoachingCloudService.getLocalProgram();
     const user = auth.currentUser;
-    const fallbackEmail = user?.email || 'alsamy36@gmail.com';
+    const fallbackEmail = user?.email || 'contact@smartpeindia.app';
 
     if (existing) {
       setProgram(existing);

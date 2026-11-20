@@ -91,7 +91,7 @@ export const KheloIndiaFitnessPage: React.FC<KheloIndiaFitnessPageProps> = ({
           </h1>
 
           <p className="text-sm sm:text-base text-slate-200 leading-relaxed font-medium">
-            Manage student fitness assessment data using SmartPE. Easily record official Sports Authority of India (SAI) battery test parameters, calculate student percentiles and ratings instantly, and generate inspection-ready school fitness report cards.
+            Manage student fitness assessment data using SmartPE. Easily record Sports Authority of India (SAI)–aligned battery test parameters, calculate student percentiles and ratings instantly, and print school fitness report cards.
           </p>
 
           <div className="pt-2 flex flex-wrap gap-3">
@@ -226,7 +226,7 @@ export const KheloIndiaFitnessPage: React.FC<KheloIndiaFitnessPageProps> = ({
       {/* Internal Cross-Linking Navigation */}
       <section className="bg-slate-100 rounded-3xl p-6 md:p-8 border-2 border-slate-300 space-y-4">
         <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-          Explore Other Physical Education Software Features:
+          Explore Other PE Digital Platform Features:
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button

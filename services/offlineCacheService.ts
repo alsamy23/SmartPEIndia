@@ -1,7 +1,9 @@
-import { Student, LessonPlan, BoardType, Language } from '../types.ts';
+import { Student, LessonPlan, BoardType, Language, FitnessResult, SchoolMember } from '../types.ts';
 import { SavedItem, storageService } from './storageService.ts';
 
 const OFFLINE_STUDENTS_KEY = 'smartpe_offline_students';
+const OFFLINE_RESULTS_PREFIX = 'smartpe_offline_results_';
+const OFFLINE_MEMBER_PREFIX = 'smartpe_offline_member_';
 const PENDING_STUDENTS_KEY = 'smartpe_pending_student_sync';
 const OFFLINE_LAST_SYNC_KEY = 'smartpe_students_last_sync';
 
@@ -257,6 +259,55 @@ export const offlineCacheService = {
     }
   },
 
+  // Save fetched fitness results to local storage for instant tab switching
+  saveResultsToOfflineCache: (scopeKey: string, results: FitnessResult[]): void => {
+    try {
+      // Cap at 2500 most recent entries to stay comfortably inside 5MB localStorage quota
+      const slice = results.length > 2500 ? results.slice(0, 2500) : results;
+      localStorage.setItem(`${OFFLINE_RESULTS_PREFIX}${scopeKey}`, JSON.stringify(slice));
+    } catch (e) {
+      try {
+        // Fallback smaller slice if localStorage quota is tight
+        localStorage.setItem(`${OFFLINE_RESULTS_PREFIX}${scopeKey}`, JSON.stringify(results.slice(0, 800)));
+      } catch {
+        console.warn('Failed to cache results locally:', e);
+      }
+    }
+  },
+
+  // Retrieve cached fitness results for scopeKey
+  getResultsFromOfflineCache: (scopeKey: string): FitnessResult[] => {
+    try {
+      const data = localStorage.getItem(`${OFFLINE_RESULTS_PREFIX}${scopeKey}`);
+      if (!data) return [];
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? (parsed as FitnessResult[]) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  // Cache resolved SchoolMember profile locally for zero-latency schoolId lookup on reload
+  saveMemberToOfflineCache: (uid: string, member: SchoolMember | null): void => {
+    if (!uid || !member) return;
+    try {
+      localStorage.setItem(`${OFFLINE_MEMBER_PREFIX}${uid}`, JSON.stringify(member));
+    } catch {
+      // ignore storage quota error
+    }
+  },
+
+  getMemberFromOfflineCache: (uid: string): SchoolMember | null => {
+    if (!uid) return null;
+    try {
+      const data = localStorage.getItem(`${OFFLINE_MEMBER_PREFIX}${uid}`);
+      if (!data) return null;
+      return JSON.parse(data) as SchoolMember;
+    } catch {
+      return null;
+    }
+  },
+
   // Save a student offline (creates or updates in local cache and enqueues sync)
   saveStudentOffline: (student: Student): Student[] => {
     const currentStudents = offlineCacheService.getStudentsFromOfflineCache();
@@ -352,5 +403,26 @@ export const offlineCacheService = {
       pendingSyncCount: pendingQueue.length,
       lastSyncTime: lastSyncStr ? parseInt(lastSyncStr, 10) : null
     };
+  },
+
+  // Clear cached student records, fitness results, member profile, and school branding on logout
+  clearSensitiveCacheOnLogout: (): void => {
+    try {
+      localStorage.removeItem(OFFLINE_STUDENTS_KEY);
+      localStorage.removeItem(OFFLINE_LAST_SYNC_KEY);
+      localStorage.removeItem('smartpe_school_name');
+      localStorage.removeItem('smartpe_school_logo');
+
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith(OFFLINE_RESULTS_PREFIX) || key.startsWith(OFFLINE_MEMBER_PREFIX))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch (e) {
+      console.warn('Failed to clear sensitive offline cache on logout:', e);
+    }
   }
 };

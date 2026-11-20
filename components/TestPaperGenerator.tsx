@@ -18,12 +18,15 @@ import {
   Target,
   Activity,
   Dumbbell,
-  Timer
+  Timer,
+  Share2
 } from 'lucide-react';
 import { TestPaper, Language } from '../types.ts';
 import { generateTestPaper } from '../services/geminiService.ts';
 import { storageService } from '../services/storageService.ts';
 import { exportToPdf, exportToWord } from '../lib/exportUtils.ts';
+import { safeOpenExternal } from '../utils/safeBrowser.ts';
+import { trackEvent } from '../services/analytics.ts';
 
 const TestPaperGenerator: React.FC = () => {
   const [grade, setGrade] = useState('12');
@@ -167,6 +170,23 @@ const TestPaperGenerator: React.FC = () => {
     exportToPdf(contentRef.current, `TestPaper_${topic.slice(0, 15)}_${grade}`).catch(err => {
       console.error("PDF Export error:", err);
     });
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!result) return;
+    const text =
+`📝 *CBSE PHYSICAL EDUCATION QUESTION PAPER*
+🏫 *Class:* ${result.displayGrade || result.grade} | *Type:* ${testType}
+📊 *Max Marks:* ${result.maxMarks} | ⏱️ *Time:* ${result.timeAllowed}
+
+Generate free CBSE PE question papers & marking schemes:
+https://smartpeindia.app/testpaper`;
+    trackEvent('resource_shared', {
+      resource_type: 'Question Paper Generator',
+      channel: 'WhatsApp'
+    });
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    safeOpenExternal(waUrl, "Opening WhatsApp to share Question Paper Generator!");
   };
 
   const handleExportWord = () => {
@@ -501,7 +521,7 @@ const TestPaperGenerator: React.FC = () => {
               <ArrowLeft size={16} />
               <span>Generate New</span>
             </button>
-            <div className="flex space-x-3">
+            <div className="flex flex-wrap gap-2 sm:gap-3">
               {result.markingScheme && (
                 <button 
                   onClick={() => setShowMarkingScheme(!showMarkingScheme)}
@@ -511,6 +531,13 @@ const TestPaperGenerator: React.FC = () => {
                   <span>{showMarkingScheme ? 'View Question Paper' : 'View Marking Scheme'}</span>
                 </button>
               )}
+              <button 
+                onClick={handleShareWhatsApp}
+                className="px-5 py-3 bg-[#25D366] text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-[#20bd5a] transition-all flex items-center space-x-2 shadow-sm"
+              >
+                <Share2 size={16} />
+                <span>Share on WhatsApp</span>
+              </button>
               <button 
                 onClick={handleSave}
                 disabled={isSaved}

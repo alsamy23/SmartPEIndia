@@ -1,9 +1,11 @@
 
 import React, { useState } from 'react';
-import { Activity, Trophy, ChevronRight, Calculator, RefreshCw, Loader2, Award, ClipboardList, AlertCircle, Info, Zap } from 'lucide-react';
+import { Activity, Trophy, ChevronRight, Calculator, RefreshCw, Loader2, Award, ClipboardList, AlertCircle, Info, Zap, Share2 } from 'lucide-react';
 import { evaluateKheloIndiaScores } from '../services/geminiService.ts';
 import { FitnessAssessment } from '../types.ts';
 import { getDescriptiveFieldInfo } from '../utils/bmiUtils.ts';
+import { safeOpenExternal } from '../utils/safeBrowser.ts';
+import { trackEvent } from '../services/analytics.ts';
 
 const KheloIndia: React.FC = () => {
   const [age, setAge] = useState('12');
@@ -81,14 +83,37 @@ const KheloIndia: React.FC = () => {
     }
   };
 
+  const handleShareWhatsApp = () => {
+    const categoryLabel = `Age ${age} (${gender === 'Male' ? 'Boy' : 'Girl'})`;
+    const text = result
+      ? `🏃 *KHELO INDIA FITNESS BENCHMARK*\n📊 *Category:* ${categoryLabel}\n🏅 *Tests Evaluated:* ${result.tests?.length || 0} SAI Battery Tests\n\nCheck Khelo India percentiles & CBSE fitness ratings for free:\nhttps://smartpeindia.app/khelo-india`
+      : `🏃 *FREE KHELO INDIA FITNESS CALCULATOR*\nInstant percentile & medal ratings for school PE teachers (50m/30m/25m sprint, 600m run, sit & reach, curl-ups & push-ups).\n\nTry it on SmartPE India:\nhttps://smartpeindia.app/khelo-india`;
+    trackEvent('resource_shared', {
+      resource_type: 'Khelo India Calculator',
+      channel: 'WhatsApp'
+    });
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    safeOpenExternal(waUrl, "Opening WhatsApp to share Khelo India Calculator!");
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in pb-20">
       <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-[2.5rem] p-10 text-white shadow-xl relative overflow-hidden">
-        <div className="relative z-10">
-          <h2 className="text-4xl font-black mb-4 uppercase tracking-tighter">Khelo India Assessment</h2>
-          <p className="text-orange-100 max-w-xl text-lg font-medium leading-relaxed">
-            Instant percentile calculations and medal criteria based on the official National Fitness Protocols and CBSE metrics.
-          </p>
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 className="text-4xl font-black mb-4 uppercase tracking-tighter">Khelo India Assessment</h2>
+            <p className="text-orange-100 max-w-xl text-lg font-medium leading-relaxed">
+              Instant percentile calculations and medal criteria based on the official National Fitness Protocols and CBSE metrics.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleShareWhatsApp}
+            className="self-start sm:self-center px-4 py-2.5 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all active:scale-95 shrink-0 cursor-pointer"
+          >
+            <Share2 size={15} />
+            <span>Share on WhatsApp</span>
+          </button>
         </div>
         <Trophy className="absolute right-[-20px] bottom-[-40px] w-64 h-64 text-white/10 rotate-12" />
       </div>
@@ -220,11 +245,21 @@ const KheloIndia: React.FC = () => {
             </div>
           ) : (
             <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 animate-slide-up">
-               <div className="flex justify-between items-center mb-8 border-b pb-4">
+               <div className="flex flex-wrap justify-between items-center gap-3 mb-8 border-b pb-4">
                  <h3 className="text-2xl font-black text-slate-800">Performance Report</h3>
-                 <button onClick={() => setResult(null)} className="p-2 text-slate-400 hover:text-orange-500">
-                   <RefreshCw size={20} />
-                 </button>
+                 <div className="flex items-center gap-2">
+                   <button
+                     type="button"
+                     onClick={handleShareWhatsApp}
+                     className="px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                   >
+                     <Share2 size={14} />
+                     <span>Share on WhatsApp</span>
+                   </button>
+                   <button onClick={() => setResult(null)} className="p-2 text-slate-400 hover:text-orange-500" title="Reset results">
+                     <RefreshCw size={20} />
+                   </button>
+                 </div>
                </div>
 
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">

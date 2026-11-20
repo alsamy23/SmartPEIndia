@@ -259,11 +259,11 @@ const Dashboard: React.FC<{
       const scrolledRatio = scrollY / docHeight;
       if (scrolledRatio >= 0.5 && !sessionStorage.getItem('scrolled_home_50')) {
         sessionStorage.setItem('scrolled_home_50', 'true');
-        trackEvent('scroll_50', { page_location: '/', page_title: 'Physical Education Software for Indian Schools' });
+        trackEvent('scroll_50', { page_location: '/', page_title: 'Digital Physical Education Platform for Indian Schools' });
       }
       if (scrolledRatio >= 0.9 && !sessionStorage.getItem('scrolled_home_90')) {
         sessionStorage.setItem('scrolled_home_90', 'true');
-        trackEvent('scroll_90', { page_location: '/', page_title: 'Physical Education Software for Indian Schools' });
+        trackEvent('scroll_90', { page_location: '/', page_title: 'Digital Physical Education Platform for Indian Schools' });
       }
     };
 
@@ -336,13 +336,13 @@ const Dashboard: React.FC<{
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#D4A017]/15 border border-[#D4A017]/40 rounded-full">
             <span className="w-2 h-2 rounded-full bg-[#D4A017] animate-ping"></span>
             <span className="text-[9.5px] font-black uppercase text-[#0D2B52] tracking-widest">
-              Physical Education Software • Built for Indian Schools
+              PE Digital Platform • Built for Indian Schools
             </span>
           </div>
 
           <div className="space-y-2">
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[2.85rem] xl:text-[3.2rem] font-black font-display tracking-tight leading-[0.98] text-[#0D2B52] uppercase">
-              Physical Education Software <br className="hidden md:block"/>
+              Digital Physical Education Platform <br className="hidden md:block"/>
               <span className="text-[#D4A017]">for Indian Schools</span>
             </h1>
             
@@ -357,11 +357,11 @@ const Dashboard: React.FC<{
             </div>
 
             <p className="text-xs sm:text-sm text-[#333333] max-w-xl leading-relaxed font-medium">
-              SmartPE helps schools plan PE lessons, assess students, track fitness, manage PE records, and generate organized reports — all in one platform built for physical education.
+              SmartPE helps schools plan PE lessons, assess students, track fitness, manage PE records, and generate organized reports — all in one PE digital platform.
             </p>
 
             <p className="text-xs text-slate-600 max-w-xl leading-relaxed font-semibold">
-              Designed for CBSE schools, PE teachers and PE departments in India.
+              Designed for CBSE schools, PE teachers, principals, and sports departments in India.
             </p>
           </div>
 
@@ -370,6 +370,7 @@ const Dashboard: React.FC<{
             <button 
               onClick={() => {
                 trackEvent('hero_cta_click', { cta_name: 'explore_smartpe_hero', page_location: '/', target_tab: 'planner' });
+                trackEvent('lesson_planner_click', { source: 'dashboard_hero' });
                 onNavigate?.('planner');
               }}
               className="group w-full sm:w-auto px-6 py-3.5 bg-[#0D2B52] text-white rounded-full font-black text-xs uppercase tracking-wider transition-all hover:bg-[#164077] hover:-translate-y-0.5 active:translate-y-0 shadow-[3px_3px_0px_0px_rgba(13,43,82,1)] border-2 border-slate-900 text-center flex items-center justify-center space-x-2 cursor-pointer"
@@ -381,6 +382,7 @@ const Dashboard: React.FC<{
             <button 
               onClick={() => {
                 trackEvent('hero_cta_click', { cta_name: 'see_pe_features_hero', page_location: '/', target_tab: 'tools' });
+                trackEvent('demo_click', { feature_name: 'pe_tools_overview', page_location: '/' });
                 onNavigate?.('tools');
               }}
               className="w-full sm:w-auto px-6 py-3.5 bg-white border-2 border-[#0D2B52]/30 text-[#0D2B52] rounded-full font-black text-xs uppercase tracking-wider hover:border-[#0D2B52] hover:bg-slate-50 transition-all text-center flex items-center justify-center cursor-pointer"
@@ -466,7 +468,7 @@ const Dashboard: React.FC<{
           <div className="space-y-1">
             <span className="text-[10px] font-black uppercase tracking-widest text-[#D4A017]">NATIONAL CURRICULUM & ASSESSMENT</span>
             <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-[#0D2B52] uppercase font-display">
-              Physical Education Software Modules
+              PE Digital Platform Modules
             </h2>
           </div>
           <p className="text-xs text-slate-500 font-medium max-w-md">
@@ -501,6 +503,7 @@ const Dashboard: React.FC<{
           <div 
             onClick={() => {
               trackEvent('feature_click', { feature_name: 'khelo_india_card', page_location: '/' });
+              trackEvent('fitness_assessment_click', { source: 'dashboard_module_card' });
               onNavigate?.('khelo-india-fitness-assessment');
             }}
             className="p-5 rounded-2xl bg-gradient-to-br from-emerald-50/70 to-white border-2 border-slate-900 hover:shadow-[4px_4px_0px_0px_rgba(13,43,82,1)] hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between group"
@@ -513,7 +516,7 @@ const Dashboard: React.FC<{
                 Khelo India Fitness Assessment
               </h3>
               <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
-                Manage student fitness assessment data. Record official SAI battery scores, calculate percentiles, and print reports.
+                Manage student fitness assessment data. Record SAI-aligned battery scores, calculate percentiles, and print reports.
               </p>
             </div>
             <div className="pt-3 flex items-center text-xs font-black text-emerald-900 group-hover:translate-x-1 transition-transform">
@@ -655,18 +658,20 @@ const Dashboard: React.FC<{
                   </button>
                 </div>
                 <div className="md:col-span-5 bg-orange-50/50 p-6 rounded-[2rem] border-2 border-orange-100 space-y-4">
-                  <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest block">Daily Value Metrics</span>
+                  <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest block">Workflow Impact</span>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white p-3 rounded-xl border border-slate-100">
-                      <p className="text-2xl font-black text-[#FF6B00]">5+ Hrs</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">Weekly time saved</p>
+                      <p className="text-2xl font-black text-[#FF6B00]">60s</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase">Draft lesson plans</p>
                     </div>
                     <div className="bg-white p-3 rounded-xl border border-slate-100">
-                      <p className="text-2xl font-black text-slate-900">0</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">Paper registers needed</p>
+                      <p className="text-2xl font-black text-slate-900">Digital</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase">Field & term logs</p>
                     </div>
                   </div>
-                  <p className="text-[10px] text-slate-500 italic font-semibold">"I used to spend my Sundays writing CBSE lesson diaries. Now I generate them in seconds on my phone." — PE Teacher, Chennai</p>
+                  <p className="text-[10px] text-slate-600 font-semibold leading-relaxed">
+                    Designed around real ground periods—plan structured warm-ups, record tests offline on the field, and print clean class summaries without manual spreadsheets.
+                  </p>
                 </div>
               </motion.div>
             )}
@@ -702,18 +707,20 @@ const Dashboard: React.FC<{
                   </button>
                 </div>
                 <div className="md:col-span-5 bg-indigo-50/50 p-6 rounded-[2rem] border-2 border-indigo-100 space-y-4">
-                  <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest block">Operational Metrics</span>
+                  <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest block">Department Visibility</span>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white p-3 rounded-xl border border-slate-100">
-                      <p className="text-2xl font-black text-indigo-600">100%</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">Staff alignment</p>
+                      <p className="text-2xl font-black text-indigo-600">Unified</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase">Staff roster sync</p>
                     </div>
                     <div className="bg-white p-3 rounded-xl border border-slate-100">
                       <p className="text-2xl font-black text-slate-900">Live</p>
                       <p className="text-[9px] font-bold text-slate-400 uppercase">Equipment audit</p>
                     </div>
                   </div>
-                  <p className="text-[10px] text-slate-500 italic font-semibold">"SmartPE gives me perfect visibility. I know exactly which grade is doing which CBSE strand today." — HoD PE, Mumbai</p>
+                  <p className="text-[10px] text-slate-600 font-semibold leading-relaxed">
+                    Track which teacher has completed Baseline, Term 1, or Term 2 assessments across every section from one department command view.
+                  </p>
                 </div>
               </motion.div>
             )}
@@ -726,22 +733,22 @@ const Dashboard: React.FC<{
               >
                 <div className="md:col-span-7 space-y-4">
                   <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[9px] font-black uppercase tracking-wider">For Principals & Trust Boards</span>
-                  <h4 className="text-2xl font-black text-slate-900 uppercase">Audit-Ready Compliance & Parent Brand Trust</h4>
+                  <h4 className="text-2xl font-black text-slate-900 uppercase">Audit-Ready Documentation & Parent Trust</h4>
                   <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                    Satisfy school inspectors and board audits (CBSE, ICSE, state boards) instantly. Present continuous physical assessment portfolios and build parents' brand trust.
+                    Keep organized documentation ready for school inspections and board reviews (CBSE, ICSE, state boards) with continuous physical development records.
                   </p>
                   <ul className="space-y-2.5 text-xs text-slate-700 font-semibold">
                     <li className="flex items-center gap-2">
                       <span className="text-emerald-500 font-bold">✓</span>
-                      1-click generation of CBSE-compliant Health Cards and BMI sheets.
+                      1-click generation of CBSE-aligned Health Cards and BMI sheets.
                     </li>
                     <li className="flex items-center gap-2">
                       <span className="text-emerald-500 font-bold">✓</span>
-                      Print-ready, professional inspection folders with evidence-backed curriculum compliance.
+                      Print-ready, organized inspection folders with curriculum & term progress logs.
                     </li>
                     <li className="flex items-center gap-2">
                       <span className="text-emerald-500 font-bold">✓</span>
-                      Automated professional parent letters for sports day and health alerts.
+                      Ready-to-print parent circulars for sports days and health alerts.
                     </li>
                   </ul>
                   <button type="button" onClick={() => onNavigate?.('principal-dashboard')} className="mt-2 text-xs font-black uppercase tracking-wider text-emerald-600 hover:underline flex items-center gap-1 bg-transparent border-0 cursor-pointer">
@@ -749,18 +756,20 @@ const Dashboard: React.FC<{
                   </button>
                 </div>
                 <div className="md:col-span-5 bg-emerald-50/50 p-6 rounded-[2rem] border-2 border-emerald-100 space-y-4">
-                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block">Governance Ratings</span>
+                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block">Governance & Oversight</span>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white p-3 rounded-xl border border-slate-100">
-                      <p className="text-2xl font-black text-emerald-600">Zero</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">Audit failures</p>
+                      <p className="text-2xl font-black text-emerald-600">Aligned</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase">CBSE Strands 1–4</p>
                     </div>
                     <div className="bg-white p-3 rounded-xl border border-slate-100">
                       <p className="text-2xl font-black text-slate-900">Custom</p>
                       <p className="text-[9px] font-bold text-slate-400 uppercase">Parent reports</p>
                     </div>
                   </div>
-                  <p className="text-[10px] text-slate-500 italic font-semibold">"For inspections, having physical education records digitized and cataloged in SmartPE is a complete relief." — Principal, Dehradun</p>
+                  <p className="text-[10px] text-slate-600 font-semibold leading-relaxed">
+                    View class-wise assessment coverage, remaining term deadlines, and teacher-by-teacher completion metrics in real time.
+                  </p>
                 </div>
               </motion.div>
             )}
@@ -822,26 +831,29 @@ const Dashboard: React.FC<{
           <div className="text-center">
             <span className="text-[11px] font-black uppercase tracking-widest text-[#10B981]">STAGE 3: RESULTS & DELIVERABLES</span>
             <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight mt-1">3. See the Real Results: Sample Outputs</h3>
-            <p className="text-xs text-slate-500 font-semibold max-w-lg mx-auto">Don't take our word for it. Review the actual, board-compliant physical documents and cards generated by the platform instantly.</p>
+            <p className="text-xs text-slate-500 font-semibold max-w-lg mx-auto">Preview sample curriculum-aligned lesson diaries, skill rubrics, student fitness cards, and inspection summary formats generated inside SmartPE.</p>
           </div>
 
           <div className="bg-slate-950 border-4 border-slate-900 rounded-[2.5rem] p-4 sm:p-8 md:p-10 text-white space-y-8 shadow-[8px_8px_0px_0px_rgba(15,23,42,1)]">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between border-b border-slate-800 pb-6 gap-4">
               <div>
                 <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">OUTPUT TEMPLATE EXPLORER</span>
-                <h4 className="text-xl font-black uppercase tracking-tight">Interactive High-Fidelity Previews</h4>
+                <h4 className="text-xl font-black uppercase tracking-tight">Interactive Sample Previews</h4>
               </div>
               <div className="flex flex-wrap gap-2">
                 {[
                   { id: 'lesson', label: '📄 CBSE Lesson Plan' },
                   { id: 'rubric', label: '📋 CBSE Skill Rubric' },
                   { id: 'report', label: '📊 Student Health Card' },
-                  { id: 'inspection', label: '📂 Board Inspection Folder' },
+                  { id: 'inspection', label: '📂 Inspection Summary' },
                 ].map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setSampleOutputTab(tab.id as any)}
+                    onClick={() => {
+                      setSampleOutputTab(tab.id as any);
+                      trackEvent('report_preview', { report_type: tab.id, format: 'interactive_sample' });
+                    }}
                     className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border-2 ${
                       sampleOutputTab === tab.id
                         ? 'bg-[#FF6B00] text-white border-slate-900 shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] font-black'
@@ -933,17 +945,17 @@ const Dashboard: React.FC<{
                 <div className="space-y-6 animate-in fade-in duration-300">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b-2 border-slate-200 pb-4 gap-2">
                     <div>
-                      <span className="text-[9px] font-black uppercase text-indigo-600 tracking-wider">OFFICIAL ASSESSMENT RUBRIC MATRIX</span>
-                      <h5 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-900">CBSE BOARD PRACTICAL GRADING MATRIX</h5>
+                      <span className="text-[9px] font-black uppercase text-indigo-600 tracking-wider">CBSE-ALIGNED ASSESSMENT RUBRIC</span>
+                      <h5 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-900">SAMPLE PRACTICAL GRADING MATRIX</h5>
                     </div>
                     <div className="text-left sm:text-right text-[10px] font-mono text-slate-500 font-semibold space-y-0.5">
-                      <p>RUB ID: SMP-RB-9941</p>
-                      <p>ALIGNED: NEW NEP 2020 CRITERIA</p>
+                      <p>SAMPLE ID: SMP-RB-9941</p>
+                      <p>ALIGNED: NEP 2020 CRITERIA</p>
                     </div>
                   </div>
 
                   <p className="text-xs text-slate-650 font-semibold leading-relaxed">
-                    Designed to be printed or pasted on physical registers. Grading standard for <strong className="text-slate-900">High School Practical Sports Examinations</strong>.
+                    Designed to be printed or exported for PE practical records. Structured rubric for <strong className="text-slate-900">School Practical Sports Evaluations</strong>.
                   </p>
 
                   <div className="overflow-x-auto font-bold">
@@ -965,9 +977,9 @@ const Dashboard: React.FC<{
                         </tr>
                         <tr>
                           <td className="py-3 font-black text-slate-900">Form & Stance</td>
-                          <td className="py-3 font-medium">Perfect knee flexion, athletic low center of gravity, rapid body direction shifts.</td>
+                          <td className="py-3 font-medium">Balanced knee flexion, low athletic center of gravity, controlled direction shifts.</td>
                           <td className="py-3 font-medium">Maintains upright posture, slowing lateral deceleration.</td>
-                          <td className="py-3 font-medium">Rigid, slouching posture; high risk of trip or minor joint strain.</td>
+                          <td className="py-3 font-medium">Rigid, slouching posture; needs support for balance and footwork.</td>
                         </tr>
                         <tr>
                           <td className="py-3 font-black text-slate-900">Match Ethics</td>
@@ -985,12 +997,12 @@ const Dashboard: React.FC<{
                 <div className="space-y-6 animate-in fade-in duration-300">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b-2 border-slate-200 pb-4 gap-2">
                     <div>
-                      <span className="text-[9px] font-black uppercase text-emerald-600 tracking-wider">BOARD COMPLIANT STUDENT PROFILE</span>
-                      <h5 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-900">STUDENT FITNESS CARD & HEALTH CARD</h5>
+                      <span className="text-[9px] font-black uppercase text-emerald-600 tracking-wider">SAMPLE STUDENT FITNESS PROFILE</span>
+                      <h5 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-900">STUDENT FITNESS & HEALTH CARD</h5>
                     </div>
                     <div className="text-left sm:text-right text-[10px] font-mono text-slate-500 font-semibold space-y-0.5">
-                      <p>CARD ID: SMP-REP-003</p>
-                      <p>PROTOCOL: KHELO INDIA KIFT STANDARDS</p>
+                      <p>SAMPLE ID: SMP-REP-003</p>
+                      <p>PROTOCOL: KHELO INDIA–ALIGNED</p>
                     </div>
                   </div>
 
@@ -999,9 +1011,9 @@ const Dashboard: React.FC<{
                       KD
                     </div>
                     <div className="text-xs text-slate-700 font-bold space-y-0.5">
-                      <h6 className="text-sm font-black text-slate-900 uppercase">KABIR DUTT (Roll No. 12)</h6>
+                      <h6 className="text-sm font-black text-slate-900 uppercase">SAMPLE STUDENT (Roll No. 12)</h6>
                       <p>Grade 8-A &bull; Age: 13 Yrs &bull; Weight: 46 kg &bull; Height: 154 cm</p>
-                      <p className="text-[10px] text-[#FF6B00]">Last Synced: March 2026 via SmartPE Cloud</p>
+                      <p className="text-[10px] text-[#FF6B00]">Sample Preview • Generated in SmartPE</p>
                     </div>
                   </div>
 
@@ -1025,8 +1037,8 @@ const Dashboard: React.FC<{
                   </div>
 
                   <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-[10px] font-black text-[#FF6B00] uppercase tracking-wider font-bold">
-                    <span>Overall Health Standing: Healthy BMI ✓</span>
-                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg">Inspected & Verified</span>
+                    <span>BMI Indicator: Healthy Range ✓</span>
+                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg">Sample Card Preview</span>
                   </div>
                 </div>
               )}
@@ -1035,40 +1047,40 @@ const Dashboard: React.FC<{
                 <div className="space-y-6 animate-in fade-in duration-300 font-bold">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b-2 border-slate-200 pb-4 gap-2">
                     <div>
-                      <span className="text-[9px] font-black uppercase text-indigo-600 tracking-wider">GOVERNANCE & AUDIT REPORT</span>
-                      <h5 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-900">BOARD COMPLIANCE & INSPECTION CHECKSHEET</h5>
+                      <span className="text-[9px] font-black uppercase text-indigo-600 tracking-wider">DEPARTMENT OVERSIGHT SUMMARY</span>
+                      <h5 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-900">SAMPLE PE INSPECTION CHECKSHEET</h5>
                     </div>
                     <div className="text-left sm:text-right text-[10px] font-mono text-slate-500 font-semibold space-y-0.5">
-                      <p>AUD ID: SMP-AUD-2026</p>
-                      <p>AUDITOR: OFFICIAL SCHOOL BOARD STANDARDS</p>
+                      <p>SAMPLE ID: SMP-AUD-2026</p>
+                      <p>ALIGNED: NEP 2020 & CBSE HPE</p>
                     </div>
                   </div>
 
                   <p className="text-xs text-slate-650 font-semibold leading-relaxed">
-                    Instantly export this folder for inspectors to prove continuous assessment compliance under <strong className="text-slate-900">NEP 2020 Guidelines</strong>.
+                    Export organized department logs to document continuous physical education assessment under <strong className="text-slate-900">NEP 2020 Guidelines</strong>.
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
                       <span className="text-[9px] font-black uppercase text-indigo-600">Syllabus Strands</span>
                       <p className="text-2xl font-black text-slate-900">4 / 4</p>
-                      <p className="text-[10px] font-semibold text-slate-500 leading-tight">Fully aligned across Games, Health, SEWA & Health Cards.</p>
+                      <p className="text-[10px] font-semibold text-slate-500 leading-tight">Aligned across Games, Health, SEWA & Health Cards.</p>
                     </div>
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-                      <span className="text-[9px] font-black uppercase text-emerald-600">Continuous Assessment</span>
-                      <p className="text-2xl font-black text-slate-900">100%</p>
-                      <p className="text-[10px] font-semibold text-slate-500 leading-tight">Every student profile contains recorded baseline, midline and final marks.</p>
+                      <span className="text-[9px] font-black uppercase text-emerald-600">Term Tracking</span>
+                      <p className="text-2xl font-black text-slate-900">3 Phases</p>
+                      <p className="text-[10px] font-semibold text-slate-500 leading-tight">Baseline, Term 1 & Term 2 assessments tracked per class.</p>
                     </div>
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-                      <span className="text-[9px] font-black uppercase text-amber-600">Audit Evidence</span>
-                      <p className="text-2xl font-black text-slate-900">Present</p>
-                      <p className="text-[10px] font-semibold text-slate-500 leading-tight">All digital diaries signed, timestamps locked, and secure.</p>
+                      <span className="text-[9px] font-black uppercase text-amber-600">Audit Readiness</span>
+                      <p className="text-2xl font-black text-slate-900">Export</p>
+                      <p className="text-[10px] font-semibold text-slate-500 leading-tight">CSV & print-ready registers prepared per school workspace.</p>
                     </div>
                   </div>
 
                   <div className="bg-emerald-50/50 p-3.5 rounded-xl border border-emerald-100 flex items-center gap-3">
                     <span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs">✓</span>
-                    <p className="text-[10px] font-bold text-slate-700">Your school PE department is currently ranked as <strong className="text-emerald-700">"Excellent" (Grade A)</strong> in terms of compliance records.</p>
+                    <p className="text-[10px] font-bold text-slate-700">Live figures update dynamically from your school&apos;s own recorded rosters and assessments.</p>
                   </div>
                 </div>
               )}

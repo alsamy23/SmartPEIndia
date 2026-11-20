@@ -49,9 +49,11 @@ import { isBrandSuperAdmin } from '../types';
 import { auth, db } from '../services/firebase.ts';
 import { SEOConfig, DEFAULT_SEO_CONFIG, loadSEOConfig, saveSEOConfig, RouteSEOOverride } from '../services/seoService.ts';
 import { DataPrivacyTab } from './privacy/DataPrivacyTab.tsx';
+import { privacyAuditService } from '../services/privacyAuditService.ts';
 import { userActivityService, LoginActivityRecord } from '../services/userActivityService.ts';
 import { callAIBase } from '../services/geminiService.ts';
 import { safeCopyToClipboard, downloadCsvFile } from '../utils/safeBrowser.ts';
+import { sendTeacherInviteEmail } from '../services/emailService.ts';
 
 const SchoolAdmin: React.FC = () => {
   const [members, setMembers] = useState<SchoolMember[]>([]);
@@ -90,6 +92,7 @@ const SchoolAdmin: React.FC = () => {
   const [userSearchQuery, setUserSearchQuery] = useState<string>('');
   const [userTypeFilter, setUserTypeFilter] = useState<'all' | 'school' | 'academy' | 'personal'>('all');
   const [loadingDirectory, setLoadingDirectory] = useState<boolean>(false);
+  const [deletingTargetId, setDeletingTargetId] = useState<string | null>(null);
 
   // Camera Capture States for School Logo
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -760,18 +763,31 @@ Friday Period 3: Grade 7B - Fitness`;
         return;
       }
 
+      const targetSchoolName = currentSchool?.name || userProfile.schoolName || 'SmartPE Partner School';
       await fitnessService.addTeamMember({
         uid: `pending_${Math.random().toString(36).substr(2, 9)}`,
         schoolId: userProfile.schoolId,
-        schoolName: currentSchool?.name || userProfile.schoolName || 'SmartPE Partner School',
+        schoolName: targetSchoolName,
         schoolLogo: currentSchool?.logoUrl || userProfile.schoolLogo || '',
         displayName: cleanName,
         email: cleanEmail,
         role: newMember.role || 'teacher'
       });
-      
-      setSuccess(`Teacher ${cleanName} (${cleanEmail}) added to school. They will have access upon sign-in.`);
-      toast.success(`Teacher added!`);
+
+      const inviteRes = await sendTeacherInviteEmail({
+        toEmail: cleanEmail,
+        recipientName: cleanName,
+        schoolName: targetSchoolName,
+        role: newMember.role || 'teacher',
+        inviterName: userProfile.displayName || auth.currentUser?.displayName || 'School Administrator'
+      }).catch(() => ({ success: false, message: '' }));
+
+      setSuccess(
+        inviteRes.success
+          ? `Teacher ${cleanName} (${cleanEmail}) added and email invitation sent!`
+          : `Teacher ${cleanName} (${cleanEmail}) added to school. They will have access upon sign-in.`
+      );
+      toast.success(inviteRes.success ? 'Teacher added & invite sent!' : 'Teacher added to school!');
       setIsAdding(false);
       setNewMember({ email: '', displayName: '', role: 'teacher' });
       
@@ -804,6 +820,91 @@ Friday Period 3: Grade 7B - Fitness`;
     } finally {
       setSeoLoading(false);
     }
+  };
+
+  const handleSuperAdminDeleteUser = (targetUser: any) => {
+    if (!isSuperAdmin || !targetUser?.uid) return;
+    if (targetUser.email?.toLowerCase() === auth.currentUser?.email?.toLowerCase()) {
+      toast.error('You cannot delete your own active Super Admin profile from the directory.');
+      return;
+    }
+    const label = targetUser.displayName || targetUser.email || targetUser.uid;
+    toast.confirm(
+      `Admin Direct Delete: Permanently delete "${label}" and all of their owned workspace/student data immediately? This cannot be undone.`,
+      async () => {
+        setDeletingTargetId(targetUser.uid);
+        try {
+          const summary = await privacyAuditService.superAdminDeleteUserAndData({
+            uid: targetUser.uid,
+            email: targetUser.email,
+            schoolId: targetUser.schoolId,
+            academyId: targetUser.academyId,
+            role: targetUser.role,
+            deleteOwnedWorkspace: true
+          });
+          setRegisteredUsers(prev => prev.filter(u => u.uid !== targetUser.uid));
+          if (targetUser.schoolId && targetUser.role === 'admin') {
+            setAllSchools(prev => prev.filter(s => s.id !== targetUser.schoolId));
+          }
+          if (targetUser.academyId) {
+            setAcademicPrograms(prev => prev.filter(p => p.id !== targetUser.academyId));
+          }
+          toast.success(`Deleted user & ${summary.deletedRecordsCount} associated records immediately.`);
+        } catch (err) {
+          console.error('Super Admin user delete failed:', err);
+          toast.error('Failed to delete user data.');
+        } finally {
+          setDeletingTargetId(null);
+        }
+      }
+    );
+  };
+
+  const handleSuperAdminDeleteSchool = (school: any) => {
+    if (!isSuperAdmin || !school?.id) return;
+    toast.confirm(
+      `Admin Direct Delete: Permanently delete school "${school.name}" and ALL its students, test results, practicals, teams, and timetables immediately?`,
+      async () => {
+        setDeletingTargetId(school.id);
+        try {
+          const summary = await privacyAuditService.deleteSchoolWorkspaceData(school.id, {
+            deleteSchoolRecord: true,
+            deleteCurrentUserAccount: false,
+            reason: 'Super Admin direct school deletion'
+          });
+          setAllSchools(prev => prev.filter(s => s.id !== school.id));
+          if (currentSchool?.id === school.id) {
+            setCurrentSchool(null);
+          }
+          toast.success(`School "${school.name}" & ${summary.deletedRecordsCount} records permanently deleted.`);
+        } catch (err) {
+          console.error('Super Admin school delete failed:', err);
+          toast.error('Failed to delete school workspace.');
+        } finally {
+          setDeletingTargetId(null);
+        }
+      }
+    );
+  };
+
+  const handleSuperAdminDeleteAcademy = (prog: any) => {
+    if (!isSuperAdmin || !prog?.id) return;
+    toast.confirm(
+      `Admin Direct Delete: Permanently delete academy "${prog.programName}" and all athletes/assessments immediately?`,
+      async () => {
+        setDeletingTargetId(prog.id);
+        try {
+          const summary = await privacyAuditService.deleteAcademyProgramData(prog.id);
+          setAcademicPrograms(prev => prev.filter(p => p.id !== prog.id));
+          toast.success(`Academy "${prog.programName}" & ${summary.deletedRecordsCount} records permanently deleted.`);
+        } catch (err) {
+          console.error('Super Admin academy delete failed:', err);
+          toast.error('Failed to delete academy program.');
+        } finally {
+          setDeletingTargetId(null);
+        }
+      }
+    );
   };
 
   if (loading && !members.length) {
@@ -857,10 +958,16 @@ Friday Period 3: Grade 7B - Fitness`;
             <button
               key={school.id}
               onClick={async () => {
+                setCurrentSchool(school);
+                setSchoolNameInput(school.name || '');
                 const members = await fitnessService.getSchoolMembers(school.id);
                 setMembers(members);
               }}
-              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-200 transition-all"
+              className={`px-4 py-2 border rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                currentSchool?.id === school.id
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white border-slate-200 hover:bg-indigo-50 hover:border-indigo-200'
+              }`}
             >
               {school.name}
             </button>
@@ -1808,7 +1915,7 @@ Friday Period 3: Grade 7B - Fitness`;
                         className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-[#0D2B52] focus:bg-white transition-all resize-none"
                         value={seoConfig.metaDescription}
                         onChange={e => setSeoConfig({ ...seoConfig, metaDescription: e.target.value })}
-                        placeholder="Comprehensive description summarizing your PE software capabilities..."
+                        placeholder="Comprehensive description summarizing your PE digital platform capabilities..."
                       />
                     </div>
 
@@ -2178,14 +2285,14 @@ Friday Period 3: Grade 7B - Fitness`;
                       <h5 className="text-[#1a0dab] hover:underline font-normal text-base leading-snug cursor-pointer font-sans line-clamp-2">
                         {selectedSeoSubTab === 'routes' && seoConfig.routeOverrides?.[selectedRouteKey]?.title
                           ? `${seoConfig.routeOverrides[selectedRouteKey].title} | ${seoConfig.metaTitlePrefix || 'Smart PE India'}`
-                          : `${seoConfig.metaTitlePrefix || 'Smart PE India (smartpeindia.app)'} | #1 AI Platform for PE Teachers`}
+                          : `${seoConfig.metaTitlePrefix || 'Smart PE India (smartpeindia.app)'} | PE Digital Platform for Schools`}
                       </h5>
 
                       {/* Snippet Description */}
                       <p className="text-xs text-[#4d5156] font-normal leading-relaxed line-clamp-3">
                         <strong className="text-slate-800">SmartPE India</strong> {selectedSeoSubTab === 'routes' && seoConfig.routeOverrides?.[selectedRouteKey]?.description
                           ? seoConfig.routeOverrides[selectedRouteKey].description
-                          : (seoConfig.metaDescription || "India's #1 AI-powered platform for Physical Education teachers and schools.")}
+                          : (seoConfig.metaDescription || "PE Digital Platform for Indian Physical Education teachers and schools.")}
                       </p>
 
                       {/* Google Sitelinks */}
@@ -2733,6 +2840,15 @@ Friday Period 3: Grade 7B - Fitness`;
                                   <Mail size={14} />
                                 </a>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => handleSuperAdminDeleteUser(user)}
+                                disabled={deletingTargetId === user.uid || user.email?.toLowerCase() === auth.currentUser?.email?.toLowerCase()}
+                                title="Admin Direct Delete User & Data"
+                                className="p-1.5 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                {deletingTargetId === user.uid ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -2752,13 +2868,57 @@ Friday Period 3: Grade 7B - Fitness`;
           </div>
           )}
 
+          {/* Registered Schools Direct Management */}
+          {allSchools.length > 0 && (
+            <div className="bg-white border-2 border-slate-900 p-6 rounded-[2rem] shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-black text-lg text-slate-900 uppercase tracking-tight">
+                    Registered Schools ({allSchools.length})
+                  </h4>
+                  <p className="text-xs text-slate-500">Admin privilege: inspect or permanently delete any school workspace immediately without a request.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {allSchools.map(school => (
+                  <div key={school.id} className="p-5 border-2 border-slate-200 hover:border-slate-900 rounded-2xl transition-all bg-slate-50 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded">
+                        School Workspace
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleSuperAdminDeleteSchool(school)}
+                        disabled={deletingTargetId === school.id}
+                        title="Delete School & All Data Immediately"
+                        className="px-2.5 py-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-40"
+                      >
+                        {deletingTargetId === school.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                    <div>
+                      <h5 className="font-black text-slate-900 text-base truncate">{school.name || 'Partner School'}</h5>
+                      <p className="text-[10px] font-mono text-slate-400 truncate">ID: {school.id}</p>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                      <span>Admin UID: {(school.adminId || '').slice(0, 10)}...</span>
+                      <span>Created: {school.createdAt ? new Date(school.createdAt).toLocaleDateString() : '—'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Academic Clubs & Programs Section */}
           {academicPrograms.length > 0 && (
             <div className="bg-white border-2 border-slate-900 p-6 rounded-[2rem] shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-black text-lg text-slate-900 uppercase tracking-tight">
-                    Registered Sports Clubs & Academic Programs ({academicPrograms.length})
+                    Registered Sports Clubs &amp; Academic Programs ({academicPrograms.length})
                   </h4>
                   <p className="text-xs text-slate-500">All registered athletic academies and club programs platform-wide.</p>
                 </div>
@@ -2767,11 +2927,22 @@ Friday Period 3: Grade 7B - Fitness`;
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {academicPrograms.map(prog => (
                   <div key={prog.id} className="p-5 border-2 border-slate-200 hover:border-slate-900 rounded-2xl transition-all bg-slate-50 space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-[10px] font-black uppercase tracking-widest text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
                         {prog.sport || 'Multi-Sport'}
                       </span>
-                      <span className="text-[10px] font-mono text-slate-400">Code: {prog.inviteCode || '—'}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-slate-400">Code: {prog.inviteCode || '—'}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleSuperAdminDeleteAcademy(prog)}
+                          disabled={deletingTargetId === prog.id}
+                          title="Delete Academy & All Athletes Immediately"
+                          className="p-1.5 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                        >
+                          {deletingTargetId === prog.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <h5 className="font-black text-slate-900 text-base">{prog.programName}</h5>
@@ -2791,8 +2962,8 @@ Friday Period 3: Grade 7B - Fitness`;
 
       {activeAdminTab === 'privacy' && (
         <DataPrivacyTab
-          schoolId={userProfile?.schoolId || (isSuperAdmin && allSchools.length > 0 ? allSchools[0].id : '') || auth.currentUser?.uid || 'default'}
-          schoolName={schoolNameInput || userProfile?.schoolName || 'Partner Educational Institution'}
+          schoolId={currentSchool?.id || userProfile?.schoolId || (isSuperAdmin && allSchools.length > 0 ? allSchools[0].id : '') || auth.currentUser?.uid || 'default'}
+          schoolName={currentSchool?.name || schoolNameInput || userProfile?.schoolName || 'Partner Educational Institution'}
           isAdmin={userProfile?.role === 'admin' || isSuperAdmin}
         />
       )}

@@ -161,6 +161,9 @@ export const SchoolDPAModal: React.FC<SchoolDPAModalProps> = ({
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs font-bold">
                 🔒 <strong>Data Minimization Guarantee:</strong> SmartPE does not collect or require student home addresses, personal telephone numbers, Aadhaar numbers, or unrelated medical histories.
               </div>
+              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-950 text-xs font-semibold">
+                👨‍👩‍👧 <strong>Parental &amp; Guardian Consent (DPDP Act Sec. 9):</strong> Because school students are under 18 years of age, the Partner Institution (<strong>Data Fiduciary</strong>) confirms and warrants that it has provided appropriate notice and obtained valid parent/guardian consent under school admission or PE program policies before authorizing educators to record student records in SmartPE.
+              </div>
             </section>
 
             <section className="space-y-2">
@@ -204,21 +207,21 @@ export const SchoolDPAModal: React.FC<SchoolDPAModalProps> = ({
                 The School retains complete ownership of all data. The School Administrator can:
               </p>
               <ul className="list-disc list-inside pl-2 space-y-1 text-slate-600 font-semibold text-xs">
-                <li><strong>Export Data:</strong> Download a full, structured export of all student profiles, test scores, and assessments at any time.</li>
-                <li><strong>Request Deletion:</strong> Initiate a formal workspace deletion request. To prevent accidental loss, deletion requests undergo a multi-step administrative verification with a 14-day retention buffer before irreversible purging.</li>
+                <li><strong>Export Data Anytime:</strong> Download a full, structured JSON or CSV export of all student profiles, test scores, and assessments at any time.</li>
+                <li><strong>Immediate Direct Deletion Anytime:</strong> School Administrators (and platform administrators) hold direct privilege to permanently delete all school records or close the workspace immediately from School Settings → Data &amp; Privacy—no approval request or waiting period required.</li>
               </ul>
             </section>
 
             <section className="space-y-2">
               <h3 className="text-sm sm:text-base font-black uppercase tracking-tight text-slate-900 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs">6</span>
-                Breach Notification & Support Cooperation
+                Breach Notification &amp; Support Cooperation
               </h3>
               <p>
                 In the unlikely event of a confirmed security incident impacting school data, SmartPE will notify the designated School Administrator without undue delay and within 72 hours of verification, providing details and remedial actions taken.
               </p>
               <p className="text-xs text-slate-500">
-                Official Privacy & Data Protection Contact: <a href="mailto:contact@smartpeindia.app" className="font-bold text-indigo-600 underline">contact@smartpeindia.app</a>
+                Official Privacy &amp; Data Protection Contact: <a href="mailto:contact@smartpeindia.app" className="font-bold text-indigo-600 underline">contact@smartpeindia.app</a>
               </p>
             </section>
           </div>

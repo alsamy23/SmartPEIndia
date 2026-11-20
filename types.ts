@@ -268,6 +268,12 @@ export interface School {
   logoUrl?: string;
   code?: string;
   createdAt: string;
+  termDeadlines?: {
+    Baseline?: string;
+    'Term 1'?: string;
+    'Term 2'?: string;
+    Annual?: string;
+  };
 }
 
 export interface SchoolMember {
@@ -520,6 +526,85 @@ export interface ParentReportSummary {
   teacherNotes?: string;
 }
 
+// =========================================================================
+// 100-MARK TERM PE COMPOSITE EVALUATION & REPORT CARD TYPES
+// =========================================================================
+
+export type CompositeScoringPreset = 'cbse_standard_30_20_50' | 'primary_30_30_40' | 'custom';
+
+export interface CompositeWeightConfig {
+  fitnessMax: number;     // Default 30
+  disciplineMax: number;  // Default 20 (or 30 for Primary)
+  gamesMax: number;       // Default 50 (or 40 for Primary)
+}
+
+export interface SportSkillScoreItem {
+  id: string;
+  skillName: string;
+  score: number;          // e.g. 0 to scaleMax
+}
+
+export interface DisciplineBreakdown {
+  uniform: number;        // 0 to 5
+  punctuality: number;    // 0 to 5
+  sportsmanship: number;  // 0 to 5
+  safety: number;         // 0 to 5
+  rawTotal: number;       // Sum out of 20
+  marksAwarded: number;   // Scaled proportionally to weights.disciplineMax
+}
+
+export interface CompositeFitnessTestBreakdown {
+  testId: string;
+  testName: string;
+  rawValue: string;
+  unit: string;
+  term: string;
+  scorePercent: number;
+  level: DevelopmentLevel;
+}
+
+export interface CompositeFitnessSnapshot {
+  autoScoreOutOf100: number;
+  autoMarksAwarded: number;
+  baselineToTermBonus: number;
+  testsCounted: number;
+  sourceTermUsed: string;
+  testsSummary: CompositeFitnessTestBreakdown[];
+  bmiPoint?: BMIDevelopmentPoint;
+  manualOverrideMarks?: number;
+  overrideReason?: string;
+}
+
+export interface CompositeTermEvaluation {
+  id: string;
+  schoolId: string;
+  teacherId: string;
+  studentId: string;
+  studentName: string;
+  grade: string;
+  section: string;
+  rollNumber: string;
+  academicYear: string;
+  term: string;
+  preset: CompositeScoringPreset;
+  weights: CompositeWeightConfig;
+  fitnessSnapshot: CompositeFitnessSnapshot;
+  discipline: DisciplineBreakdown;
+  games: {
+    sportName: string;
+    scaleMax: 5 | 8 | 10;
+    skills: SportSkillScoreItem[]; // 1 to 8 skills
+    rawTotal: number;
+    rawMax: number;
+    marksAwarded: number;
+  };
+  totalScore: number; // Out of 100
+  cbseGrade: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' | 'D' | 'E';
+  coScholasticGrade: 'A' | 'B' | 'C';
+  remarks: string;
+  updatedAt: string;
+}
+
 // Brand communication and super-administrator emails
 export const BRAND_EMAILS = {
   admin: 'admin@smartpeindia.app',
@@ -532,7 +617,6 @@ export const BRAND_EMAILS = {
 
 export const SUPER_ADMIN_EMAILS = [
   'alsamy36@gmail.com',
-  'admin@smartpeindia.com',
   'admin@smartpeindia.app',
   'contact@smartpeindia.app',
   'info@smartpeindia.app'

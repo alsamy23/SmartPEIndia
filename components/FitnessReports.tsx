@@ -1819,29 +1819,31 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
                   </label>
 
                   {/* Dropdown Trigger Box */}
-                  <button
-                    type="button"
-                    onClick={() => setIsDropdownOpen(prev => !prev)}
-                    className={`w-full p-3.5 bg-slate-50 border-2 rounded-2xl font-bold text-xs text-left transition-all flex items-center justify-between cursor-pointer ${
-                      isDropdownOpen 
-                        ? 'border-indigo-600 bg-white ring-2 ring-indigo-500/20 shadow-sm' 
-                        : selectedId 
-                          ? 'border-slate-900 bg-white text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]' 
-                          : 'border-slate-200 text-slate-400 hover:border-slate-400 hover:bg-slate-100/70'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-2.5 truncate pr-2">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        selectedId ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'
-                      }`}>
-                        {selectedType === 'individual' ? <User size={14} /> : <Users size={14} />}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsDropdownOpen(prev => !prev)}
+                      className={`w-full p-3.5 ${selectedId ? 'pr-16' : 'pr-10'} bg-slate-50 border-2 rounded-2xl font-bold text-xs text-left transition-all flex items-center justify-between cursor-pointer ${
+                        isDropdownOpen 
+                          ? 'border-indigo-600 bg-white ring-2 ring-indigo-500/20 shadow-sm' 
+                          : selectedId 
+                            ? 'border-slate-900 bg-white text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]' 
+                            : 'border-slate-200 text-slate-400 hover:border-slate-400 hover:bg-slate-100/70'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5 truncate pr-2">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                          selectedId ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'
+                        }`}>
+                          {selectedType === 'individual' ? <User size={14} /> : <Users size={14} />}
+                        </div>
+                        <span className={`truncate ${selectedId ? 'font-black text-slate-900 text-xs' : 'font-semibold text-slate-400'}`}>
+                          {selectedDisplayLabel}
+                        </span>
                       </div>
-                      <span className={`truncate ${selectedId ? 'font-black text-slate-900 text-xs' : 'font-semibold text-slate-400'}`}>
-                        {selectedDisplayLabel}
-                      </span>
-                    </div>
+                    </button>
 
-                    <div className="flex items-center space-x-1 shrink-0 text-slate-400">
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center space-x-1 text-slate-400 pointer-events-none">
                       {selectedId && (
                         <button
                           type="button"
@@ -1851,7 +1853,7 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
                             setSelectedViaStudent(null);
                             setSearchQuery('');
                           }}
-                          className="p-1 hover:bg-slate-100 hover:text-slate-700 rounded-lg transition cursor-pointer"
+                          className="p-1 hover:bg-slate-100 hover:text-slate-700 rounded-lg transition cursor-pointer pointer-events-auto"
                           title="Clear selection"
                         >
                           <X size={14} />
@@ -1859,7 +1861,7 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
                       )}
                       <ChevronDown size={16} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180 text-indigo-600' : ''}`} />
                     </div>
-                  </button>
+                  </div>
 
                   {/* Selected via Student Tag */}
                   {selectedId && selectedType === 'class' && selectedViaStudent && (

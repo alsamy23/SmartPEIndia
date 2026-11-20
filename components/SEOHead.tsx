@@ -55,7 +55,7 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
   const pageTitlePart = customTitle || routeOverride.title;
   let fullTitle: string;
   if (!pageTitlePart) {
-    fullTitle = `${prefix} | #1 AI Platform for PE Teachers`;
+    fullTitle = `${prefix} | PE Digital Platform for Indian Schools`;
   } else if (pageTitlePart.includes(prefix) || pageTitlePart.includes('Smart PE India')) {
     fullTitle = pageTitlePart;
   } else {
@@ -107,14 +107,14 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
           "@type": "ImageObject",
           "url": "https://smartpeindia.app/logo.png"
         },
-        "description": "Physical Education Software and Sports Management Platform for Indian Schools."
+        "description": "Digital Physical Education Platform and Sports Management System for Indian Schools."
       },
       {
         "@type": "WebSite",
         "@id": "https://smartpeindia.app/#website",
         "url": "https://smartpeindia.app/",
         "name": "SmartPE India",
-        "description": "Physical Education Software for Indian Schools",
+        "description": "Digital Physical Education Platform for Indian Schools",
         "publisher": {
           "@id": "https://smartpeindia.app/#organization"
         }

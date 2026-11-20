@@ -45,7 +45,8 @@ import {
   DevelopmentLevel,
   TestDefinition,
   PhysicalDevelopmentProfile,
-  InterventionRecord
+  InterventionRecord,
+  CompositeTermEvaluation
 } from '../../types.ts';
 import {
   MASTER_TEST_DEFINITIONS,
@@ -57,28 +58,59 @@ import {
   aggregatePhysicalDevelopmentProfile,
   physicalDevelopmentStorage
 } from '../../services/physicalDevelopmentEngine.ts';
+import {
+  compositeEvaluationService,
+  computeFitnessContribution
+} from '../../services/compositeEvaluationService.ts';
+import FitnessTests from '../FitnessTests.tsx';
+import { TermCompositeGradingView } from './TermCompositeGradingView.tsx';
 import { ParentPhysicalDevelopmentReportModal } from './ParentPhysicalDevelopmentReportModal.tsx';
 import { toast } from '../../services/toast.ts';
 import { auth } from '../../services/firebase.ts';
 
+export type UnifiedHubMode = 'fitness_tests' | 'term_grading' | 'student_profile' | 'fast_entry' | 'interventions';
+
 interface UnifiedPhysicalDevelopmentHubProps {
   onNavigate?: (tab: any) => void;
   initialStudentId?: string;
+  initialMode?: UnifiedHubMode;
 }
 
 export const UnifiedPhysicalDevelopmentHub: React.FC<UnifiedPhysicalDevelopmentHubProps> = ({
   onNavigate,
-  initialStudentId
+  initialStudentId,
+  initialMode = 'fitness_tests'
 }) => {
   // Navigation / Mode state
-  const [hubMode, setHubMode] = useState<'fast_entry' | 'student_profile' | 'interventions'>('fast_entry');
+  const [hubMode, setHubMode] = useState<UnifiedHubMode>(initialMode);
 
-  // Loaded data
-  const [students, setStudents] = useState<Student[]>([]);
+  useEffect(() => {
+    setHubMode(initialMode);
+  }, [initialMode]);
+
+  // Loaded data (seeded synchronously from localStorage cache where available for zero-delay mount)
+  const [students, setStudents] = useState<Student[]>(() => {
+    try {
+      const raw = localStorage.getItem('smartpe_offline_students');
+      return raw ? (JSON.parse(raw) as Student[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [allResults, setAllResults] = useState<FitnessResult[]>([]);
-  const [interventions, setInterventions] = useState<InterventionRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [userProfile, setUserProfile] = useState<SchoolMember | null>(null);
+  const [evaluations, setEvaluations] = useState<CompositeTermEvaluation[]>([]);
+  const [interventions, setInterventions] = useState<InterventionRecord[]>(() => {
+    try {
+      const raw = localStorage.getItem('smartpe_interventions_data');
+      return raw ? (JSON.parse(raw) as InterventionRecord[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [userProfile, setUserProfile] = useState<SchoolMember | null>(() => {
+    return auth.currentUser ? fitnessService.getCachedSchoolMember(auth.currentUser.uid) : null;
+  });
 
   // Workflow Selection State: Class -> Section -> Term -> Domain -> Test
   const [selectedGrade, setSelectedGrade] = useState<string>('ALL');
@@ -96,66 +128,100 @@ export const UnifiedPhysicalDevelopmentHub: React.FC<UnifiedPhysicalDevelopmentH
   const [selectedProfileStudentId, setSelectedProfileStudentId] = useState<string>(initialStudentId || '');
   const [profileSearchQuery, setProfileSearchQuery] = useState('');
   const [showParentReportModal, setShowParentReportModal] = useState(false);
+  const [reportCompositeEval, setReportCompositeEval] = useState<CompositeTermEvaluation | null>(null);
 
   // Intervention Modal / Form State
   const [editingIntervention, setEditingIntervention] = useState<Partial<InterventionRecord> | null>(null);
   const [showInterventionModal, setShowInterventionModal] = useState(false);
 
-  // 1. Initial Data Fetch & Firestore Subscriptions
+  // 1. Parallel, Non-Blocking Data Fetch & Multiplexed Firestore Subscriptions
   useEffect(() => {
+    let active = true;
     let unsubStudents: (() => void) | undefined;
     let unsubResults: (() => void) | undefined;
+    let unsubEvaluations: (() => void) | undefined;
 
-    const loadHubData = async () => {
-      if (!auth.currentUser) {
-        setLoading(false);
-        return;
-      }
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setIsSyncing(false);
+      return;
+    }
 
-      try {
-        const member = await fitnessService.getSchoolMember(auth.currentUser.uid);
-        setUserProfile(member);
-        const schoolId = member?.schoolId;
-        const isAdmin = member?.role === 'admin';
+    const startSubscriptions = (member: SchoolMember | null) => {
+      if (!active) return;
+      const schoolId = member?.schoolId;
+      const isAdmin = member?.role === 'admin';
 
-        // Load Interventions
-        const loadedInterventions = await physicalDevelopmentStorage.getInterventions(undefined, schoolId);
-        setInterventions(loadedInterventions);
+      // Fetch interventions in background without blocking students/results render
+      physicalDevelopmentStorage
+        .getInterventions(undefined, schoolId)
+        .then((loadedInterventions) => {
+          if (active) setInterventions(loadedInterventions);
+        })
+        .catch(() => {});
 
-        // Subscribe to students
-        unsubStudents = fitnessService.subscribeToStudents(
-          auth.currentUser.uid,
-          schoolId,
-          isAdmin,
-          (studentList) => {
-            setStudents(studentList);
-            if (!selectedProfileStudentId && studentList.length > 0) {
-              setSelectedProfileStudentId(initialStudentId || studentList[0].id);
-            }
-          }
-        );
+      unsubStudents = fitnessService.subscribeToStudents(
+        uid,
+        schoolId,
+        isAdmin,
+        (studentList) => {
+          if (!active) return;
+          setStudents(studentList);
+          setSelectedProfileStudentId((prev) => prev || initialStudentId || studentList[0]?.id || '');
+        }
+      );
 
-        // Subscribe to all test results
-        unsubResults = fitnessService.subscribeToResults(
-          auth.currentUser.uid,
-          schoolId,
-          isAdmin,
-          (resultsList) => {
-            setAllResults(resultsList);
-            setLoading(false);
-          }
-        );
-      } catch (err) {
-        console.error("Error loading Physical Development Hub data:", err);
-        setLoading(false);
-      }
+      unsubResults = fitnessService.subscribeToResults(
+        uid,
+        schoolId,
+        isAdmin,
+        (resultsList) => {
+          if (!active) return;
+          setAllResults(resultsList);
+          setIsSyncing(false);
+        }
+      );
+
+      unsubEvaluations = compositeEvaluationService.subscribeToEvaluations(
+        uid,
+        schoolId,
+        isAdmin,
+        (evalList) => {
+          if (!active) return;
+          setEvaluations(evalList);
+        }
+      );
     };
 
-    loadHubData();
+    const cachedMember = fitnessService.getCachedSchoolMember(uid);
+    if (cachedMember) {
+      setUserProfile(cachedMember);
+      startSubscriptions(cachedMember);
+    } else {
+      setIsSyncing(true);
+      fitnessService
+        .getSchoolMember(uid)
+        .then((member) => {
+          if (!active) return;
+          setUserProfile(member);
+          startSubscriptions(member);
+        })
+        .catch(() => {
+          if (active) setIsSyncing(false);
+        });
+    }
+
+    // Safety fallback so subtle syncing badge never spins forever offline
+    const syncTimer = window.setTimeout(() => {
+      if (active) setIsSyncing(false);
+    }, 3500);
 
     return () => {
+      active = false;
+      window.clearTimeout(syncTimer);
       unsubStudents?.();
       unsubResults?.();
+      unsubEvaluations?.();
     };
   }, [auth.currentUser?.uid]);
 
@@ -226,6 +292,14 @@ export const UnifiedPhysicalDevelopmentHub: React.FC<UnifiedPhysicalDevelopmentH
     const studentResults = allResults.filter(r => r.studentId === activeStudent.id);
     return aggregatePhysicalDevelopmentProfile(activeStudent, studentResults, interventions);
   }, [activeStudent, allResults, interventions]);
+
+  const activeStudentEvaluation = useMemo(() => {
+    if (!activeStudent) return null;
+    const saved = evaluations
+      .filter(e => e.studentId === activeStudent.id)
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+    return saved || null;
+  }, [activeStudent, evaluations]);
 
   // Handle Quick Batch Save
   const handleSaveBatchResults = async () => {
@@ -338,74 +412,144 @@ export const UnifiedPhysicalDevelopmentHub: React.FC<UnifiedPhysicalDevelopmentH
     toast.success("Intervention record updated!");
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[450px] p-8 text-center">
-        <Loader2 className="w-10 h-10 text-[#0D2B52] animate-spin mb-3" />
-        <p className="text-sm font-bold text-slate-700">Loading Physical Development Engine & Profiles...</p>
-        <p className="text-xs text-slate-400 mt-1">Aggregating existing fitness, skills, and BMI records</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-2 sm:px-4 py-4">
       
-      {/* Top Banner & Mode Navigation */}
-      <div className="bg-gradient-to-r from-[#0D2B52] via-[#153e75] to-[#0a203d] rounded-2xl p-5 sm:p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="px-2.5 py-0.5 bg-[#D4A017] text-slate-950 text-[10px] font-black uppercase tracking-wider rounded-full">
-              Unified Physical Development
-            </span>
-            <span className="text-xs text-slate-300 font-medium">
-              6 Core Domains &bull; Deterministic Growth Engine &bull; Zero Manual Math
-            </span>
+      {/* Top Banner & Unified Option-1 Mode Navigation */}
+      <div className="bg-gradient-to-r from-[#0D2B52] via-[#153e75] to-[#0a203d] rounded-2xl p-5 sm:p-6 text-white shadow-xl space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <span className="px-2.5 py-0.5 bg-[#D4A017] text-slate-950 text-[10px] font-black uppercase tracking-wider rounded-full">
+                Unified PE Hub &bull; Zero Data Loss
+              </span>
+              <span className="text-xs text-slate-300 font-medium">
+                Fitness Tests &amp; BMI &bull; 100-Mark Term Grading &bull; Report Cards
+              </span>
+              {isSyncing && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/10 text-slate-200 rounded-full text-[10px] font-bold">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Syncing latest records...
+                </span>
+              )}
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black font-display tracking-tight text-white uppercase">
+              PE Fitness &amp; Development
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-200 max-w-2xl mt-1 leading-relaxed">
+              Record playground fitness tests &amp; BMI once. SmartPE automatically converts your saved fitness scores into 30 marks, combines Discipline (20) &amp; Games Skills (50), and builds complete 100-mark CBSE Report Cards.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black font-display tracking-tight text-white uppercase">
-            Physical Development Profile
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-200 max-w-2xl mt-1 leading-relaxed">
-            Enter raw test scores once. SmartPE automatically computes development levels, measures longitudinal growth, suggests targeted interventions, and generates parent reports.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-xl backdrop-blur-xs border border-white/15 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 bg-white/10 p-1.5 rounded-xl backdrop-blur-xs border border-white/15">
           <button
-            onClick={() => setHubMode('fast_entry')}
-            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide transition-all flex items-center gap-1.5 ${
-              hubMode === 'fast_entry'
+            onClick={() => setHubMode('fitness_tests')}
+            className={`px-3.5 py-2 rounded-lg text-xs font-black tracking-wide transition-all flex items-center gap-1.5 ${
+              hubMode === 'fitness_tests'
                 ? 'bg-white text-[#0D2B52] shadow-md'
                 : 'text-white hover:bg-white/10'
             }`}
           >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-amber-500" />
-            Rapid Assessment Entry
+            <Activity className="w-3.5 h-3.5 text-amber-500" />
+            1. Fitness Tests &amp; BMI
+          </button>
+          <button
+            onClick={() => setHubMode('term_grading')}
+            className={`px-3.5 py-2 rounded-lg text-xs font-black tracking-wide transition-all flex items-center gap-1.5 ${
+              hubMode === 'term_grading'
+                ? 'bg-white text-[#0D2B52] shadow-md'
+                : 'text-white hover:bg-white/10'
+            }`}
+          >
+            <Trophy className="w-3.5 h-3.5 text-emerald-500" />
+            2. Term Grading (100M)
           </button>
           <button
             onClick={() => setHubMode('student_profile')}
-            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide transition-all flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-lg text-xs font-black tracking-wide transition-all flex items-center gap-1.5 ${
               hubMode === 'student_profile'
                 ? 'bg-white text-[#0D2B52] shadow-md'
                 : 'text-white hover:bg-white/10'
             }`}
           >
-            <User className="w-3.5 h-3.5 text-emerald-500" />
-            Individual Profiles ({students.length})
+            <User className="w-3.5 h-3.5 text-blue-500" />
+            3. Profile &amp; Report Card ({students.length})
+          </button>
+          <button
+            onClick={() => setHubMode('fast_entry')}
+            className={`px-3.5 py-2 rounded-lg text-xs font-black tracking-wide transition-all flex items-center gap-1.5 ${
+              hubMode === 'fast_entry'
+                ? 'bg-white text-[#0D2B52] shadow-md'
+                : 'text-white hover:bg-white/10'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-500" />
+            4. 6-Domain Grid
           </button>
           <button
             onClick={() => setHubMode('interventions')}
-            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide transition-all flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-lg text-xs font-black tracking-wide transition-all flex items-center gap-1.5 ${
               hubMode === 'interventions'
                 ? 'bg-white text-[#0D2B52] shadow-md'
                 : 'text-white hover:bg-white/10'
             }`}
           >
             <Target className="w-3.5 h-3.5 text-purple-400" />
-            Interventions ({interventions.length})
+            5. Interventions ({interventions.length})
           </button>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* STEP 1: FITNESS TESTS & BMI (EMBEDDED EXISTING MODULE, ZERO DATA LOSS)    */}
+      {/* ========================================================================= */}
+      {hubMode === 'fitness_tests' && (
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="text-xs text-blue-950">
+              <strong className="font-black uppercase tracking-wide block sm:inline mr-2">
+                Connected Workflow:
+              </strong>
+              Any Baseline, Term 1, or Term 2 fitness tests &amp; BMI saved below automatically flow into{' '}
+              <strong>Step 2: Term Grading (30 + 20 + 50 = 100)</strong>.
+            </div>
+            <button
+              onClick={() => setHubMode('term_grading')}
+              className="px-4 py-2 bg-[#0D2B52] hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wide flex items-center gap-1.5 shrink-0 shadow-sm transition-all"
+            >
+              Go to Step 2: Term Grading (100M)
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <FitnessTests
+            sharedStudents={students}
+            sharedResults={allResults}
+            sharedUserProfile={userProfile}
+          />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* STEP 2: 100-MARK TERM GRADING (30 FITNESS + 20 DISCIPLINE + 50 GAMES)     */}
+      {/* ========================================================================= */}
+      {hubMode === 'term_grading' && (
+        <TermCompositeGradingView
+          students={students}
+          allResults={allResults}
+          evaluations={evaluations}
+          userProfile={userProfile}
+          onSavedEvaluation={(saved) => {
+            setEvaluations(prev => [saved, ...prev.filter(e => e.id !== saved.id)]);
+          }}
+          onOpenReportCard={(studentId, evalDoc) => {
+            setSelectedProfileStudentId(studentId);
+            setReportCompositeEval(evalDoc);
+            setShowParentReportModal(true);
+          }}
+          onGoToFitnessTests={() => setHubMode('fitness_tests')}
+        />
+      )}
 
       {/* ========================================================================= */}
       {/* MODE 1: RAPID ASSESSMENT ENTRY (CLASS -> SECTION -> CYCLE -> DOMAIN -> TEST) */}
@@ -726,7 +870,10 @@ export const UnifiedPhysicalDevelopmentHub: React.FC<UnifiedPhysicalDevelopmentH
               </select>
 
               <button
-                onClick={() => setShowParentReportModal(true)}
+                onClick={() => {
+                  setReportCompositeEval(activeStudentEvaluation);
+                  setShowParentReportModal(true);
+                }}
                 className="px-4 py-2 bg-[#D4A017] hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition-all shadow-sm"
               >
                 <FileText className="w-4 h-4" />
@@ -734,6 +881,58 @@ export const UnifiedPhysicalDevelopmentHub: React.FC<UnifiedPhysicalDevelopmentH
               </button>
             </div>
           </div>
+
+          {/* 100-Mark Term PE Grading Summary Card */}
+          {(() => {
+            const liveFitness = activeStudent
+              ? computeFitnessContribution(activeStudent, allResults, 'Term 1', 30)
+              : null;
+            return (
+              <div className="bg-gradient-to-r from-slate-50 to-blue-50/70 rounded-2xl border border-blue-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                {activeStudentEvaluation ? (
+                  <>
+                    <div>
+                      <span className="px-2 py-0.5 bg-[#0D2B52] text-white rounded-md text-[10px] font-black uppercase">
+                        Saved Term Scorecard ({activeStudentEvaluation.term})
+                      </span>
+                      <div className="text-sm font-black text-[#0D2B52] mt-1">
+                        Total: {activeStudentEvaluation.totalScore} / 100 &bull; CBSE Grade {activeStudentEvaluation.cbseGrade} ({activeStudentEvaluation.coScholasticGrade})
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        Fitness: <strong>{activeStudentEvaluation.fitnessSnapshot.manualOverrideMarks ?? activeStudentEvaluation.fitnessSnapshot.autoMarksAwarded}/{activeStudentEvaluation.weights.fitnessMax}</strong> &bull; Discipline: <strong>{activeStudentEvaluation.discipline.marksAwarded}/{activeStudentEvaluation.weights.disciplineMax}</strong> &bull; Games ({activeStudentEvaluation.games.sportName}): <strong>{activeStudentEvaluation.games.marksAwarded}/{activeStudentEvaluation.weights.gamesMax}</strong>
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setHubMode('term_grading')}
+                      className="px-4 py-2 bg-[#0D2B52] hover:bg-slate-800 text-white rounded-xl text-xs font-bold shrink-0"
+                    >
+                      Edit Term Marks →
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded-md text-[10px] font-black uppercase">
+                        Auto-Ready Fitness Score
+                      </span>
+                      <div className="text-sm font-black text-[#0D2B52] mt-1">
+                        Fitness Contribution Ready: {liveFitness?.autoMarksAwarded || 0} / 30 Marks ({liveFitness?.testsCounted || 0} tests recorded)
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        Add Discipline (20) and Games Skills (50) in Step 2 to finalize this student&apos;s 100-mark CBSE Report Card.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setHubMode('term_grading')}
+                      className="px-4 py-2 bg-[#0D2B52] hover:bg-slate-800 text-white rounded-xl text-xs font-bold shrink-0"
+                    >
+                      Grade in Step 2 (100M) →
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* 6 Core Domains Radar/Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -1081,8 +1280,12 @@ export const UnifiedPhysicalDevelopmentHub: React.FC<UnifiedPhysicalDevelopmentH
       {showParentReportModal && activeStudentProfile && (
         <ParentPhysicalDevelopmentReportModal
           profile={activeStudentProfile}
+          compositeEvaluation={reportCompositeEval ?? activeStudentEvaluation}
           isOpen={showParentReportModal}
-          onClose={() => setShowParentReportModal(false)}
+          onClose={() => {
+            setShowParentReportModal(false);
+            setReportCompositeEval(null);
+          }}
           schoolName={userProfile?.schoolName || 'SmartPE Physical Education Department'}
         />
       )}

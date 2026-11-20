@@ -1,9 +1,24 @@
-import { collection, doc, setDoc, getDoc, addDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  writeBatch,
+  query,
+  where,
+  serverTimestamp,
+  DocumentReference
+} from 'firebase/firestore';
+import { deleteUser, signOut } from 'firebase/auth';
 import { db, auth } from './firebase';
-import { fitnessService, Student, FitnessResult, SchoolMember } from './fitnessService';
+import { fitnessService } from './fitnessService';
+import { offlineCacheService } from './offlineCacheService';
 
 export interface PrivacyAuditEvent {
-  eventType: 
+  eventType:
     | 'login'
     | 'failed_login'
     | 'dpa_accepted'
@@ -39,7 +54,14 @@ export interface DeletionRequest {
   notes?: string;
 }
 
-export const DPA_VERSION = 'v1.0 (2026.1)';
+export interface InstantDeletionSummary {
+  deletedRecordsCount: number;
+  authAccountDeleted: boolean;
+  requiresRecentLogin?: boolean;
+  collectionsCleared: string[];
+}
+
+export const DPA_VERSION = 'v1.1 (2026.2)';
 
 /**
  * Sanitizes event parameters so that no student PII or assessment scores are stored in audit logs
@@ -62,6 +84,39 @@ function sanitizeAuditDetails(details?: Record<string, any>): Record<string, any
     }
   }
   return clean;
+}
+
+/**
+ * Deletes an array of DocumentReferences in batches of 400 to respect Firestore's 500-op batch cap.
+ */
+async function commitBatchDeletes(refs: DocumentReference[]): Promise<number> {
+  if (!refs.length) return 0;
+  let totalDeleted = 0;
+  const CHUNK_SIZE = 400;
+  for (let i = 0; i < refs.length; i += CHUNK_SIZE) {
+    const chunk = refs.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+    chunk.forEach((ref) => batch.delete(ref));
+    await batch.commit();
+    totalDeleted += chunk.length;
+  }
+  return totalDeleted;
+}
+
+/**
+ * Queries a collection by field==value and batch-deletes all matching documents.
+ */
+async function deleteMatchingDocs(colName: string, field: string, value: string): Promise<number> {
+  if (!value) return 0;
+  try {
+    const q = query(collection(db, colName), where(field, '==', value));
+    const snap = await getDocs(q);
+    if (snap.empty) return 0;
+    return await commitBatchDeletes(snap.docs.map((d) => d.ref));
+  } catch (err) {
+    console.warn(`Batch delete skipped or failed for ${colName} (${field}=${value}):`, err);
+    return 0;
+  }
 }
 
 export const privacyAuditService = {
@@ -167,7 +222,6 @@ export const privacyAuditService = {
    */
   exportSchoolData: async (schoolId: string, teacherId?: string): Promise<any> => {
     const user = auth.currentUser;
-    const isSuper = fitnessService.isSuperAdmin();
 
     let workloads: any[] = [];
     try {
@@ -199,8 +253,8 @@ export const privacyAuditService = {
         exportDate: new Date().toISOString(),
         schoolId,
         exportedBy: user?.email || 'Authorized User',
-        platform: 'SmartPE Digital PE Assessment Platform',
-        version: '1.0'
+        platform: 'SmartPE PE Digital Platform',
+        version: '1.1'
       },
       summary: {
         totalStudents: students.length,
@@ -218,7 +272,365 @@ export const privacyAuditService = {
   },
 
   /**
-   * Submits a formal School Data Deletion Request (Safe multi-step process)
+   * Immediately deletes all data for a school workspace.
+   * Child collections are deleted FIRST while school membership & school doc still validate admin access.
+   * No approval request or waiting period required.
+   */
+  deleteSchoolWorkspaceData: async (
+    schoolId: string,
+    options?: { deleteSchoolRecord?: boolean; deleteCurrentUserAccount?: boolean; reason?: string }
+  ): Promise<InstantDeletionSummary> => {
+    const currentUser = auth.currentUser;
+    const collectionsCleared: string[] = [];
+    let deletedRecordsCount = 0;
+
+    // 1. Delete all child records FIRST (while school doc + membership remain valid for security rules)
+    const schoolCollections = [
+      'students',
+      'results',
+      'teams',
+      'practical_assessments',
+      'composite_evaluations',
+      'interventions',
+      'workloads'
+    ];
+
+    for (const colName of schoolCollections) {
+      const count = await deleteMatchingDocs(colName, 'schoolId', schoolId);
+      if (count > 0) {
+        deletedRecordsCount += count;
+        collectionsCleared.push(colName);
+      }
+    }
+
+    // Also delete Sports Day doc for this school if present
+    try {
+      const sdRef = doc(db, 'sportsDays', schoolId);
+      const sdSnap = await getDoc(sdRef);
+      if (sdSnap.exists()) {
+        await deleteDoc(sdRef);
+        deletedRecordsCount += 1;
+        collectionsCleared.push('sportsDays');
+      }
+    } catch (err) {
+      console.warn('Could not delete sportsDays doc:', err);
+    }
+
+    // Clear any historical deletion requests for this school
+    await deleteMatchingDocs('deletion_requests', 'schoolId', schoolId);
+
+    // 2. Log sanitized completion audit entry before deleting membership/account
+    await privacyAuditService.recordEvent('deletion_completed', schoolId, {
+      deletedRecordsCount,
+      collectionsCount: collectionsCleared.length,
+      deleteSchoolRecord: Boolean(options?.deleteSchoolRecord || options?.deleteCurrentUserAccount),
+      reason: options?.reason || 'Immediate self-service or admin deletion'
+    });
+
+    // 3. If deleting the whole school record or closing account
+    if (options?.deleteSchoolRecord || options?.deleteCurrentUserAccount) {
+      const membersDeleted = await deleteMatchingDocs('schoolMembers', 'schoolId', schoolId);
+      if (membersDeleted > 0) {
+        deletedRecordsCount += membersDeleted;
+        collectionsCleared.push('schoolMembers');
+      }
+
+      try {
+        const schoolRef = doc(db, 'schools', schoolId);
+        const schoolSnap = await getDoc(schoolRef);
+        if (schoolSnap.exists()) {
+          await deleteDoc(schoolRef);
+          deletedRecordsCount += 1;
+          collectionsCleared.push('schools');
+        }
+      } catch (err) {
+        console.warn('Could not delete school document:', err);
+      }
+    }
+
+    // 4. Clear browser offline caches so no deleted student data lingers on device
+    try {
+      offlineCacheService.clearSensitiveCacheOnLogout();
+      localStorage.removeItem('smartpe_practical_assessments');
+      localStorage.removeItem('smartpe_pending_student_sync');
+      localStorage.removeItem(`smartpe_dpa_${schoolId}`);
+      localStorage.removeItem(`smartpe_deletion_req_${schoolId}`);
+    } catch (e) {}
+
+    // 5. If closing current user's account completely
+    let authAccountDeleted = false;
+    let requiresRecentLogin = false;
+
+    if (options?.deleteCurrentUserAccount && currentUser) {
+      try {
+        await deleteDoc(doc(db, 'users', currentUser.uid));
+        deletedRecordsCount += 1;
+        collectionsCleared.push('users');
+      } catch (err) {
+        console.warn('Could not delete current user Firestore profile:', err);
+      }
+
+      try {
+        localStorage.removeItem('smartpe_active_workspace');
+        await deleteUser(currentUser);
+        authAccountDeleted = true;
+      } catch (authErr: any) {
+        if (authErr?.code === 'auth/requires-recent-login') {
+          requiresRecentLogin = true;
+        } else {
+          console.warn('Auth user deletion note:', authErr);
+        }
+        try {
+          await signOut(auth);
+        } catch (e) {}
+      }
+    }
+
+    return {
+      deletedRecordsCount,
+      authAccountDeleted,
+      requiresRecentLogin,
+      collectionsCleared
+    };
+  },
+
+  /**
+   * Allows any individual educator/coach to delete their own profile, personal workspace data, and account anytime.
+   */
+  deletePersonalAccountData: async (reason?: string): Promise<InstantDeletionSummary> => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('No authenticated user found.');
+    }
+
+    const uid = currentUser.uid;
+    const personalSchoolId = `personal_${uid}`;
+    const collectionsCleared: string[] = [];
+    let deletedRecordsCount = 0;
+
+    // Delete personal-workspace and teacher-owned documents while auth is active
+    const ownerCols = [
+      'students',
+      'results',
+      'teams',
+      'practical_assessments',
+      'composite_evaluations',
+      'interventions',
+      'workloads'
+    ];
+
+    for (const colName of ownerCols) {
+      const c1 = await deleteMatchingDocs(colName, 'schoolId', personalSchoolId);
+      const c2 = await deleteMatchingDocs(colName, 'teacherId', uid);
+      if (c1 + c2 > 0) {
+        deletedRecordsCount += c1 + c2;
+        collectionsCleared.push(colName);
+      }
+    }
+
+    await privacyAuditService.recordEvent('deletion_completed', personalSchoolId, {
+      deletedRecordsCount,
+      scope: 'personal_account_closure',
+      reason: reason || 'User chose to discontinue using platform'
+    });
+
+    // Delete schoolMembers/{uid} and users/{uid}
+    try {
+      const memRef = doc(db, 'schoolMembers', uid);
+      if ((await getDoc(memRef)).exists()) {
+        await deleteDoc(memRef);
+        deletedRecordsCount += 1;
+        collectionsCleared.push('schoolMembers');
+      }
+    } catch (err) {
+      console.warn('Could not delete schoolMembers doc:', err);
+    }
+
+    try {
+      const userRef = doc(db, 'users', uid);
+      if ((await getDoc(userRef)).exists()) {
+        await deleteDoc(userRef);
+        deletedRecordsCount += 1;
+        collectionsCleared.push('users');
+      }
+    } catch (err) {
+      console.warn('Could not delete users doc:', err);
+    }
+
+    try {
+      offlineCacheService.clearSensitiveCacheOnLogout();
+      localStorage.removeItem('smartpe_practical_assessments');
+      localStorage.removeItem('smartpe_pending_student_sync');
+      localStorage.removeItem('smartpe_active_workspace');
+    } catch (e) {}
+
+    let authAccountDeleted = false;
+    let requiresRecentLogin = false;
+
+    try {
+      await deleteUser(currentUser);
+      authAccountDeleted = true;
+    } catch (authErr: any) {
+      if (authErr?.code === 'auth/requires-recent-login') {
+        requiresRecentLogin = true;
+      }
+      try {
+        await signOut(auth);
+      } catch (e) {}
+    }
+
+    return {
+      deletedRecordsCount,
+      authAccountDeleted,
+      requiresRecentLogin,
+      collectionsCleared
+    };
+  },
+
+  /**
+   * Direct Admin / Super Admin privilege: Delete an Academy program & all its athletes/assessments immediately.
+   */
+  deleteAcademyProgramData: async (programId: string): Promise<InstantDeletionSummary> => {
+    const collectionsCleared: string[] = [];
+    let deletedRecordsCount = 0;
+
+    // Delete athletes & assessments FIRST while academy doc exists
+    const athCount = await deleteMatchingDocs('academic_athletes', 'programId', programId);
+    if (athCount > 0) {
+      deletedRecordsCount += athCount;
+      collectionsCleared.push('academic_athletes');
+    }
+
+    const assCount = await deleteMatchingDocs('academic_assessments', 'programId', programId);
+    if (assCount > 0) {
+      deletedRecordsCount += assCount;
+      collectionsCleared.push('academic_assessments');
+    }
+
+    await privacyAuditService.recordEvent('deletion_completed', programId, {
+      deletedRecordsCount,
+      scope: 'academy_program_deleted'
+    });
+
+    try {
+      const progRef = doc(db, 'academic_programs', programId);
+      if ((await getDoc(progRef)).exists()) {
+        await deleteDoc(progRef);
+        deletedRecordsCount += 1;
+        collectionsCleared.push('academic_programs');
+      }
+    } catch (err) {
+      console.warn('Could not delete academic_program doc:', err);
+    }
+
+    try {
+      localStorage.removeItem('smartpe_academic_program');
+    } catch (e) {}
+
+    return {
+      deletedRecordsCount,
+      authAccountDeleted: false,
+      collectionsCleared
+    };
+  },
+
+  /**
+   * Super Admin Direct Delete Privilege: Immediately remove any user's profile, membership, activity logs,
+   * and optionally their personal/school/academy records — no approval request needed.
+   */
+  superAdminDeleteUserAndData: async (target: {
+    uid: string;
+    email?: string;
+    schoolId?: string;
+    academyId?: string;
+    role?: string;
+    deleteOwnedWorkspace?: boolean;
+  }): Promise<InstantDeletionSummary> => {
+    const collectionsCleared: string[] = [];
+    let deletedRecordsCount = 0;
+
+    // 1. Delete teacher-authored & personal records if requested
+    if (target.deleteOwnedWorkspace) {
+      const targetPersonalId = `personal_${target.uid}`;
+      const cols = [
+        'students',
+        'results',
+        'teams',
+        'practical_assessments',
+        'composite_evaluations',
+        'interventions',
+        'workloads'
+      ];
+      for (const colName of cols) {
+        const c1 = await deleteMatchingDocs(colName, 'teacherId', target.uid);
+        const c2 = await deleteMatchingDocs(colName, 'schoolId', targetPersonalId);
+        if (c1 + c2 > 0) {
+          deletedRecordsCount += c1 + c2;
+          collectionsCleared.push(colName);
+        }
+      }
+
+      if (target.schoolId && target.role === 'admin' && !target.schoolId.startsWith('personal_')) {
+        const schoolRes = await privacyAuditService.deleteSchoolWorkspaceData(target.schoolId, {
+          deleteSchoolRecord: true,
+          deleteCurrentUserAccount: false,
+          reason: 'Super Admin direct workspace deletion'
+        });
+        deletedRecordsCount += schoolRes.deletedRecordsCount;
+        schoolRes.collectionsCleared.forEach((c) => {
+          if (!collectionsCleared.includes(c)) collectionsCleared.push(c);
+        });
+      }
+
+      if (target.academyId) {
+        const acadRes = await privacyAuditService.deleteAcademyProgramData(target.academyId);
+        deletedRecordsCount += acadRes.deletedRecordsCount;
+        acadRes.collectionsCleared.forEach((c) => {
+          if (!collectionsCleared.includes(c)) collectionsCleared.push(c);
+        });
+      }
+    }
+
+    // 2. Delete schoolMembers/{uid}, users/{uid}, and login_activity for uid
+    try {
+      const memRef = doc(db, 'schoolMembers', target.uid);
+      if ((await getDoc(memRef)).exists()) {
+        await deleteDoc(memRef);
+        deletedRecordsCount += 1;
+        collectionsCleared.push('schoolMembers');
+      }
+    } catch (e) {}
+
+    try {
+      const userRef = doc(db, 'users', target.uid);
+      if ((await getDoc(userRef)).exists()) {
+        await deleteDoc(userRef);
+        deletedRecordsCount += 1;
+        collectionsCleared.push('users');
+      }
+    } catch (e) {}
+
+    const logCount = await deleteMatchingDocs('login_activity', 'uid', target.uid);
+    if (logCount > 0) {
+      deletedRecordsCount += logCount;
+      collectionsCleared.push('login_activity');
+    }
+
+    await privacyAuditService.recordEvent('deletion_completed', target.schoolId || 'super_admin', {
+      targetUid: target.uid,
+      deletedRecordsCount,
+      scope: 'super_admin_direct_delete'
+    });
+
+    return {
+      deletedRecordsCount,
+      authAccountDeleted: false,
+      collectionsCleared
+    };
+  },
+
+  /**
+   * Submits a formal School Data Deletion Request (kept for backward compatibility if needed)
    */
   submitDeletionRequest: async (
     schoolId: string,
@@ -234,9 +646,9 @@ export const privacyAuditService = {
       requestedByUid: user?.uid || '',
       requestedByEmail: user?.email || '',
       requestedAt: nowIso,
-      reason: reason || 'Administrative School Workspace Deletion Request',
+      reason: reason || 'Administrative School Workspace Deletion',
       status: 'pending_verification',
-      notes: 'Deletion requested via School Admin Data & Privacy Settings. Standard 14-day grace period applied for verification and backup retention.'
+      notes: 'Deletion recorded via School Admin Data & Privacy Settings.'
     };
 
     try {

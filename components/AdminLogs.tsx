@@ -33,7 +33,7 @@ const AdminLogs: React.FC = () => {
 
   // Settings State
   const [config, setConfig] = useState<TelemetryConfigState>({
-    adminAlertEmail: 'alsamy36@gmail.com',
+    adminAlertEmail: 'contact@smartpeindia.app',
     adminWhatsAppNumber: '919443389025',
     emailAlertsEnabled: true
   });
@@ -412,7 +412,7 @@ const AdminLogs: React.FC = () => {
                 value={config.adminAlertEmail}
                 onChange={(e) => setConfig({ ...config, adminAlertEmail: e.target.value })}
                 className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900"
-                placeholder="alsamy36@gmail.com"
+                placeholder="contact@smartpeindia.app"
               />
               <span className="text-[11px] text-slate-400 block">
                 Emails are dispatched via Brevo transactional service with ready-to-copy AI Studio prompt blocks.

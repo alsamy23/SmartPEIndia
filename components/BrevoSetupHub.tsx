@@ -26,12 +26,12 @@ interface BrevoSetupHubProps {
 }
 
 export const BrevoSetupHub: React.FC<BrevoSetupHubProps> = ({ 
-  userEmail = 'alsamy36@gmail.com',
+  userEmail = 'contact@smartpeindia.app',
   onNavigateToNurture
 }) => {
   const [status, setStatus] = useState<BrevoLiveStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [testEmail, setTestEmail] = useState(userEmail || 'alsamy36@gmail.com');
+  const [testEmail, setTestEmail] = useState(userEmail || 'contact@smartpeindia.app');
   const [sendingTest, setSendingTest] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; messageId?: string } | null>(null);
   const [copiedEnv, setCopiedEnv] = useState(false);
@@ -86,7 +86,8 @@ export const BrevoSetupHub: React.FC<BrevoSetupHubProps> = ({
   const envSnippet = `# Brevo (Sendinblue) Transactional Email Configuration
 # 300 Free Emails / Day • No Credit Card Required
 BREVO_API_KEY=your_brevo_v3_api_key_here
-FROM_EMAIL="SmartPE India <admin@smartpeindia.com>"
+FROM_EMAIL="SmartPE India <noreply@smartpeindia.app>"
+ADMIN_ALERT_EMAIL=contact@smartpeindia.app
 EMAIL_PROVIDER=brevo`;
 
   const handleCopyEnv = async () => {
@@ -208,7 +209,7 @@ EMAIL_PROVIDER=brevo`;
                 <span>Sender Email (FROM_EMAIL)</span>
               </span>
               <span className="font-mono text-xs font-bold text-slate-900 truncate max-w-[200px]" title={status?.fromEmail}>
-                {status?.fromEmail || 'alsamy36@gmail.com'}
+                {status?.fromEmail || 'noreply@smartpeindia.app'}
               </span>
             </div>
 
@@ -314,7 +315,7 @@ EMAIL_PROVIDER=brevo`;
                 type="email"
                 value={testEmail}
                 onChange={(e) => setTestEmail(e.target.value)}
-                placeholder="alsamy36@gmail.com"
+                placeholder="contact@smartpeindia.app"
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-sm text-slate-900 focus:outline-none focus:border-primary focus:bg-white transition-all"
               />
             </div>
@@ -366,7 +367,7 @@ EMAIL_PROVIDER=brevo`;
                 <span>Tip: Check Your Inbox / Spam</span>
               </div>
               <p className="font-medium text-amber-900/80 leading-relaxed">
-                When sending via Brevo for the first time, check both your primary inbox and spam folder. Add <span className="font-mono font-bold">{status?.fromEmail || 'alsamy36@gmail.com'}</span> to your contacts to ensure 100% primary inbox placement.
+                When sending via Brevo for the first time, check both your primary inbox and spam folder. Add <span className="font-mono font-bold">{status?.fromEmail || 'noreply@smartpeindia.app'}</span> to your contacts to ensure 100% primary inbox placement.
               </p>
             </div>
           </div>
@@ -409,7 +410,7 @@ EMAIL_PROVIDER=brevo`;
             </div>
             <h4 className="font-black text-slate-900 uppercase text-sm">Create Free Account</h4>
             <p className="text-xs text-slate-600 leading-relaxed font-medium">
-              Sign up at <a href="https://www.brevo.com" target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline">brevo.com</a> using your email (e.g., <span className="font-bold">alsamy36@gmail.com</span>). No credit card required. Free tier includes 300 emails/day forever.
+              Sign up at <a href="https://www.brevo.com" target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline">brevo.com</a> using your admin email (e.g., <span className="font-bold">contact@smartpeindia.app</span>). No credit card required. Free tier includes 300 emails/day forever.
             </p>
           </div>
 
@@ -420,7 +421,7 @@ EMAIL_PROVIDER=brevo`;
             </div>
             <h4 className="font-black text-slate-900 uppercase text-sm">Verify Sender Email</h4>
             <p className="text-xs text-slate-600 leading-relaxed font-medium">
-              In Brevo, go to <strong>Senders & IPs → Senders</strong> (<a href="https://app.brevo.com/senders" target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline">direct link</a>). Verify that <span className="font-bold">alsamy36@gmail.com</span> is listed and marked as Active.
+              In Brevo, go to <strong>Senders & IPs → Senders</strong> (<a href="https://app.brevo.com/senders" target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline">direct link</a>). Verify your domain or <span className="font-bold">noreply@smartpeindia.app</span> as Active.
             </p>
           </div>
 

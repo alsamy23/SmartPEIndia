@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Check, 
   Sparkles, 
@@ -12,10 +12,12 @@ import {
   QrCode, 
   FileText,
   PhoneCall,
-  CheckCircle2
+  CheckCircle2,
+  Loader2
 } from 'lucide-react';
 import { toast } from '../services/toast';
 import { trackEvent } from '../services/analytics';
+import { submitSchoolInvoiceRequest } from '../services/emailService';
 
 interface PricingAndPlansProps {
   userEmail?: string | null;
@@ -30,6 +32,11 @@ export const PricingAndPlans: React.FC<PricingAndPlansProps> = ({
   const [selectedPlanModal, setSelectedPlanModal] = useState<string | null>(null);
   const [schoolName, setSchoolName] = useState('');
   const [phone, setPhone] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    trackEvent('pricing_view', { source: 'subscription_plans_tab', plan_highlighted: 'founding_pass' });
+  }, []);
 
   const plans = [
     {
@@ -67,7 +74,7 @@ export const PricingAndPlans: React.FC<PricingAndPlansProps> = ({
         'High-Resolution Diagrams & Export to PDF / Word',
         'AI Sports Movement & Biomechanics Video Lab',
         'Parent Letter Drafter & School Notices',
-        'Priority AI Response & 24/7 Support'
+        'Priority AI Response & Support (Within 24 Working Hours)'
       ],
       buttonText: 'Upgrade to Pro Pass',
       buttonVariant: 'secondary' as const
@@ -86,7 +93,7 @@ export const PricingAndPlans: React.FC<PricingAndPlansProps> = ({
         'Principal Inspection Dashboard & Audit Reports',
         'Centralized Khelo India Student Fitness Database',
         'Custom School Name & Logo Branding on all PDFs',
-        'Official GST Tax Invoice for School Accounts',
+        'School Purchase Order & Tax Invoice Support',
         'Dedicated Onboarding Assistance by Founder L. Samy'
       ],
       buttonText: 'Get School Pass',
@@ -99,10 +106,31 @@ export const PricingAndPlans: React.FC<PricingAndPlansProps> = ({
     setSelectedPlanModal(planName);
   };
 
-  const handleInvoiceSubmit = (e: React.FormEvent) => {
+  const handleInvoiceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success(`Thank you! School Invoice request for "${selectedPlanModal}" submitted. Our team will contact you at ${phone || userEmail}.`);
-    setSelectedPlanModal(null);
+    if (!selectedPlanModal || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const result = await submitSchoolInvoiceRequest({
+        planName: selectedPlanModal,
+        billingCycle,
+        schoolName: schoolName.trim(),
+        phone: phone.trim(),
+        contactEmail: userEmail || undefined
+      });
+      if (result.success) {
+        toast.success(`Request for "${selectedPlanModal}" sent! We will contact you at ${phone || userEmail}.`);
+        setSelectedPlanModal(null);
+        setSchoolName('');
+        setPhone('');
+      } else {
+        toast.error(result.message || 'Could not send request right now. Please email contact@smartpeindia.app.');
+      }
+    } catch {
+      toast.error('Network error submitting request. Please email contact@smartpeindia.app.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -170,7 +198,7 @@ export const PricingAndPlans: React.FC<PricingAndPlansProps> = ({
                   <span className="text-xs font-bold text-slate-400 line-through">{plan.originalPrice}</span>
                 </div>
                 <p className="text-[11px] font-black uppercase tracking-wider text-emerald-600">
-                  {plan.id === 'founding_pass' ? 'Active automatically for all accounts' : 'Includes 18% GST invoice'}
+                  {plan.id === 'founding_pass' ? 'Active automatically for all accounts' : 'School Purchase Order & Invoice available'}
                 </p>
               </div>
 
@@ -295,9 +323,11 @@ export const PricingAndPlans: React.FC<PricingAndPlansProps> = ({
 
               <button
                 type="submit"
-                className="w-full py-4 bg-primary text-white border-2 border-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary-container transition-all shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]"
+                disabled={isSubmitting}
+                className="w-full py-4 bg-primary text-white border-2 border-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary-container transition-all shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                Submit & Request Invoice
+                {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : null}
+                <span>{isSubmitting ? 'Sending Request...' : 'Submit & Request Invoice'}</span>
               </button>
             </form>
           </div>

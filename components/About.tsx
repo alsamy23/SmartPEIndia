@@ -98,13 +98,13 @@ const About: React.FC<AboutProps> = ({ onNavigate }) => {
               icon: Award,
               color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
               title: 'Curriculum-first',
-              desc: 'Aligned strictly with CBSE Physical Education, ICSE guidelines, NEP 2020, and official Khelo India battery testing standards'
+              desc: 'Aligned with CBSE Physical Education, ICSE guidelines, NEP 2020, and Khelo India–aligned fitness testing protocols'
             },
             {
               icon: Shield,
               color: 'text-cyan-600 bg-cyan-50 border-cyan-100',
               title: 'Free for teachers',
-              desc: 'Absolutely free for every PE teacher. Funded by premium school administrative subscriptions, never commercial ads'
+              desc: 'Core PE planning and assessment tools are free for teachers. Funded by optional school workspace plans, never commercial ads'
             }
           ].map((feature, idx) => {
             const Icon = feature.icon;
@@ -137,7 +137,7 @@ const About: React.FC<AboutProps> = ({ onNavigate }) => {
             their evenings back.
           </h2>
           <p className="text-slate-300 text-sm md:text-base font-medium max-w-3xl leading-relaxed">
-            A PE teacher in an Indian school is, on a given day, a coach, curriculum planner, data analyst, parent liaison, and event manager — usually with no budget for software. smartpeindia consolidates that whole job into one mobile-first, simple app and keeps it free. That's the entire mission.
+            A PE teacher in an Indian school is, on a given day, a coach, curriculum planner, data analyst, parent liaison, and event manager — usually with limited budget for digital tools. smartpeindia consolidates that whole workflow into one mobile-first PE digital platform with free core teacher tools. That's the entire mission.
           </p>
         </div>
 

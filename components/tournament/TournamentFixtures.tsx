@@ -9,6 +9,7 @@ import CombinationTournament from './CombinationTournament.tsx';
 import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
 import { toast } from '../../services/toast.ts';
 import { safeOpenExternal } from '../../utils/safeBrowser.ts';
+import { trackEvent } from '../../services/analytics.ts';
 
 export type FixtureMode = 'knockout' | 'roundrobin' | 'combination';
 
@@ -34,13 +35,25 @@ export const TournamentFixtures: React.FC<TournamentFixturesProps> = ({ initialM
 
   // Quick WhatsApp bulletin trigger
   const handleQuickWhatsApp = () => {
-    const text = 
-`🏆 *OFFICIAL TOURNAMENT FIXTURES ANNOUNCEMENT*
+    const formatLabel =
+      fixtureMode === 'knockout'
+        ? 'Knockout Bracket'
+        : fixtureMode === 'roundrobin'
+        ? 'Round Robin League'
+        : 'Combination Tournament';
+    const text =
+`🏆 *OFFICIAL TOURNAMENT FIXTURES*
 📌 *Tournament:* ${tournamentName} (${category})
 📅 *Date:* ${startDate} | 👥 *Teams:* ${teamsList.length} Teams
-🏅 *Current Format:* ${fixtureMode === 'knockout' ? 'Knockout Bracket' : fixtureMode === 'roundrobin' ? 'Round Robin League' : 'Combination Tournament'}
-Official CBSE Physical Education Subject Code 048 format.
-Generated via SmartPE India Official Tournament Studio.`;
+🏅 *Format:* ${formatLabel}
+Official CBSE PE (Code 048) compliant draw.
+
+Create free fixtures for your school:
+https://smartpeindia.app/tournament-fixtures`;
+    trackEvent('resource_shared', {
+      resource_type: 'Tournament Fixtures',
+      channel: 'WhatsApp'
+    });
     const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     safeOpenExternal(waUrl, "Opening WhatsApp with tournament summary!");
   };
@@ -74,7 +87,7 @@ Generated via SmartPE India Official Tournament Studio.`;
                 title="Share quick tournament summary to WhatsApp"
               >
                 <Share2 size={13} />
-                <span className="hidden sm:inline">WhatsApp</span>
+                <span className="hidden sm:inline">Share on WhatsApp</span>
               </button>
 
               <button

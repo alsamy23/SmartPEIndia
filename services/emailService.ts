@@ -27,8 +27,58 @@ export interface SendEmailPayload {
 
 export interface EmailServiceStatus {
   configured: boolean;
-  provider: string; // 'smtp' | 'resend' | 'brevo' | 'sendgrid' | 'simulated'
+  provider: string; // 'smtp' | 'resend' | 'brevo' | 'sendgrid' | 'unconfigured'
   fromEmail: string;
+}
+
+export async function sendTeacherInviteEmail(payload: {
+  toEmail: string;
+  recipientName?: string;
+  schoolName?: string;
+  inviterName?: string;
+  role?: string;
+}): Promise<{ success: boolean; message: string; provider?: string }> {
+  try {
+    const headers = await getAuthHeaders();
+    const res = await fetch('/api/email/invite', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, message: data.error || data.message || `Invite request failed (${res.status})` };
+    }
+    return data;
+  } catch (err: any) {
+    console.error('Error sending teacher invite email:', err);
+    return { success: false, message: err.message || 'Failed to dispatch invite email' };
+  }
+}
+
+export async function submitSchoolInvoiceRequest(payload: {
+  planName: string;
+  billingCycle: 'annual' | 'monthly';
+  schoolName: string;
+  phone: string;
+  contactEmail?: string;
+}): Promise<{ success: boolean; message: string; provider?: string }> {
+  try {
+    const headers = await getAuthHeaders();
+    const res = await fetch('/api/billing/invoice-request', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, message: data.error || data.message || `Request failed (${res.status})` };
+    }
+    return data;
+  } catch (err: any) {
+    console.error('Error submitting school invoice request:', err);
+    return { success: false, message: err.message || 'Failed to submit invoice request' };
+  }
 }
 
 export async function sendAutomatedWelcomeEmail(
@@ -170,7 +220,7 @@ export function generateWelcomeEmailHtml(recipientName?: string, schoolName?: st
               <div class="badge">1-Year Free Founding Pass Active</div>
               <h1 class="brand-title">Smart PE India</h1>
               <p class="brand-slogan">Plan Smarter. Teach Better.</p>
-              <p class="brand-subtitle">India's #1 AI Platform for Physical Education Teachers & Sports Departments</p>
+              <p class="brand-subtitle">PE Digital Platform for Physical Education Teachers &amp; Sports Departments</p>
             </div>
 
             <!-- Main Content Area -->
@@ -179,14 +229,14 @@ export function generateWelcomeEmailHtml(recipientName?: string, schoolName?: st
               <p class="greeting">Dear ${safeName},</p>
               
               <p class="intro-p">
-                Welcome to <strong>Smart PE India</strong>! We are thrilled to partner with you and <strong>${safeSchool}</strong> in modernizing physical education across India.
+                Welcome to <strong>Smart PE India</strong>! We are delighted to partner with you and <strong>${safeSchool}</strong> in modernizing physical education across India.
               </p>
 
               <!-- Highlight Pass Activation Card -->
               <div class="hero-banner">
                 <div class="hero-banner-title">🌟 Your 1-Year Free Founding Educator Pass is Activated!</div>
                 <p class="hero-banner-desc">
-                  You have unlocked complete, unrestricted access to India's premier AI curriculum generator, assessment engine, and sports management suite.
+                  You have unlocked full educator access to our AI curriculum generator, assessment engine, and sports management workspace.
                 </p>
               </div>
 
@@ -216,8 +266,8 @@ export function generateWelcomeEmailHtml(recipientName?: string, schoolName?: st
                       <div style="background-color: #fefce8; color: #854d0e; width: 32px; height: 32px; border-radius: 8px; text-align: center; line-height: 32px; font-size: 16px;">🏆</div>
                     </td>
                     <td class="benefit-content-td">
-                      <div class="benefit-name">Official Khelo India & SAI Assessment Battery</div>
-                      <p class="benefit-desc">Record fitness tests, calculate instant SAI percentile scores, track BMI ratings, and print inspection-ready student health report cards with 1 click.</p>
+                      <div class="benefit-name">Khelo India &amp; SAI–Aligned Assessment Battery</div>
+                      <p class="benefit-desc">Record fitness tests, calculate instant age- and gender-graded percentile scores, track BMI ratings, and print student health report cards with 1 click.</p>
                     </td>
                   </tr>
                 </table>
@@ -246,8 +296,8 @@ export function generateWelcomeEmailHtml(recipientName?: string, schoolName?: st
                       <div style="background-color: #faf5ff; color: #6b21a8; width: 32px; height: 32px; border-radius: 8px; text-align: center; line-height: 32px; font-size: 16px;">📊</div>
                     </td>
                     <td class="benefit-content-td">
-                      <div class="benefit-name">Principal & Management Inspection Dashboard</div>
-                      <p class="benefit-desc">Generate executive summary reports, school-wide physical literacy metrics, and teacher workload schedules to demonstrate program excellence.</p>
+                      <div class="benefit-name">Principal &amp; Department Oversight Dashboard</div>
+                      <p class="benefit-desc">Track class-wise testing completion, school physical literacy metrics, and teacher workload schedules cleanly.</p>
                     </td>
                   </tr>
                 </table>
@@ -262,7 +312,7 @@ export function generateWelcomeEmailHtml(recipientName?: string, schoolName?: st
                     </td>
                     <td class="benefit-content-td">
                       <div class="benefit-name">Tournament Fixture & Sports Day Manager</div>
-                      <p class="benefit-desc">Build knockout brackets (with official bye calculations), round-robin leagues, and Sports Day point tables with exportable PDF & image sheets.</p>
+                      <p class="benefit-desc">Build knockout brackets (with structured bye placement), round-robin leagues, and Sports Day point tables with exportable PDF & image sheets.</p>
                     </td>
                   </tr>
                 </table>
@@ -317,7 +367,7 @@ export function generateWelcomeEmailHtml(recipientName?: string, schoolName?: st
               </p>
               <div class="footer-links">
                 <a href="https://smartpeindia.app">Portal Home</a> •
-                <a href="https://smartpeindia.app/#curriculum">Curriculum</a> •
+                <a href="https://smartpeindia.app/#yearly-planner">Curriculum</a> •
                 <a href="https://smartpeindia.app/#khelo-india">Khelo India</a> •
                 <a href="https://smartpeindia.app/#privacy">Privacy Policy</a> •
                 <a href="mailto:contact@smartpeindia.app">Contact Support</a>
@@ -339,12 +389,12 @@ Dear ${safeName},
 
 Welcome to Smart PE India! Your 1-Year Free Founding Educator Pass has been activated for ${safeSchool}.
 
-🌟 Key Benefits of Your Smart PE India Portal:
+🌟 Key Highlights of Your Smart PE India Portal:
 1. ⚡ AI PE Lesson Planner & Drill Generator — Generate CBSE/ICSE/State aligned lesson plans in under 60 seconds with diagrams and safety cues.
-2. 🏆 Official Khelo India & SAI Assessment Battery — Instant SAI fitness scores, BMI percentiles, and printable student health report cards.
+2. 🏆 Khelo India & SAI–Aligned Assessment Battery — Instant age- and gender-graded fitness scores, BMI percentiles, and printable student health report cards.
 3. 📝 CBSE Theory Master & Exam Question Paper Maker — Board-pattern PE question papers with ready-to-use answer keys for Classes 9–12.
-4. 📊 Principal & Management Inspection Dashboard — Inspection-ready physical literacy reports and workload schedules.
-5. 🏅 Tournament & Sports Day Manager — Knockout brackets with bye calculations and round-robin league schedules.
+4. 📊 Principal & Department Oversight Dashboard — Class-wise fitness tracking and teacher workload schedules.
+5. 🏅 Tournament & Sports Day Manager — Knockout brackets with structured bye calculations and round-robin league schedules.
 6. 🏃 AI Sports Biomechanics Lab — Movement analysis and coaching cues for athletics, football, and cricket.
 
 Launch your PE portal anytime at: https://smartpeindia.app
@@ -492,8 +542,8 @@ export async function getEmailConfigStatus(): Promise<EmailServiceStatus> {
   } catch {
     return {
       configured: false,
-      provider: 'simulated',
-      fromEmail: 'alsamy36@gmail.com'
+      provider: 'unconfigured',
+      fromEmail: 'noreply@smartpeindia.app'
     };
   }
 }
@@ -526,7 +576,7 @@ export async function getBrevoLiveStatus(): Promise<BrevoLiveStatus> {
       configured: false,
       connected: false,
       apiKeyFound: false,
-      fromEmail: 'alsamy36@gmail.com',
+      fromEmail: 'noreply@smartpeindia.app',
       senderVerified: false,
       error: err.message || 'Failed to connect to email status service'
     };
@@ -544,7 +594,7 @@ export async function sendBrevoTestEmail(toEmail?: string): Promise<{
     const res = await fetch('/api/email/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ toEmail: toEmail || 'alsamy36@gmail.com' })
+      body: JSON.stringify({ toEmail: toEmail || 'contact@smartpeindia.app' })
     });
     const data = await res.json();
     return data;

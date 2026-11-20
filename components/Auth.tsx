@@ -71,6 +71,15 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
   };
 
   const handleGoogleSignIn = async () => {
+    if (!agreedToPrivacy) {
+      setError(
+        isLogin
+          ? 'Please read and accept the Terms & Conditions and Privacy Notice before logging in.'
+          : 'Please accept the Terms & Conditions and Privacy Notice before creating an account.'
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -86,6 +95,7 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
         const nowIso = new Date().toISOString();
         const cleanEmail = (user.email || '').trim().toLowerCase();
         const cleanName = user.displayName?.trim() || cleanEmail.split('@')[0] || 'Coach';
+        let resolvedOrgName = '';
 
         if (workspaceType === 'academy') {
           // Check if coach was invited to an existing academy
@@ -124,6 +134,7 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             programId = program.id;
           }
 
+          resolvedOrgName = progName;
           await setDoc(userDocRef, {
             uid: user.uid,
             email: cleanEmail,
@@ -135,6 +146,8 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             role: 'admin',
             createdAt: nowIso,
             registrationDate: nowIso,
+            privacyAcceptedAt: nowIso,
+            privacyVersion: '2026-11',
             nurtureStep1SentAt: nowIso
           });
 
@@ -177,6 +190,7 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           }
 
           const finalSchoolName = customSchoolName || schoolName.trim() || `${cleanName}'s Partner School`;
+          resolvedOrgName = finalSchoolName;
           
           await setDoc(userDocRef, {
             uid: user.uid,
@@ -190,6 +204,8 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             role,
             createdAt: nowIso,
             registrationDate: nowIso,
+            privacyAcceptedAt: nowIso,
+            privacyVersion: '2026-11',
             nurtureStep1SentAt: nowIso
           });
 
@@ -208,11 +224,19 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
 
         userActivityService.recordUserLogin(user, {
           workspaceType: workspaceType,
-          orgName: workspaceType === 'academy' ? academyName : schoolName,
+          orgName: resolvedOrgName || (workspaceType === 'academy' ? academyName : schoolName),
           role: 'admin'
         }).catch(() => {});
 
+        sessionStorage.setItem('smartpe_show_onboarding', 'true');
         trackEvent('signup', { method: 'google', workspace: workspaceType });
+        trackEvent('signup_complete', { method: 'google', workspace: workspaceType });
+        trackEvent('profile_created', { workspace: workspaceType });
+
+        if (cleanEmail) {
+          sendAutomatedWelcomeEmail(cleanEmail, cleanName, resolvedOrgName || (workspaceType === 'academy' ? academyName : schoolName))
+            .catch(e => console.warn('Google signup welcome email note:', e));
+        }
       } else {
         const uData = userSnap.data();
         const activeWs = uData.activeWorkspace || (uData.academyId && !uData.schoolId ? 'academy' : 'school');
@@ -222,11 +246,13 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           academicCoachingCloudService.getOrFetchProgramForCurrentUser().catch(() => {});
         }
 
-        // Record existing user login event for Super Admin tracking
+        // Record existing user login event for Super Admin tracking and record latest Terms acceptance
         userActivityService.recordUserLogin(user, {
           workspaceType: activeWs,
           orgName: uData.schoolName || uData.academyName,
-          role: uData.role
+          role: uData.role,
+          privacyAcceptedAt: new Date().toISOString(),
+          privacyVersion: '2026-11'
         }).catch(() => {});
       }
     } catch (err: any) {
@@ -250,8 +276,12 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!isLogin && !agreedToPrivacy) {
-      setError('Please accept the Terms of Service and Privacy Notice to proceed with registration.');
+    if (!agreedToPrivacy) {
+      setError(
+        isLogin
+          ? 'Please read and accept the Terms & Conditions and Privacy Notice before logging in.'
+          : 'Please accept the Terms & Conditions and Privacy Notice to proceed with registration.'
+      );
       return;
     }
 
@@ -277,11 +307,13 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           localStorage.setItem('smartpe_active_workspace', activeWs);
         }
 
-        // Record user login event in Firestore for Super Admin tracking
+        // Record user login event and latest Terms/Privacy acceptance
         userActivityService.recordUserLogin(user, {
           workspaceType: activeWs,
           orgName,
-          role: userRole
+          role: userRole,
+          privacyAcceptedAt: new Date().toISOString(),
+          privacyVersion: '2026-11'
         }).catch(() => {});
       } else {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -314,6 +346,8 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             role: 'admin',
             createdAt: nowIso,
             registrationDate: nowIso,
+            privacyAcceptedAt: nowIso,
+            privacyVersion: '2026-11',
             lastLoginAt: nowIso,
             lastActiveAt: nowIso,
             loginCount: 1,
@@ -329,8 +363,15 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             role: 'admin'
           }).catch(() => {});
 
+          sessionStorage.setItem('smartpe_show_onboarding', 'true');
           trackEvent('signup', { method: 'email', workspace: 'academy' });
+          trackEvent('signup_complete', { method: 'email', workspace: 'academy' });
           trackEvent('profile_created', { workspace: 'academy' });
+
+          if (user.email) {
+            sendAutomatedWelcomeEmail(user.email, displayName || 'Head Coach', finalAcademyName)
+              .catch(e => console.warn('Academy welcome email trigger note:', e));
+          }
         } else {
           // --- SCHOOL WORKSPACE REGISTRATION ---
           const membersRef = collection(db, 'schoolMembers');
@@ -386,6 +427,8 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             role,
             createdAt: nowIso,
             registrationDate: nowIso,
+            privacyAcceptedAt: nowIso,
+            privacyVersion: '2026-11',
             nurtureStep1SentAt: nowIso
           });
 
@@ -409,7 +452,9 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             role
           }).catch(() => {});
 
+          sessionStorage.setItem('smartpe_show_onboarding', 'true');
           trackEvent('signup', { method: 'email', workspace: 'school' });
+          trackEvent('signup_complete', { method: 'email', workspace: 'school' });
           trackEvent('profile_created', { workspace: 'school' });
 
           // Corporate Automated Welcome Email Dispatch
@@ -740,66 +785,66 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
                 <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-[11px] text-slate-600 leading-relaxed space-y-2">
                   <div className="font-black uppercase tracking-wider text-slate-900 flex items-center gap-1.5 text-xs">
                     <ShieldCheck size={16} className="text-indigo-600" />
-                    <span>Privacy & Data Protection Notice</span>
+                    <span>Privacy &amp; Data Protection Notice</span>
                   </div>
                   <p>
-                    SmartPE may process student names/identifiers, class/section, PE assessments, fitness results, sports performance records and progress reports solely to provide PE assessment, curriculum management and reporting services.
+                    SmartPE processes student names/identifiers, class/section, PE assessments, fitness results, sports performance records and progress reports solely to provide PE assessment, curriculum management and reporting services.
                   </p>
                   <ul className="list-disc list-inside space-y-0.5 text-slate-500 font-semibold text-[10px]">
                     <li>Enter only information necessary for the intended educational purpose.</li>
                     <li>SmartPE does <strong>not</strong> sell student data or use it for targeted advertising.</li>
-                    <li>School data is strictly restricted to authorized users within your organization.</li>
+                    <li>You or your school admin can export or permanently delete workspace data anytime.</li>
                   </ul>
                 </div>
-
-                {/* Required Agreement Checkbox */}
-                <label className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-slate-50 cursor-pointer select-none group">
-                  <input
-                    type="checkbox"
-                    required
-                    checked={agreedToPrivacy}
-                    onChange={(e) => {
-                      setAgreedToPrivacy(e.target.checked);
-                      if (error) setError(null);
-                    }}
-                    className="mt-0.5 w-4 h-4 rounded border-2 border-slate-400 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
-                  <span className="text-xs font-bold text-slate-700 leading-tight">
-                    I have read and agree to the SmartPE{' '}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setPrivacyModalTab('terms');
-                        setIsPrivacyModalOpen(true);
-                      }}
-                      className="text-indigo-600 underline font-black hover:text-indigo-800"
-                    >
-                      Terms of Service
-                    </button>{' '}
-                    and{' '}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setPrivacyModalTab('privacy');
-                        setIsPrivacyModalOpen(true);
-                      }}
-                      className="text-indigo-600 underline font-black hover:text-indigo-800"
-                    >
-                      Privacy Notice
-                    </button>
-                    .
-                  </span>
-                </label>
               </div>
             )}
 
+            {/* Required Terms & Privacy Checkbox (Shown on BOTH Login and Registration) */}
+            <label className="flex items-start gap-2.5 p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl hover:bg-slate-100/70 cursor-pointer select-none group">
+              <input
+                type="checkbox"
+                required
+                checked={agreedToPrivacy}
+                onChange={(e) => {
+                  setAgreedToPrivacy(e.target.checked);
+                  if (error) setError(null);
+                }}
+                className="mt-0.5 w-4 h-4 rounded border-2 border-slate-400 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
+              />
+              <span className="text-xs font-bold text-slate-700 leading-snug">
+                I have read and agree to the SmartPE{' '}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPrivacyModalTab('terms');
+                    setIsPrivacyModalOpen(true);
+                  }}
+                  className="text-indigo-600 underline font-black hover:text-indigo-800 cursor-pointer"
+                >
+                  Terms &amp; Conditions
+                </button>{' '}
+                and{' '}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPrivacyModalTab('privacy');
+                    setIsPrivacyModalOpen(true);
+                  }}
+                  className="text-indigo-600 underline font-black hover:text-indigo-800 cursor-pointer"
+                >
+                  Privacy Policy
+                </button>
+                .
+              </span>
+            </label>
+
             <button 
               type="submit"
-              disabled={loading || (!isLogin && !agreedToPrivacy)}
+              disabled={loading || !agreedToPrivacy}
               className="w-full py-4 bg-primary text-white border-2 border-slate-900 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary-container transition-all shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : (
@@ -855,8 +900,12 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             <div className="mt-6 text-center">
               <button 
                 onClick={() => {
-                  setIsLogin(!isLogin);
+                  const nextIsLogin = !isLogin;
+                  setIsLogin(nextIsLogin);
                   setError(null);
+                  if (!nextIsLogin) {
+                    trackEvent('signup_start', { entry_point: 'auth_form', workspace: workspaceType });
+                  }
                 }}
                 className="text-slate-500 font-bold text-xs sm:text-sm hover:text-primary transition-colors"
               >

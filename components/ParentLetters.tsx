@@ -27,7 +27,8 @@ const PURPOSES = [
   "Outstanding Achievement",
   "Equipment Reminder",
   "Medical Fitness Certificate Required",
-  "Khelo India Selection"
+  "Khelo India Selection",
+  "DPDP Parent Consent & PE Assessment Notice"
 ];
 
 const ParentLetters: React.FC = () => {
@@ -41,7 +42,51 @@ const ParentLetters: React.FC = () => {
   const [result, setResult] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
 
+  const handleLoadDpdpConsentTemplate = () => {
+    const schoolLabel = localStorage.getItem('smartpe_school_name') || '[School / Institution Name]';
+    const studentLabel = studentName.trim() || '[Student Full Name]';
+    const template = `SUBJECT: PARENT / GUARDIAN CONSENT NOTICE — PHYSICAL EDUCATION & FITNESS ASSESSMENT (INDIA DPDP ACT, 2023)
+
+Dear Parent / Guardian,
+
+At ${schoolLabel}, we conduct structured Physical Education (PE) assessments aligned with NEP 2020 and Khelo India / CBSE physical literacy standards to support your child's health, motor development, and fitness progress.
+
+1. WHAT INFORMATION IS RECORDED:
+• Student Name / Roll Number, Class & Section
+• Age and Gender (used strictly to calculate age-appropriate fitness percentiles)
+• Height, Weight (BMI), and PE Battery Metrics (flexibility, strength, agility, endurance, and CBSE practical marks)
+
+2. WHAT WE DO NOT COLLECT OR DO:
+• We do NOT collect Aadhaar numbers, home addresses, or student personal phone numbers in the PE system.
+• Student data is NEVER sold, shared with advertisers, or used for commercial profiling.
+• All records remain strictly under school control and are isolated to authorized PE staff of ${schoolLabel}.
+
+3. YOUR RIGHTS AS PARENT / GUARDIAN:
+You may inspect your child's PE fitness report card, request correction of any details, or ask the School PE Coordinator to remove your child's digital PE profile at any time.
+
+------------------------------------------------------------
+STUDENT DETAILS & PARENT CONSENT SLIP
+
+Student Name: ${studentLabel}
+Class / Section: ___________________   Roll No.: ___________
+
+[ ] I have read this notice and give my consent for ${schoolLabel} to record and track my ward's Physical Education & Fitness Assessment progress.
+
+Parent / Guardian Name: ____________________________________
+Signature: _________________________   Date: _______________
+
+Issued by: ${teacherName}
+Physical Education Department, ${schoolLabel}`;
+    setPurpose("DPDP Parent Consent & PE Assessment Notice");
+    setResult(template);
+    setError(null);
+  };
+
   const handleGenerate = async () => {
+    if (purpose === "DPDP Parent Consent & PE Assessment Notice") {
+      handleLoadDpdpConsentTemplate();
+      return;
+    }
     if (!studentName.trim()) {
       setError("Please enter the student's name.");
       return;
@@ -144,7 +189,16 @@ const ParentLetters: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Purpose of Letter</label>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Purpose of Letter</label>
+                <button
+                  type="button"
+                  onClick={handleLoadDpdpConsentTemplate}
+                  className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Load Instant DPDP Parent Consent Form
+                </button>
+              </div>
               <select 
                 value={purpose}
                 onChange={e => setPurpose(e.target.value)}

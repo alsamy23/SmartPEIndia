@@ -14,6 +14,8 @@ import {
   buildCorporateFeatureEmail, 
   buildLessonPlannerNurtureEmail,
   buildFitnessTestsNurtureEmail,
+  buildTeacherInviteEmail,
+  buildBillingInvoiceRequestEmail,
   getNurtureEmailTemplate,
   dispatchEmail,
   buildAdminIncidentAlertEmail,
@@ -300,7 +302,7 @@ apiRouter.get("/email/brevo/status", async (req, res) => {
       configured: false, 
       connected: false, 
       apiKeyFound: false, 
-      fromEmail: "alsamy36@gmail.com",
+      fromEmail: "noreply@smartpeindia.app",
       senderVerified: false, 
       error: err.message || "Failed to inspect Brevo status" 
     });
@@ -311,7 +313,7 @@ apiRouter.get("/email/brevo/status", async (req, res) => {
 apiRouter.post("/email/test", async (req, res) => {
   try {
     const { toEmail } = req.body;
-    const targetEmail = toEmail || "alsamy36@gmail.com";
+    const targetEmail = toEmail || process.env.ADMIN_ALERT_EMAIL || "contact@smartpeindia.app";
 
     if (!targetEmail || typeof targetEmail !== "string" || !targetEmail.includes("@")) {
       return res.status(400).json({ success: false, error: "Valid recipient email address is required" });
@@ -383,7 +385,7 @@ interface TelemetryConfig {
 }
 
 const telemetryConfig: TelemetryConfig = {
-  adminAlertEmail: process.env.ADMIN_ALERT_EMAIL || "alsamy36@gmail.com",
+  adminAlertEmail: process.env.ADMIN_ALERT_EMAIL || "contact@smartpeindia.app",
   adminWhatsAppNumber: process.env.ADMIN_WHATSAPP_NUMBER || "919443389025",
   emailAlertsEnabled: true
 };
@@ -686,8 +688,86 @@ apiRouter.post("/email/nurture/trigger", requireAuth, async (req: AuthenticatedR
   }
 });
 
-// Automated Registration Date Evaluator
-apiRouter.post("/email/nurture/evaluate", requireAuth, async (req: AuthenticatedRequest, res) => {
+// Automated Teacher Invite Email endpoint
+apiRouter.post("/email/invite", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userKey = req.user?.uid || req.ip || "anon";
+    const rl = checkRateLimit(`email_invite_${userKey}`, 20, 60 * 1000);
+    if (!rl.allowed) {
+      return res.status(429).json({ success: false, error: "Too many invite requests. Please wait a minute." });
+    }
+
+    const { toEmail, recipientName, schoolName, inviterName, role } = req.body;
+    if (!toEmail || typeof toEmail !== "string" || !toEmail.includes("@")) {
+      return res.status(400).json({ success: false, error: "Valid teacher email address is required" });
+    }
+
+    const { subject, html, text } = buildTeacherInviteEmail(
+      recipientName || "Physical Education Educator",
+      schoolName || "SmartPE Partner School",
+      inviterName || req.user?.email || "School Administrator",
+      role || "teacher"
+    );
+    const result = await dispatchEmail(toEmail.trim(), subject, html, text);
+
+    res.json({
+      success: result.success,
+      message: result.message,
+      provider: result.provider,
+      recipient: toEmail.trim()
+    });
+  } catch (error: any) {
+    console.error("Teacher invite email error:", error);
+    res.status(500).json({ success: false, error: "Failed to dispatch teacher invite email" });
+  }
+});
+
+// School Plan & Invoice Request endpoint
+apiRouter.post("/billing/invoice-request", optionalAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const ipKey = req.user?.uid || req.ip || "anon";
+    const rl = checkRateLimit(`billing_invoice_${ipKey}`, 10, 5 * 60 * 1000);
+    if (!rl.allowed) {
+      return res.status(429).json({ success: false, error: "Too many invoice requests. Please try again shortly." });
+    }
+
+    const { planName, billingCycle, schoolName, phone, contactEmail } = req.body;
+    if (!planName || !schoolName || !phone) {
+      return res.status(400).json({ success: false, error: "Plan name, school name, and contact phone are required." });
+    }
+
+    const adminEmail = process.env.ADMIN_ALERT_EMAIL || "contact@smartpeindia.app";
+    const tpl = buildBillingInvoiceRequestEmail({
+      planName: String(planName).trim(),
+      billingCycle: String(billingCycle || "annual").trim(),
+      schoolName: String(schoolName).trim(),
+      phone: String(phone).trim(),
+      contactEmail: contactEmail ? String(contactEmail).trim() : req.user?.email
+    });
+
+    const result = await dispatchEmail(adminEmail, tpl.subject, tpl.html, tpl.text);
+    res.json({
+      success: result.success,
+      message: result.success
+        ? "Invoice & onboarding request received. Our team will reach out shortly."
+        : result.message,
+      provider: result.provider
+    });
+  } catch (error: any) {
+    console.error("Invoice request error:", error);
+    res.status(500).json({ success: false, error: "Failed to process invoice request." });
+  }
+});
+
+// Automated Registration Date Evaluator (supports Firebase Bearer auth OR scheduled x-cron-secret)
+apiRouter.post("/email/nurture/evaluate", async (req: AuthenticatedRequest, res, next) => {
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  const headerSecret = String(req.headers["x-cron-secret"] || "").trim();
+  if (cronSecret && headerSecret && cronSecret === headerSecret) {
+    return next();
+  }
+  return requireAuth(req, res, next);
+}, async (req: AuthenticatedRequest, res) => {
   try {
     const { 
       toEmail, 
@@ -699,8 +779,17 @@ apiRouter.post("/email/nurture/evaluate", requireAuth, async (req: Authenticated
       createdAt, 
       step1SentAt, 
       step2SentAt, 
-      step3SentAt 
+      step3SentAt,
+      emailOptOut
     } = req.body;
+
+    if (emailOptOut === true) {
+      return res.json({
+        success: true,
+        actionTaken: "opted_out",
+        message: "Educator has opted out of onboarding sequence emails."
+      });
+    }
 
     const targetEmail = toEmail || email;
     const targetName = recipientName || displayName || name || "Physical Education Educator";
@@ -754,15 +843,17 @@ apiRouter.post("/email/nurture/evaluate", requireAuth, async (req: Authenticated
 
     res.json({
       success: result.success,
-      actionTaken: `sent_step_${dueStep}`,
+      actionTaken: result.success ? `sent_step_${dueStep}` : "delivery_failed",
       dispatchedStep: dueStep,
       stepName: template.stepName,
       triggerDay: template.triggerDay,
       daysSinceRegistration,
       provider: result.provider,
       recipient: targetEmail,
-      message: `Triggered Part ${dueStep} (${template.stepName}) based on registration date.`,
-      updatedStatus
+      message: result.success
+        ? `Triggered Part ${dueStep} (${template.stepName}) based on registration date.`
+        : result.message,
+      updatedStatus: result.success ? updatedStatus : undefined
     });
   } catch (error: any) {
     console.error("Nurture evaluation error:", error);

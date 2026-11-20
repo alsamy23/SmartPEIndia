@@ -10,7 +10,7 @@ export function reloadEmailEnv() {
 }
 
 export function parseSender(fromEmailString?: string): { name: string; email: string } {
-  const fallbackEmail = "admin@smartpeindia.com";
+  const fallbackEmail = "noreply@smartpeindia.app";
   const fallbackName = "SmartPE India";
   if (!fromEmailString || !fromEmailString.trim()) {
     return { name: fallbackName, email: fallbackEmail };
@@ -30,7 +30,7 @@ export function parseSender(fromEmailString?: string): { name: string; email: st
 
 export interface EmailSenderConfig {
   configured: boolean;
-  provider: "smtp" | "gmail" | "resend" | "brevo" | "simulated";
+  provider: "smtp" | "gmail" | "resend" | "brevo" | "unconfigured";
   fromEmail: string;
 }
 
@@ -60,7 +60,7 @@ export function getEmailConfig(): EmailSenderConfig {
     return {
       configured: Boolean(process.env.BREVO_API_KEY),
       provider: "brevo",
-      fromEmail: process.env.FROM_EMAIL || "SmartPE India <admin@smartpeindia.com>"
+      fromEmail: process.env.FROM_EMAIL || "SmartPE India <noreply@smartpeindia.app>"
     };
   }
 
@@ -68,7 +68,7 @@ export function getEmailConfig(): EmailSenderConfig {
     return {
       configured: true,
       provider: "resend",
-      fromEmail: process.env.FROM_EMAIL || "SmartPE India <admin@smartpeindia.com>"
+      fromEmail: process.env.FROM_EMAIL || "SmartPE India <noreply@smartpeindia.app>"
     };
   }
 
@@ -90,15 +90,15 @@ export function getEmailConfig(): EmailSenderConfig {
 
   return {
     configured: false,
-    provider: "simulated",
-    fromEmail: process.env.FROM_EMAIL || "SmartPE India <admin@smartpeindia.com>"
+    provider: "unconfigured",
+    fromEmail: process.env.FROM_EMAIL || "SmartPE India <noreply@smartpeindia.app>"
   };
 }
 
 export async function checkBrevoStatus(): Promise<BrevoStatusResponse> {
   reloadEmailEnv();
   const apiKey = process.env.BREVO_API_KEY?.trim();
-  const fromEmail = process.env.FROM_EMAIL || "SmartPE India <admin@smartpeindia.com>";
+  const fromEmail = process.env.FROM_EMAIL || "SmartPE India <noreply@smartpeindia.app>";
   const sender = parseSender(fromEmail);
 
   if (!apiKey) {
@@ -127,7 +127,7 @@ export async function checkBrevoStatus(): Promise<BrevoStatusResponse> {
       const errMsg = errBody?.message || errBody?.code || `HTTP ${accRes.status} ${accRes.statusText}`;
       const isIpRestricted = errMsg.toLowerCase().includes("ip address") || errMsg.toLowerCase().includes("authorised_ips");
       const friendlyError = isIpRestricted
-        ? "Brevo API key active, but IP authorization is required: Please authorize this server IP in Brevo Dashboard > Security > Authorized IPs (https://app.brevo.com/security/authorised_ips). Automated emails continue via background processing."
+        ? "Brevo API key active, but IP authorization is required: Please authorize this server IP in Brevo Dashboard > Security > Authorized IPs (https://app.brevo.com/security/authorised_ips)."
         : `Brevo authentication failed (${accRes.status}): ${errMsg}. Verify your BREVO_API_KEY in .env.`;
       
       return {
@@ -316,7 +316,7 @@ export function buildCorporateWelcomeEmail(recipientName: string, schoolName?: s
               <div class="badge">1-Year Free Founding Pass Active</div>
               <h1 class="brand-title">Smart PE India</h1>
               <p class="brand-slogan">Plan Smarter. Teach Better.</p>
-              <p class="brand-subtitle">India's #1 AI Platform for Physical Education Teachers & Sports Departments</p>
+              <p class="brand-subtitle">PE Digital Platform for Physical Education Teachers &amp; Sports Departments</p>
             </div>
 
             <!-- Main Content Area -->
@@ -325,14 +325,14 @@ export function buildCorporateWelcomeEmail(recipientName: string, schoolName?: s
               <p class="greeting">Dear ${safeName},</p>
               
               <p class="intro-p">
-                Welcome to <strong>Smart PE India</strong>! We are thrilled to partner with you and <strong>${safeSchool}</strong> in modernizing physical education across India.
+                Welcome to <strong>Smart PE India</strong>! We are delighted to partner with you and <strong>${safeSchool}</strong> in modernizing physical education across India.
               </p>
 
               <!-- Highlight Pass Activation Card -->
               <div class="hero-banner">
                 <div class="hero-banner-title">🌟 Your 1-Year Free Founding Educator Pass is Activated!</div>
                 <p class="hero-banner-desc">
-                  You have unlocked complete, unrestricted access to India's premier AI curriculum generator, assessment engine, and sports management suite.
+                  You have unlocked full educator access to our AI curriculum generator, assessment engine, and sports management workspace.
                 </p>
               </div>
 
@@ -362,8 +362,8 @@ export function buildCorporateWelcomeEmail(recipientName: string, schoolName?: s
                       <div style="background-color: #fefce8; color: #854d0e; width: 32px; height: 32px; border-radius: 8px; text-align: center; line-height: 32px; font-size: 16px;">🏆</div>
                     </td>
                     <td class="benefit-content-td">
-                      <div class="benefit-name">Official Khelo India & SAI Assessment Battery</div>
-                      <p class="benefit-desc">Record fitness tests, calculate instant SAI percentile scores, track BMI ratings, and print inspection-ready student health report cards with 1 click.</p>
+                      <div class="benefit-name">Khelo India &amp; SAI–Aligned Assessment Battery</div>
+                      <p class="benefit-desc">Record fitness tests, calculate instant age- and gender-graded percentile scores, track BMI ratings, and print student health report cards with 1 click.</p>
                     </td>
                   </tr>
                 </table>
@@ -433,7 +433,7 @@ export function buildCorporateWelcomeEmail(recipientName: string, schoolName?: s
               </p>
               <div class="footer-links">
                 <a href="https://smartpeindia.app">Portal Home</a> •
-                <a href="https://smartpeindia.app/#curriculum">Curriculum</a> •
+                <a href="https://smartpeindia.app/#yearly-planner">Curriculum</a> •
                 <a href="https://smartpeindia.app/#khelo-india">Khelo India</a> •
                 <a href="https://smartpeindia.app/#privacy">Privacy Policy</a> •
                 <a href="mailto:contact@smartpeindia.app">Contact Support</a>
@@ -456,11 +456,11 @@ Dear ${safeName},
 
 Welcome to Smart PE India! Your 1-Year Free Founding Educator Pass has been activated for ${safeSchool}.
 
-🌟 Key Benefits of Your Smart PE India Portal:
+🌟 Key Highlights of Your Smart PE India Portal:
 1. ⚡ AI PE Lesson Planner & Drill Generator — Generate CBSE/ICSE/State aligned lesson plans in under 60 seconds with diagrams and safety cues.
-2. 🏆 Official Khelo India & SAI Assessment Battery — Instant SAI fitness scores, BMI percentiles, and printable student health report cards.
+2. 🏆 Khelo India & SAI–Aligned Assessment Battery — Instant age- and gender-graded fitness scores, BMI percentiles, and printable student health report cards.
 3. 📝 CBSE Theory Master & Exam Question Paper Maker — Board-pattern PE question papers with ready-to-use answer keys for Classes 9–12.
-4. 📊 Principal & Management Inspection Dashboard — Inspection-ready physical literacy reports and workload schedules.
+4. 📊 Principal & Department Oversight Dashboard — Organized physical literacy metrics and workload schedules.
 
 Launch your PE portal anytime at: https://smartpeindia.app
 
@@ -524,9 +524,9 @@ export function buildLessonPlannerNurtureEmail(recipientName: string, schoolName
               </p>
 
               <div class="highlight-card">
-                <h3 style="margin: 0 0 6px 0; color: #0D2B52; font-size: 16px;">⏱️ The 60-Second Lesson Plan Guarantee:</h3>
+                <h3 style="margin: 0 0 6px 0; color: #0D2B52; font-size: 16px;">⏱️ The 60-Second Lesson Plan Workflow:</h3>
                 <p style="margin: 0; font-size: 14px; color: #475569;">
-                  Select your grade, choose a sport (e.g. Football, Basketball, Athletics, Kho-Kho), and our AI generates a structured 40-minute period breakdown with warm-ups, progressions, and safety protocols.
+                  Select your grade, choose a sport (e.g. Football, Basketball, Athletics, Kho-Kho), and generate a structured 40-minute period breakdown with warm-ups, progressions, and safety cues.
                 </p>
               </div>
 
@@ -537,11 +537,11 @@ export function buildLessonPlannerNurtureEmail(recipientName: string, schoolName
                 <p style="margin: 6px 0; font-size: 14px;">✅ <strong>12-Minute Skill Breakdown:</strong> Step-by-step coaching cues with fault corrections.</p>
                 <p style="margin: 6px 0; font-size: 14px;">✅ <strong>15-Minute Lead-Up Game:</strong> Engaging modified play keeping all students active.</p>
                 <p style="margin: 6px 0; font-size: 14px;">✅ <strong>5-Minute Cool-Down & Reflection:</strong> Static stretches & key learning questions.</p>
-                <p style="margin: 6px 0; font-size: 14px;">✅ <strong>CBSE / ICSE / NEP 2020 Matrix:</strong> Official learning outcomes and safety guidelines.</p>
+                <p style="margin: 6px 0; font-size: 14px;">✅ <strong>CBSE / ICSE / NEP 2020 Matrix:</strong> Board-aligned learning outcomes and safety guidelines.</p>
               </div>
 
               <div style="text-align: center; margin: 32px 0;">
-                <a href="https://smartpeindia.app/#planner" class="cta-btn">Generate Your First Lesson Plan Now →</a>
+                <a href="https://smartpeindia.app/#lesson-planner" class="cta-btn">Generate Your First Lesson Plan Now →</a>
               </div>
 
               <p style="font-size: 13px; color: #64748b; text-align: center; margin-bottom: 0;">
@@ -557,7 +557,7 @@ export function buildLessonPlannerNurtureEmail(recipientName: string, schoolName
             <div class="footer">
               <p style="margin: 0 0 8px 0; font-weight: 700; color: #ffffff;">Smart PE India</p>
               <p style="margin: 0; font-size: 11px; color: #94a3b8;">
-                You are receiving this value-packed guide as part of your 1-Year Free Founding Educator Pass.
+                You are receiving this onboarding guide as part of your 1-Year Free Founding Educator Pass.
               </p>
             </div>
           </div>
@@ -574,16 +574,16 @@ Dear ${safeName},
 
 Save 3+ hours this week with Smart PE India's AI PE Lesson Planner!
 
-As a Physical Education teacher at ${safeSchool}, writing manual lesson plans takes valuable time. With Smart PE India, you can generate complete 40-minute CBSE/ICSE aligned lesson plans in under 60 seconds.
+As a Physical Education teacher at ${safeSchool}, writing manual lesson plans takes valuable time. With Smart PE India, you can draft complete 40-minute CBSE/ICSE aligned lesson plans in under 60 seconds.
 
 Every plan includes:
 - 8-Min Dynamic Warm-up
 - 12-Min Skill Progression & Coaching Cues
 - 15-Min Lead-up Small Sided Game
 - 5-Min Cool-Down & Reflection
-- Official CBSE/NEP 2020 Learning Outcomes
+- CBSE/NEP 2020 Learning Outcomes
 
-Try it now at: https://smartpeindia.app/#planner
+Try it now at: https://smartpeindia.app/#lesson-planner
 
 Best regards,
 L. Samy
@@ -629,41 +629,41 @@ export function buildFitnessTestsNurtureEmail(recipientName: string, schoolName?
             <div class="header">
               <div class="badge">Nurture Series • Part 3</div>
               <h1 style="font-size: 26px; font-weight: 900; margin: 0 0 6px 0; text-transform: uppercase; color: #ffffff;">Khelo India & Fitness Tests</h1>
-              <p style="font-size: 14px; color: #a7f3d0; margin: 0;">Official SAI Assessment Battery & Instant Report Cards</p>
+              <p style="font-size: 14px; color: #a7f3d0; margin: 0;">SAI–Aligned Assessment Battery & Instant Report Cards</p>
             </div>
 
             <div class="content">
               <p style="font-size: 18px; font-weight: 800; color: #0D2B52; margin-top: 0;">Dear ${safeName},</p>
               
               <p>
-                Fitness assessments are the backbone of a high-performing Physical Education department at <strong>${safeSchool}</strong>.
+                Fitness assessments are the backbone of a structured Physical Education department at <strong>${safeSchool}</strong>.
               </p>
 
               <div class="highlight-card">
-                <h3 style="margin: 0 0 6px 0; color: #166534; font-size: 16px;">🏆 Official Sports Authority of India (SAI) Battery Pre-Loaded:</h3>
+                <h3 style="margin: 0 0 6px 0; color: #166534; font-size: 16px;">🏆 Khelo India &amp; SAI–Aligned Fitness Battery Pre-Loaded:</h3>
                 <p style="margin: 0; font-size: 14px; color: #15803d;">
-                  Never spend hours manually matching raw scores to percentile tables. Enter your student's test results, and Smart PE India computes national percentile ranks instantly!
+                  Never spend hours manually matching raw scores to reference tables. Enter your student's test results, and Smart PE India computes age- and gender-graded percentile ranks instantly!
                 </p>
               </div>
 
-              <h4 style="color: #0D2B52; text-transform: uppercase; font-size: 14px; letter-spacing: 0.5px; margin: 24px 0 12px 0;">All 8 Official Tests Built-in:</h4>
+              <h4 style="color: #0D2B52; text-transform: uppercase; font-size: 14px; letter-spacing: 0.5px; margin: 24px 0 12px 0;">All 8 Battery Protocols Built-in:</h4>
               
               <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
-                <p style="margin: 6px 0; font-size: 14px;">🔹 <strong>Body Composition:</strong> Height, Weight & BMI calculation with WHO/SAI rating bands.</p>
+                <p style="margin: 6px 0; font-size: 14px;">🔹 <strong>Body Composition:</strong> Height, Weight & BMI calculation with age-graded rating bands.</p>
                 <p style="margin: 6px 0; font-size: 14px;">🔹 <strong>Balance & Coordination:</strong> Flamingo Balance Test & Plate Tapping Test.</p>
                 <p style="margin: 6px 0; font-size: 14px;">🔹 <strong>Speed & Endurance:</strong> 50m Standing Start Sprint & 600m Run/Walk.</p>
                 <p style="margin: 6px 0; font-size: 14px;">🔹 <strong>Flexibility & Strength:</strong> Sit & Reach, Partial Curl-ups & Push-ups / Modified Push-ups.</p>
               </div>
 
               <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
-                <h4 style="margin: 0 0 6px 0; color: #1e40af; font-size: 14px;">🖨️ Inspection-Ready Student Health Cards</h4>
+                <h4 style="margin: 0 0 6px 0; color: #1e40af; font-size: 14px;">🖨️ Structured Student Health &amp; Development Cards</h4>
                 <p style="margin: 0; font-size: 13px; color: #1e3a8a;">
-                  Print official Student Health & Fitness Report Cards for Parent-Teacher Meetings (PTMs) and CBSE annual school affiliation inspections with a single click.
+                  Print Student Health &amp; Fitness Report Cards for Parent-Teacher Meetings (PTMs) and annual department documentation with a single click.
                 </p>
               </div>
 
               <div style="text-align: center; margin: 32px 0;">
-                <a href="https://smartpeindia.app/#fitness" class="cta-btn">Explore Fitness Tests & Scores →</a>
+                <a href="https://smartpeindia.app/#fitness-tests" class="cta-btn">Explore Fitness Tests & Scores →</a>
               </div>
 
               <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
@@ -675,7 +675,7 @@ export function buildFitnessTestsNurtureEmail(recipientName: string, schoolName?
             <div class="footer">
               <p style="margin: 0 0 8px 0; font-weight: 700; color: #ffffff;">Smart PE India</p>
               <p style="margin: 0; font-size: 11px; color: #94a3b8;">
-                You are receiving this value-packed guide as part of your 1-Year Free Founding Educator Pass.
+                You are receiving this onboarding guide as part of your 1-Year Free Founding Educator Pass.
               </p>
             </div>
           </div>
@@ -690,17 +690,17 @@ export function buildFitnessTestsNurtureEmail(recipientName: string, schoolName?
   const text = `
 Dear ${safeName},
 
-Calculate instant SAI Fitness Percentiles & Print Student Health Cards for ${safeSchool}!
+Calculate instant SAI-aligned Fitness Percentiles & Print Student Health Cards for ${safeSchool}!
 
-Smart PE India has all official Khelo India & SAI Battery tests pre-loaded:
+Smart PE India has Khelo India & SAI-aligned battery protocols pre-loaded:
 - BMI & Body Composition
 - 50m Sprint & 600m Run/Walk
 - Sit & Reach Flexibility
 - Flamingo Balance & Plate Tapping
 - Partial Curl-Ups & Push-Ups
 
-Generate inspection-ready Student Health Cards with 1 click:
-https://smartpeindia.app/#fitness
+Generate structured Student Health Cards with 1 click:
+https://smartpeindia.app/#fitness-tests
 
 Best regards,
 L. Samy
@@ -766,7 +766,7 @@ export function buildCorporateFeatureEmail(featureTitle: string, featureDescript
       </p>
     </div>
     <div class="footer">
-      <p style="margin: 0;">Smart PE India • #1 AI Platform for Physical Education Teachers</p>
+      <p style="margin: 0;">Smart PE India • PE Digital Platform for Schools &amp; Sports Academies</p>
     </div>
   </div>
 </body>
@@ -776,8 +776,99 @@ export function buildCorporateFeatureEmail(featureTitle: string, featureDescript
   return { subject, html, text: `${featureTitle}\n\n${featureDescription}\n\nAccess it at: ${url}` };
 }
 
+export function buildTeacherInviteEmail(
+  recipientName: string,
+  schoolName: string,
+  inviterName: string,
+  role: string
+): { subject: string; html: string; text: string } {
+  const safeName = recipientName?.trim() || "Physical Education Educator";
+  const safeSchool = schoolName?.trim() || "SmartPE Partner School";
+  const safeInviter = inviterName?.trim() || "School Administrator";
+  const safeRole = role?.trim() || "teacher";
+  const subject = `You're invited to join ${safeSchool} on Smart PE India`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; }
+    .container { max-width: 600px; margin: 24px auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; }
+    .header { background: #0D2B52; padding: 28px 24px; text-align: center; color: #ffffff; }
+    .content { padding: 32px 28px; line-height: 1.65; font-size: 15px; color: #334155; }
+    .btn-primary { background-color: #0D2B52; color: #ffffff !important; text-decoration: none; padding: 14px 32px; font-size: 14px; font-weight: 800; border-radius: 10px; display: inline-block; text-transform: uppercase; }
+    .footer { background-color: #091D38; padding: 20px; text-align: center; font-size: 12px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2 style="margin: 0; color: #ffffff; text-transform: uppercase;">Smart PE India</h2>
+      <p style="margin: 6px 0 0 0; color: #D4A017; font-size: 12px; font-weight: 700;">School Workspace Invitation</p>
+    </div>
+    <div class="content">
+      <p style="font-size: 17px; font-weight: 800; color: #0D2B52; margin-top: 0;">Dear ${safeName},</p>
+      <p>
+        <strong>${safeInviter}</strong> has added you to the <strong>${safeSchool}</strong> PE department workspace on <strong>Smart PE India</strong> with the role: <strong>${safeRole.toUpperCase()}</strong>.
+      </p>
+      <p>
+        Sign in using this exact email address (via Google Sign-In or email registration) to automatically link with your school's student directory, fitness assessments, and lesson plans.
+      </p>
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="https://smartpeindia.app" class="btn-primary">Open Smart PE Portal →</a>
+      </div>
+      <p style="font-size: 13px; color: #64748b;">
+        Need assistance? Reply or contact <a href="mailto:contact@smartpeindia.app" style="color: #0D2B52; font-weight: bold;">contact@smartpeindia.app</a>.
+      </p>
+    </div>
+    <div class="footer">
+      Smart PE India • PE Digital Platform for Indian Schools (<a href="https://smartpeindia.app/#privacy" style="color: #D4A017;">Privacy Policy</a>)
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = `Dear ${safeName},\n\n${safeInviter} has added you to ${safeSchool} on Smart PE India (${safeRole}).\nSign in using this email address at https://smartpeindia.app to access your school workspace.\n\nSupport: contact@smartpeindia.app`;
+  return { subject, html, text };
+}
+
+export function buildBillingInvoiceRequestEmail(params: {
+  planName: string;
+  billingCycle: string;
+  schoolName: string;
+  phone: string;
+  contactEmail?: string;
+}): { subject: string; html: string; text: string } {
+  const subject = `[SmartPE Billing] ${params.planName} Request — ${params.schoolName}`;
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; padding: 24px; color: #0f172a;">
+  <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border: 2px solid #0f172a; border-radius: 16px; overflow: hidden;">
+    <div style="background: #0D2B52; color: #ffffff; padding: 20px 24px;">
+      <h2 style="margin: 0; font-size: 18px; text-transform: uppercase;">New Plan / PO Invoice Request</h2>
+    </div>
+    <div style="padding: 24px; font-size: 14px; line-height: 1.6;">
+      <p><strong>Plan Selected:</strong> ${params.planName}</p>
+      <p><strong>Billing Cycle:</strong> ${params.billingCycle}</p>
+      <p><strong>School / Organization:</strong> ${params.schoolName}</p>
+      <p><strong>Phone / WhatsApp:</strong> ${params.phone}</p>
+      <p><strong>User Email:</strong> ${params.contactEmail || "Not provided"}</p>
+      <p><strong>Submitted At:</strong> ${new Date().toISOString()}</p>
+    </div>
+  </div>
+</body>
+</html>`;
+  const text = `New Plan / PO Invoice Request\nPlan: ${params.planName}\nCycle: ${params.billingCycle}\nSchool: ${params.schoolName}\nPhone: ${params.phone}\nEmail: ${params.contactEmail || "Not provided"}`;
+  return { subject, html, text };
+}
+
 export async function dispatchEmail(toEmail: string, subject: string, html: string, text: string): Promise<{ success: boolean; message: string; provider: string }> {
   const config = getEmailConfig();
+  const replyToEmail = process.env.ADMIN_ALERT_EMAIL || "contact@smartpeindia.app";
 
   // If Resend API key is available via HTTP API
   if (config.provider === "resend" && process.env.RESEND_API_KEY) {
@@ -791,6 +882,7 @@ export async function dispatchEmail(toEmail: string, subject: string, html: stri
         body: JSON.stringify({
           from: config.fromEmail,
           to: [toEmail],
+          reply_to: replyToEmail,
           subject,
           html,
           text
@@ -824,8 +916,8 @@ export async function dispatchEmail(toEmail: string, subject: string, html: stri
           },
           to: [{ email: toEmail.trim() }],
           replyTo: {
-            name: sender.name,
-            email: sender.email
+            name: "SmartPE India Support",
+            email: replyToEmail
           },
           subject,
           htmlContent: html,
@@ -851,15 +943,13 @@ export async function dispatchEmail(toEmail: string, subject: string, html: stri
         );
 
         if (isIpRestricted) {
-          console.warn("[Brevo] Notice: Cloud IP authorization is required on your Brevo account (https://app.brevo.com/security/authorised_ips). Falling back to secondary email dispatcher.");
+          console.warn("[Brevo] Notice: Cloud IP authorization is required on your Brevo account (https://app.brevo.com/security/authorised_ips).");
         } else {
           console.warn(`[Brevo] Dispatch warning (${res.status}): ${errorDetail}`);
         }
-        // Fall through to SMTP / Gmail / Simulation rather than returning failure immediately
       }
     } catch (e: any) {
       console.warn("[Brevo] Network dispatch warning:", e.message);
-      // Fall through to SMTP / Gmail / Simulation
     }
   }
 
@@ -869,6 +959,7 @@ export async function dispatchEmail(toEmail: string, subject: string, html: stri
     try {
       await transporter.sendMail({
         from: config.fromEmail,
+        replyTo: replyToEmail,
         to: toEmail,
         subject,
         html,
@@ -877,16 +968,15 @@ export async function dispatchEmail(toEmail: string, subject: string, html: stri
       return { success: true, message: `Email delivered to ${toEmail} via ${config.provider}`, provider: config.provider };
     } catch (smtpErr: any) {
       console.warn("SMTP delivery warning:", smtpErr.message);
-      // Fall through to simulation
     }
   }
 
-  // Simulated Corporate Dispatch (Logs full email and returns successfully)
-  console.log(`[Smart PE Corporate Email Dispatcher] -> Simulated delivery to ${toEmail} | Subject: "${subject}"`);
+  // Do not silently fake success when no live mail provider succeeded
+  console.warn(`[SmartPE Email Dispatcher] Email delivery not configured/completed for ${toEmail} | Subject: "${subject}"`);
   return {
-    success: true,
-    message: `Email recorded and dispatched via SmartPE engine for ${toEmail}. (To send directly to external inbox via Brevo, authorize this server IP at https://app.brevo.com/security/authorised_ips or configure SMTP).`,
-    provider: "simulated"
+    success: false,
+    message: `Email could not be delivered to ${toEmail} because no live email provider is active or authorized. Configure BREVO_API_KEY, RESEND_API_KEY, or SMTP credentials.`,
+    provider: "unconfigured"
   };
 }
 

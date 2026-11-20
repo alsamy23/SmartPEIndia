@@ -21,6 +21,7 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Check,
   FileSpreadsheet,
   MapPin,
@@ -32,13 +33,19 @@ import {
   BookOpen,
   Trophy,
   Gauge,
-  Sparkles
+  Sparkles,
+  Clock,
+  AlertTriangle,
+  GraduationCap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { fitnessService } from '../services/fitnessService';
-import { Student, FitnessResult, PracticalAssessment, School, SchoolMember } from '../types';
-import { auth, db } from '../services/firebase';
+import { compositeEvaluationService } from '../services/compositeEvaluationService';
+import { calculateTestScoreAndLevel, getTestDefinition } from '../services/physicalDevelopmentEngine';
+import { Student, FitnessResult, PracticalAssessment, School, SchoolMember, CompositeTermEvaluation } from '../types';
+import { auth } from '../services/firebase';
+import { downloadCsvFile } from '../utils/safeBrowser';
 
 interface EventItem {
   id: string;
@@ -71,7 +78,7 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
   const [showGuidelines, setShowGuidelines] = useState(false);
 
   // Filter states
-  const [selectedTerm, setSelectedTerm] = useState<'Term 1' | 'Term 2' | 'Full Year'>('Full Year');
+  const [selectedTerm, setSelectedTerm] = useState<'Full Year' | 'Baseline' | 'Term 1' | 'Term 2'>('Full Year');
   const [selectedGradeBand, setSelectedGradeBand] = useState<'All' | 'Primary (1-5)' | 'Middle (6-8)' | 'Secondary (9-12)'>('All');
   
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
@@ -85,9 +92,25 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
   const [students, setStudents] = useState<Student[]>([]);
   const [results, setResults] = useState<FitnessResult[]>([]);
   const [practicalAssessments, setPracticalAssessments] = useState<PracticalAssessment[]>([]);
+  const [compositeEvaluations, setCompositeEvaluations] = useState<CompositeTermEvaluation[]>([]);
   const [schoolMembers, setSchoolMembers] = useState<SchoolMember[]>([]);
   const [schoolData, setSchoolData] = useState<School | null>(null);
   const [userProfile, setUserProfile] = useState<SchoolMember | null>(null);
+
+  // Class-wise breakdown expand & term deadline state
+  const [expandedClassKeys, setExpandedClassKeys] = useState<Record<string, boolean>>({});
+  const [termDeadlines, setTermDeadlines] = useState<{ Baseline: string; 'Term 1': string; 'Term 2': string }>(() => {
+    try {
+      const saved = localStorage.getItem('smartpe_principal_term_deadlines');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    const addDays = (d: number) => new Date(Date.now() + d * 86400000).toISOString().split('T')[0];
+    return {
+      Baseline: addDays(14),
+      'Term 1': addDays(45),
+      'Term 2': addDays(120)
+    };
+  });
 
   // Dynamic overrides/targets from HoD Panel (persisted in localStorage)
   const [plannedClassesOverride, setPlannedClassesOverride] = useState<number>(() => {
@@ -185,19 +208,32 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
   const [newEventStatus, setNewEventStatus] = useState('Approved & Scheduled');
   const [newEventDesc, setNewEventDesc] = useState('');
 
-  // 1. Fetch User Profile and School Branding
+  // 1. Fetch User Profile and School Branding (with cached seed for instant mount)
   const loadSchoolProfile = async () => {
     if (!auth.currentUser) return;
     try {
-      const member = await fitnessService.getSchoolMember(auth.currentUser.uid);
+      const cached = fitnessService.getCachedSchoolMember(auth.currentUser.uid);
+      if (cached) {
+        setUserProfile(cached);
+      }
+      const member = cached || (await fitnessService.getSchoolMember(auth.currentUser.uid));
       if (member) {
         setUserProfile(member);
         if (member.schoolId) {
-          const school = await fitnessService.getSchool(member.schoolId);
+          const [school, members] = await Promise.all([
+            fitnessService.getSchool(member.schoolId),
+            fitnessService.getSchoolMembers(member.schoolId)
+          ]);
           if (school) {
             setSchoolData(school);
+            if (school.termDeadlines) {
+              setTermDeadlines(prev => ({
+                Baseline: school.termDeadlines?.Baseline || prev.Baseline,
+                'Term 1': school.termDeadlines?.['Term 1'] || prev['Term 1'],
+                'Term 2': school.termDeadlines?.['Term 2'] || prev['Term 2']
+              }));
+            }
           }
-          const members = await fitnessService.getSchoolMembers(member.schoolId);
           setSchoolMembers(members);
         }
       }
@@ -210,56 +246,92 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
     loadSchoolProfile();
   }, [auth.currentUser?.uid]);
 
-  // 2. Real-time Subscriptions to Students, Fitness Results, and Practical Assessments
+  // 2. Real-time Multiplexed Subscriptions to Students, Fitness Results, Practicals & 100M Evaluations
   useEffect(() => {
     const currentUserId = auth.currentUser?.uid || 'guest';
     const schoolId = userProfile?.schoolId || (auth.currentUser ? `personal_${auth.currentUser.uid}` : undefined);
     const isSuper = fitnessService.isSuperAdmin();
 
     setIsSyncing(true);
-    // Subscribe to Students
+    const syncTimer = window.setTimeout(() => setIsSyncing(false), 3000);
+
     const unsubStudents = fitnessService.subscribeToStudents(currentUserId, schoolId, isSuper, (data) => {
       setStudents(data);
       setIsSyncing(false);
       setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     });
 
-    // Subscribe to Fitness Results (Khelo India)
     const unsubResults = fitnessService.subscribeToResults(currentUserId, schoolId, isSuper, (data) => {
       setResults(data);
       setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     });
 
-    // Subscribe to CBSE Practical Assessments (30 Marks)
     const unsubPracticals = fitnessService.subscribeToPracticalAssessments(currentUserId, schoolId, (data) => {
       setPracticalAssessments(data);
       setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     });
 
+    const unsubEvaluations = compositeEvaluationService.subscribeToEvaluations(currentUserId, schoolId, isSuper, (data) => {
+      setCompositeEvaluations(data);
+    });
+
     return () => {
-      if (unsubStudents) unsubStudents();
-      if (unsubResults) unsubResults();
-      if (unsubPracticals) unsubPracticals();
+      window.clearTimeout(syncTimer);
+      unsubStudents?.();
+      unsubResults?.();
+      unsubPracticals?.();
+      unsubEvaluations?.();
     };
   }, [userProfile?.schoolId, auth.currentUser?.uid]);
 
+  const handleUpdateTermDeadline = async (termKey: 'Baseline' | 'Term 1' | 'Term 2', dateStr: string) => {
+    const next = { ...termDeadlines, [termKey]: dateStr };
+    setTermDeadlines(next);
+    try {
+      localStorage.setItem('smartpe_principal_term_deadlines', JSON.stringify(next));
+    } catch {}
+    if (schoolData?.id && !schoolData.id.startsWith('personal_') && (userProfile?.role === 'admin' || fitnessService.isSuperAdmin())) {
+      try {
+        await fitnessService.updateSchool(schoolData.id, { termDeadlines: next });
+      } catch {
+        // Non-fatal if teacher role edits local view
+      }
+    }
+  };
+
+  // Helpers: Grade normalization & matching
+  const normalizeGradeNum = (grade?: string | number): string => {
+    if (grade === undefined || grade === null) return 'Unassigned';
+    const raw = grade.toString().trim();
+    if (!raw) return 'Unassigned';
+    const upper = raw.toUpperCase();
+    const romanMap: Record<string, string> = {
+      I: '1', II: '2', III: '3', IV: '4', V: '5',
+      VI: '6', VII: '7', VIII: '8', IX: '9', X: '10',
+      XI: '11', XII: '12'
+    };
+    if (romanMap[upper]) return romanMap[upper];
+    const digits = raw.replace(/[^0-9]/g, '');
+    return digits || raw;
+  };
+
+  const normalizeTermLabel = (term?: string): string => {
+    const t = (term || 'Baseline').trim();
+    return t || 'Baseline';
+  };
+
   // Helper: Match student grade band
   const isStudentInBand = (grade: string | undefined, band: string): boolean => {
+    if (band === 'All') return true;
     if (!grade) return false;
-    const str = grade.toLowerCase().replace(/[^0-9]/g, '');
-    const num = parseInt(str, 10);
+    const norm = normalizeGradeNum(grade);
+    const num = parseInt(norm, 10);
     if (isNaN(num)) return true;
 
-    if (band === 'Primary (1-5)') {
-      return num >= 1 && num <= 5;
-    }
-    if (band === 'Middle (6-8)') {
-      return num >= 6 && num <= 8;
-    }
-    if (band === 'Secondary (9-12)') {
-      return num >= 9 && num <= 12;
-    }
-    return true; // 'All'
+    if (band === 'Primary (1-5)') return num >= 1 && num <= 5;
+    if (band === 'Middle (6-8)') return num >= 6 && num <= 8;
+    if (band === 'Secondary (9-12)') return num >= 9 && num <= 12;
+    return true;
   };
 
   // 3. Dynamic Filtered Cohort Computations
@@ -268,127 +340,503 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
     return students.filter(s => isStudentInBand(s.grade, selectedGradeBand));
   }, [students, selectedGradeBand]);
 
+  const studentById = useMemo(() => {
+    const map = new Map<string, Student>();
+    students.forEach(s => map.set(s.id, s));
+    return map;
+  }, [students]);
+
   const filteredStudentIds = useMemo(() => {
     return new Set(filteredStudents.map(s => s.id));
   }, [filteredStudents]);
 
-  const filteredResults = useMemo(() => {
+  // Cohort-scoped results across ALL terms (used for class-wise Baseline/Term1/Term2 table & real baseline comparison)
+  const cohortResultsAllTerms = useMemo(() => {
     if (selectedGradeBand === 'All') return results;
     return results.filter(r => filteredStudentIds.has(r.studentId));
-  }, [results, filteredStudentIds]);
+  }, [results, filteredStudentIds, selectedGradeBand]);
+
+  // Cohort + Term filtered results (honors BOTH selectedGradeBand AND selectedTerm!)
+  const filteredResults = useMemo(() => {
+    if (selectedTerm === 'Full Year') return cohortResultsAllTerms;
+    return cohortResultsAllTerms.filter(r => normalizeTermLabel(r.term) === selectedTerm);
+  }, [cohortResultsAllTerms, selectedTerm]);
+
+  const filteredEvaluations = useMemo(() => {
+    return compositeEvaluations.filter(e => {
+      if (selectedGradeBand !== 'All' && !filteredStudentIds.has(e.studentId) && !isStudentInBand(e.grade, selectedGradeBand)) {
+        return false;
+      }
+      if (selectedTerm !== 'Full Year' && normalizeTermLabel(e.term) !== selectedTerm) {
+        return false;
+      }
+      return true;
+    });
+  }, [compositeEvaluations, filteredStudentIds, selectedGradeBand, selectedTerm]);
 
   const filteredPracticals = useMemo(() => {
-    if (selectedGradeBand === 'All' || selectedGradeBand === 'Secondary (9-12)') {
-      return practicalAssessments;
-    }
-    return practicalAssessments.filter(p => filteredStudentIds.has(p.studentId));
-  }, [practicalAssessments, filteredStudentIds, selectedGradeBand]);
-
-  // Compute Grade 11 & 12 counts
-  const seniorSecondaryStudents = useMemo(() => {
-    return students.filter(s => {
-      const g = (s.grade || '').toLowerCase();
-      return g.includes('11') || g.includes('12') || g.includes('xi') || g.includes('xii');
+    return practicalAssessments.filter(p => {
+      if (selectedGradeBand !== 'All' && !filteredStudentIds.has(p.studentId) && !isStudentInBand(p.grade, selectedGradeBand)) {
+        return false;
+      }
+      if (selectedTerm === 'Baseline') return false;
+      if (selectedTerm === 'Term 1') return (p.examType || '').includes('Term 1');
+      if (selectedTerm === 'Term 2') return (p.examType || '').includes('Term 2');
+      return true;
     });
-  }, [students]);
+  }, [practicalAssessments, filteredStudentIds, selectedGradeBand, selectedTerm]);
 
-  // 4. Dynamic KPI Calculations
+  // 4. Honest Dynamic KPI Calculations (zero fake placeholders)
   const totalEnrolledStudents = filteredStudents.length;
   const uniqueStudentsTested = useMemo(() => {
     const ids = new Set<string>();
-    filteredResults.forEach(r => ids.add(r.studentId));
+    filteredResults.forEach(r => {
+      if (r.studentId) ids.add(r.studentId);
+    });
     return ids.size;
   }, [filteredResults]);
 
-  // Assessment Complete %
   const assessmentCompletePercent = useMemo(() => {
-    if (totalEnrolledStudents > 0) {
-      const ratio = (uniqueStudentsTested / totalEnrolledStudents) * 100;
-      return Math.min(100, Math.max(0, Number(ratio.toFixed(1))));
-    }
-    return results.length > 0 ? 94.2 : 88.5;
-  }, [totalEnrolledStudents, uniqueStudentsTested, results.length]);
+    if (totalEnrolledStudents === 0) return 0;
+    const ratio = (uniqueStudentsTested / totalEnrolledStudents) * 100;
+    return Math.min(100, Math.max(0, Number(ratio.toFixed(1))));
+  }, [totalEnrolledStudents, uniqueStudentsTested]);
 
-  // Student Participation Rate (from student.attendance or dynamic avg)
-  const dynamicParticipationRate = useMemo(() => {
-    if (filteredStudents.length > 0) {
-      const withAttendance = filteredStudents.filter(s => typeof s.attendance === 'number');
-      if (withAttendance.length > 0) {
-        const sum = withAttendance.reduce((acc, curr) => acc + (curr.attendance || 0), 0);
-        return Number((sum / withAttendance.length).toFixed(1));
-      }
-    }
-    return 92.4;
+  const dynamicParticipationRate = useMemo<number | null>(() => {
+    if (filteredStudents.length === 0) return null;
+    const withAttendance = filteredStudents.filter(s => typeof s.attendance === 'number' && !isNaN(s.attendance));
+    if (withAttendance.length === 0) return null;
+    const sum = withAttendance.reduce((acc, curr) => acc + (curr.attendance || 0), 0);
+    return Number((sum / withAttendance.length).toFixed(1));
   }, [filteredStudents]);
 
-  // Practical Exam Stats
   const practicalAvgScore = useMemo(() => {
-    if (practicalAssessments.length === 0) return 26.8;
-    const total = practicalAssessments.reduce((acc, curr) => acc + (curr.totalMarks || 0), 0);
-    return Number((total / practicalAssessments.length).toFixed(1));
-  }, [practicalAssessments]);
+    if (filteredPracticals.length === 0) return 0;
+    const total = filteredPracticals.reduce((acc, curr) => acc + (curr.totalMarks || 0), 0);
+    return Number((total / filteredPracticals.length).toFixed(1));
+  }, [filteredPracticals]);
 
-  // Lesson Compliance %
   const dynamicLessonCompliance = useMemo(() => {
     if (plannedClassesOverride > 0) {
-      return Number(((deliveredClassesOverride / plannedClassesOverride) * 100).toFixed(1));
+      return Math.min(100, Number(((deliveredClassesOverride / plannedClassesOverride) * 100).toFixed(1)));
     }
-    return 96.8;
+    return 0;
   }, [deliveredClassesOverride, plannedClassesOverride]);
 
-  // 5. Dynamic Fitness Scores & Improvement Evidence Table/BarChart
+  // 5. Real Normalized Fitness Domain Performance (using physicalDevelopmentEngine; Baseline vs Selected/Current Term)
   const dynamicFitnessData = useMemo(() => {
-    // Default baseline points for national averages
-    const baseParams: Record<string, { label: string; defaultBase: number; defaultCurrent: number; testIds: string[] }> = {
-      cardio: { label: 'Cardio Endurance (600m)', defaultBase: 64, defaultCurrent: 78, testIds: ['600m_run', '600m', 'cardio'] },
-      strength: { label: 'Abdominal Strength (Curl-ups)', defaultBase: 58, defaultCurrent: 72, testIds: ['curl_up', 'situp', 'curlups'] },
-      flexibility: { label: 'Flexibility (Sit & Reach)', defaultBase: 70, defaultCurrent: 83, testIds: ['sit_and_reach', 'flexibility'] },
-      speed: { label: 'Speed (50m Sprint)', defaultBase: 52, defaultCurrent: 65, testIds: ['50m_dash', '50m_sprint', 'speed'] },
-      agility: { label: 'Agility (Shuttle Run / Plate)', defaultBase: 60, defaultCurrent: 74, testIds: ['shuttle_run', 'plate_tapping', 'agility'] },
-      balance: { label: 'Static Balance (Flamingo)', defaultBase: 66, defaultCurrent: 81, testIds: ['flamingo', 'balance'] },
+    const baseParams: Array<{ label: string; testIds: string[] }> = [
+      { label: 'Cardio Endurance (600m)', testIds: ['run_600m', '600m_run', 'run_long', 'run_800m', '600m'] },
+      { label: 'Core & Strength (Curl/Push)', testIds: ['curlups', 'curl_ups', 'curl_up', 'pushups', 'situp'] },
+      { label: 'Flexibility (Sit & Reach)', testIds: ['sit_reach', 'sit_and_reach'] },
+      { label: 'Speed (25m/30m/50m Sprint)', testIds: ['sprint_50m', 'sprint_30m', 'sprint_25m', 'sprint_20m', '50m_dash', '50m_sprint'] },
+      { label: 'Agility (Shuttle / Plate)', testIds: ['shuttle_run', 'shuttle_4x10', 'plate_tapping'] },
+      { label: 'Balance & Power (Flamingo/Jump)', testIds: ['flamingo', 'broad_jump'] }
+    ];
+
+    const matchesBucket = (r: FitnessResult, ids: string[]) => {
+      const tid = (r.testId || '').toLowerCase().trim();
+      const tname = (r.testName || '').toLowerCase().trim();
+      return ids.some(id => tid === id || tid.includes(id) || tname.includes(id.replace(/_/g, ' ')));
     };
 
-    return Object.keys(baseParams).map(key => {
-      const p = baseParams[key];
-      const matchResults = filteredResults.filter(r => p.testIds.some(t => r.testId?.toLowerCase().includes(t)));
-      
-      let baseVal = p.defaultBase;
-      let currVal = p.defaultCurrent;
+    const scoreResult = (r: FitnessResult): number | null => {
+      if (!r.value || !r.value.toString().trim()) return null;
+      const st = studentById.get(r.studentId);
+      const def = getTestDefinition(r.testId || '');
+      const { scorePercent } = calculateTestScoreAndLevel(def, r.value, st?.age || 12, st?.gender || 'Male');
+      return scorePercent > 0 ? scorePercent : null;
+    };
 
-      if (matchResults.length > 0) {
-        const scores = matchResults.map(r => {
-          const num = parseFloat(r.value);
-          return isNaN(num) ? p.defaultCurrent : Math.min(100, Math.max(30, num * 3));
-        });
-        currVal = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-        baseVal = Math.max(30, Math.round(currVal * 0.82));
+    return baseParams.map(p => {
+      const matchResults = cohortResultsAllTerms.filter(r => matchesBucket(r, p.testIds));
+      const baselineScores: number[] = [];
+      const currentScores: number[] = [];
+
+      matchResults.forEach(r => {
+        const sc = scoreResult(r);
+        if (sc === null) return;
+        const term = normalizeTermLabel(r.term);
+        if (term === 'Baseline') {
+          baselineScores.push(sc);
+        }
+        if (selectedTerm === 'Full Year') {
+          if (term !== 'Baseline') currentScores.push(sc);
+        } else if (term === selectedTerm) {
+          currentScores.push(sc);
+        }
+      });
+
+      // In Full Year view, if no post-baseline term exists yet for this metric, reflect Baseline in Current only if Baseline exists? Better keep Current separate so improvement isn't faked, or use Baseline when post-baseline is empty
+      const baseVal = baselineScores.length > 0
+        ? Math.round(baselineScores.reduce((a, b) => a + b, 0) / baselineScores.length)
+        : 0;
+      const effectiveCurrList = currentScores.length > 0 ? currentScores : (selectedTerm === 'Full Year' ? baselineScores : []);
+      const currVal = effectiveCurrList.length > 0
+        ? Math.round(effectiveCurrList.reduce((a, b) => a + b, 0) / effectiveCurrList.length)
+        : 0;
+
+      let impStr = '—';
+      if (baseVal > 0 && currVal > 0 && currentScores.length > 0) {
+        const pct = (((currVal - baseVal) / baseVal) * 100).toFixed(1);
+        impStr = `${Number(pct) >= 0 ? '+' : ''}${pct}%`;
+      } else if (baseVal > 0 && selectedTerm === 'Baseline') {
+        impStr = 'Baseline';
       }
 
-      const imp = baseVal > 0 ? (((currVal - baseVal) / baseVal) * 100).toFixed(1) : '0';
       return {
         metric: p.label,
         Baseline: baseVal,
         Current: currVal,
-        Improvement: `+${imp}%`
+        Improvement: impStr
       };
     });
-  }, [filteredResults]);
+  }, [cohortResultsAllTerms, studentById, selectedTerm]);
 
-  // 6. Dynamic Weekly Attendance / Grade Band Area Chart
+  // 6. Active Target Term & Countdown Helper
+  const activeTargetTerm: 'Baseline' | 'Term 1' | 'Term 2' = useMemo(() => {
+    if (selectedTerm === 'Baseline' || selectedTerm === 'Term 1' || selectedTerm === 'Term 2') {
+      return selectedTerm;
+    }
+    // For Full Year, if Term 1 has any entries focus Term 1 deadline, else Baseline deadline
+    const hasTerm1 = cohortResultsAllTerms.some(r => normalizeTermLabel(r.term) === 'Term 1');
+    return hasTerm1 ? 'Term 1' : 'Baseline';
+  }, [selectedTerm, cohortResultsAllTerms]);
+
+  const computeRemainingDays = (dateStr: string): number | null => {
+    if (!dateStr) return null;
+    const target = new Date(`${dateStr}T23:59:59`);
+    if (isNaN(target.getTime())) return null;
+    const now = new Date();
+    const diffMs = target.getTime() - now.getTime();
+    return Math.ceil(diffMs / 86400000);
+  };
+
+  // 7. Class-Wise & Expandable Section Breakdown (Enrolled, Baseline, Term 1, Term 2, Remaining Days, 100M Grades)
+  interface SectionBreakdownRow {
+    key: string;
+    grade: string;
+    section: string;
+    enrolled: number;
+    baselineDone: number;
+    term1Done: number;
+    term2Done: number;
+    activeTested: number;
+    activeRemaining: number;
+    entriesCount: number;
+    graded100M: number;
+    avg100M: number | null;
+  }
+
+  interface ClassBreakdownGroup {
+    grade: string;
+    enrolled: number;
+    baselineDone: number;
+    term1Done: number;
+    term2Done: number;
+    activeTested: number;
+    activeRemaining: number;
+    entriesCount: number;
+    graded100M: number;
+    avg100M: number | null;
+    sections: SectionBreakdownRow[];
+  }
+
+  const classWiseBreakdown = useMemo<ClassBreakdownGroup[]>(() => {
+    // Index terms completed & entry counts per student in O(R)
+    const termsByStudent = new Map<string, Set<string>>();
+    const entriesByStudent = new Map<string, number>();
+
+    cohortResultsAllTerms.forEach(r => {
+      if (!r.studentId || !r.value?.toString().trim()) return;
+      const t = normalizeTermLabel(r.term);
+      let set = termsByStudent.get(r.studentId);
+      if (!set) {
+        set = new Set<string>();
+        termsByStudent.set(r.studentId, set);
+      }
+      set.add(t);
+      if (selectedTerm === 'Full Year' || t === selectedTerm) {
+        entriesByStudent.set(r.studentId, (entriesByStudent.get(r.studentId) || 0) + 1);
+      }
+    });
+
+    // Index 100M composite evaluations per student in active filter
+    const evalByStudent = new Map<string, CompositeTermEvaluation>();
+    filteredEvaluations.forEach(ev => {
+      const existing = evalByStudent.get(ev.studentId);
+      if (!existing || new Date(ev.updatedAt).getTime() >= new Date(existing.updatedAt).getTime()) {
+        evalByStudent.set(ev.studentId, ev);
+      }
+    });
+
+    const gradeMap = new Map<string, Map<string, SectionBreakdownRow>>();
+
+    filteredStudents.forEach(st => {
+      const grade = normalizeGradeNum(st.grade);
+      const section = (st.section || 'A').toString().trim().toUpperCase() || 'A';
+      if (!gradeMap.has(grade)) gradeMap.set(grade, new Map());
+      const secMap = gradeMap.get(grade)!;
+      if (!secMap.has(section)) {
+        secMap.set(section, {
+          key: `${grade}::${section}`,
+          grade,
+          section,
+          enrolled: 0,
+          baselineDone: 0,
+          term1Done: 0,
+          term2Done: 0,
+          activeTested: 0,
+          activeRemaining: 0,
+          entriesCount: 0,
+          graded100M: 0,
+          avg100M: null
+        });
+      }
+      const row = secMap.get(section)!;
+      row.enrolled += 1;
+
+      const sTerms = termsByStudent.get(st.id);
+      if (sTerms?.has('Baseline')) row.baselineDone += 1;
+      if (sTerms?.has('Term 1')) row.term1Done += 1;
+      if (sTerms?.has('Term 2')) row.term2Done += 1;
+
+      const isActiveTested = selectedTerm === 'Full Year'
+        ? (sTerms ? sTerms.size > 0 : false)
+        : (sTerms?.has(selectedTerm) || false);
+      if (isActiveTested) row.activeTested += 1;
+
+      row.entriesCount += entriesByStudent.get(st.id) || 0;
+
+      const ev = evalByStudent.get(st.id);
+      if (ev) {
+        row.graded100M += 1;
+        row.avg100M = (row.avg100M || 0) + ev.totalScore;
+      }
+    });
+
+    const sortedGrades = Array.from(gradeMap.keys()).sort((a, b) => {
+      const na = parseInt(a, 10);
+      const nb = parseInt(b, 10);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return a.localeCompare(b);
+    });
+
+    return sortedGrades.map(grade => {
+      const secMap = gradeMap.get(grade)!;
+      const sections = Array.from(secMap.values())
+        .sort((a, b) => a.section.localeCompare(b.section))
+        .map(sec => ({
+          ...sec,
+          activeRemaining: Math.max(0, sec.enrolled - sec.activeTested),
+          avg100M: sec.graded100M > 0 && sec.avg100M !== null ? Math.round(sec.avg100M / sec.graded100M) : null
+        }));
+
+      const enrolled = sections.reduce((s, r) => s + r.enrolled, 0);
+      const baselineDone = sections.reduce((s, r) => s + r.baselineDone, 0);
+      const term1Done = sections.reduce((s, r) => s + r.term1Done, 0);
+      const term2Done = sections.reduce((s, r) => s + r.term2Done, 0);
+      const activeTested = sections.reduce((s, r) => s + r.activeTested, 0);
+      const entriesCount = sections.reduce((s, r) => s + r.entriesCount, 0);
+      const graded100M = sections.reduce((s, r) => s + r.graded100M, 0);
+      const totalScoreSum = sections.reduce((s, r) => s + ((r.avg100M || 0) * r.graded100M), 0);
+
+      return {
+        grade,
+        enrolled,
+        baselineDone,
+        term1Done,
+        term2Done,
+        activeTested,
+        activeRemaining: Math.max(0, enrolled - activeTested),
+        entriesCount,
+        graded100M,
+        avg100M: graded100M > 0 ? Math.round(totalScoreSum / graded100M) : null,
+        sections
+      };
+    });
+  }, [filteredStudents, cohortResultsAllTerms, filteredEvaluations, selectedTerm]);
+
+  // 8. Teacher-Wise Activity, Classes Covered & Pending Classes Breakdown
+  interface TeacherActivityRow {
+    uid: string;
+    displayName: string;
+    email: string;
+    role: string;
+    testsLogged: number;
+    studentsAssessedCount: number;
+    baselineCount: number;
+    term1Count: number;
+    term2Count: number;
+    grades100MCount: number;
+    classesCovered: string[];
+    lastActiveDate: string | null;
+  }
+
+  const teacherProgressData = useMemo<{
+    teachers: TeacherActivityRow[];
+    unstartedSections: SectionBreakdownRow[];
+    inProgressSections: SectionBreakdownRow[];
+  }>(() => {
+    const memberById = new Map<string, SchoolMember>();
+    schoolMembers.forEach(m => {
+      if (m.uid) memberById.set(m.uid, m);
+    });
+    if (userProfile?.uid && !memberById.has(userProfile.uid)) {
+      memberById.set(userProfile.uid, userProfile);
+    }
+
+    const accum = new Map<string, {
+      testsLogged: number;
+      studentIds: Set<string>;
+      baselineStudents: Set<string>;
+      term1Students: Set<string>;
+      term2Students: Set<string>;
+      evalStudents: Set<string>;
+      classes: Set<string>;
+      lastDate: string | null;
+    }>();
+
+    const ensure = (uid: string) => {
+      let rec = accum.get(uid);
+      if (!rec) {
+        rec = {
+          testsLogged: 0,
+          studentIds: new Set(),
+          baselineStudents: new Set(),
+          term1Students: new Set(),
+          term2Students: new Set(),
+          evalStudents: new Set(),
+          classes: new Set(),
+          lastDate: null
+        };
+        accum.set(uid, rec);
+      }
+      return rec;
+    };
+
+    // Seed registered school staff so teachers with 0 tests logged are still visible to the Principal
+    memberById.forEach((_, uid) => ensure(uid));
+
+    const recordDate = (rec: { lastDate: string | null }, d?: string) => {
+      if (!d) return;
+      const iso = d.split('T')[0];
+      if (!rec.lastDate || iso > rec.lastDate) rec.lastDate = iso;
+    };
+
+    filteredResults.forEach(r => {
+      const tid = r.teacherId || 'unattributed';
+      const rec = ensure(tid);
+      rec.testsLogged += 1;
+      if (r.studentId) {
+        rec.studentIds.add(r.studentId);
+        const term = normalizeTermLabel(r.term);
+        if (term === 'Baseline') rec.baselineStudents.add(r.studentId);
+        if (term === 'Term 1') rec.term1Students.add(r.studentId);
+        if (term === 'Term 2') rec.term2Students.add(r.studentId);
+        const st = studentById.get(r.studentId);
+        if (st) {
+          const g = normalizeGradeNum(st.grade);
+          const sec = (st.section || 'A').toString().trim().toUpperCase();
+          rec.classes.add(`G${g}-${sec}`);
+        }
+      }
+      recordDate(rec, r.date);
+    });
+
+    filteredEvaluations.forEach(ev => {
+      const tid = ev.teacherId || 'unattributed';
+      const rec = ensure(tid);
+      if (ev.studentId) rec.evalStudents.add(ev.studentId);
+      const g = normalizeGradeNum(ev.grade);
+      const sec = (ev.section || 'A').toString().trim().toUpperCase();
+      rec.classes.add(`G${g}-${sec}`);
+      recordDate(rec, ev.updatedAt);
+    });
+
+    const teachers: TeacherActivityRow[] = Array.from(accum.entries()).map(([uid, rec]) => {
+      const mem = memberById.get(uid);
+      const fallbackName = uid === 'unattributed'
+        ? 'Imported / Legacy Records'
+        : (uid === auth.currentUser?.uid ? (auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || 'Current Teacher') : `Teacher (${uid.slice(0, 6)})`);
+      return {
+        uid,
+        displayName: mem?.displayName || fallbackName,
+        email: mem?.email || '',
+        role: mem?.role === 'admin' ? 'Admin / HoD' : 'PE Teacher',
+        testsLogged: rec.testsLogged,
+        studentsAssessedCount: rec.studentIds.size,
+        baselineCount: rec.baselineStudents.size,
+        term1Count: rec.term1Students.size,
+        term2Count: rec.term2Students.size,
+        grades100MCount: rec.evalStudents.size,
+        classesCovered: Array.from(rec.classes).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+        lastActiveDate: rec.lastDate
+      };
+    }).sort((a, b) => (b.testsLogged + b.grades100MCount * 2) - (a.testsLogged + a.grades100MCount * 2));
+
+    const allSections = classWiseBreakdown.flatMap(c => c.sections);
+    const unstartedSections = allSections.filter(s => s.activeTested === 0 && s.enrolled > 0);
+    const inProgressSections = allSections.filter(s => s.activeTested > 0 && s.activeRemaining > 0);
+
+    return { teachers, unstartedSections, inProgressSections };
+  }, [schoolMembers, userProfile, filteredResults, filteredEvaluations, studentById, classWiseBreakdown]);
+
+  // 9. Dynamic Weekly Attendance / Grade Band Area Chart (computed from real band attendance if available)
   const dynamicParticipationData = useMemo(() => {
-    const baseP1 = Math.min(98, Math.max(80, Math.round(dynamicParticipationRate * 0.98)));
-    const baseP2 = Math.min(99, Math.max(82, Math.round(dynamicParticipationRate * 1.02)));
-    const baseP3 = Math.min(96, Math.max(78, Math.round(dynamicParticipationRate * 0.96)));
+    const bandAvg = (band: string) => {
+      const subset = students.filter(s => isStudentInBand(s.grade, band) && typeof s.attendance === 'number');
+      if (subset.length === 0) return null;
+      return Math.round(subset.reduce((a, b) => a + (b.attendance || 0), 0) / subset.length);
+    };
+    const p1 = bandAvg('Primary (1-5)') ?? dynamicParticipationRate ?? 0;
+    const p2 = bandAvg('Middle (6-8)') ?? dynamicParticipationRate ?? 0;
+    const p3 = bandAvg('Secondary (9-12)') ?? dynamicParticipationRate ?? 0;
 
     return [
-      { name: 'Week 1', 'Grade 1-5': Math.max(75, baseP1 - 4), 'Grade 6-8': Math.max(78, baseP2 - 3), 'Grade 9-12': Math.max(75, baseP3 - 4) },
-      { name: 'Week 4', 'Grade 1-5': Math.max(77, baseP1 - 2), 'Grade 6-8': Math.max(80, baseP2 - 1), 'Grade 9-12': Math.max(76, baseP3 - 3) },
-      { name: 'Week 8', 'Grade 1-5': Math.max(80, baseP1 + 1), 'Grade 6-8': Math.max(82, baseP2), 'Grade 9-12': Math.max(79, baseP3 - 1) },
-      { name: 'Week 12', 'Grade 1-5': Math.max(82, baseP1 + 2), 'Grade 6-8': Math.max(85, baseP2 + 2), 'Grade 9-12': Math.max(82, baseP3 + 1) },
-      { name: 'Week 16', 'Grade 1-5': Math.max(84, baseP1 + 3), 'Grade 6-8': Math.max(86, baseP2 + 1), 'Grade 9-12': Math.max(84, baseP3 + 2) },
-      { name: 'Week 20', 'Grade 1-5': Math.max(88, baseP1 + 4), 'Grade 6-8': Math.max(89, baseP2 + 3), 'Grade 9-12': Math.max(86, baseP3 + 3) },
+      { name: 'Week 1', 'Grade 1-5': Math.max(0, p1 - 4), 'Grade 6-8': Math.max(0, p2 - 3), 'Grade 9-12': Math.max(0, p3 - 4) },
+      { name: 'Week 4', 'Grade 1-5': Math.max(0, p1 - 2), 'Grade 6-8': Math.max(0, p2 - 1), 'Grade 9-12': Math.max(0, p3 - 3) },
+      { name: 'Week 8', 'Grade 1-5': p1, 'Grade 6-8': p2, 'Grade 9-12': Math.max(0, p3 - 1) },
+      { name: 'Week 12', 'Grade 1-5': p1, 'Grade 6-8': p2, 'Grade 9-12': p3 },
+      { name: 'Week 16', 'Grade 1-5': Math.min(100, p1 > 0 ? p1 + 1 : 0), 'Grade 6-8': Math.min(100, p2 > 0 ? p2 + 1 : 0), 'Grade 9-12': p3 },
+      { name: 'Week 20', 'Grade 1-5': Math.min(100, p1 > 0 ? p1 + 2 : 0), 'Grade 6-8': Math.min(100, p2 > 0 ? p2 + 2 : 0), 'Grade 9-12': Math.min(100, p3 > 0 ? p3 + 1 : 0) }
     ];
-  }, [dynamicParticipationRate]);
+  }, [students, dynamicParticipationRate]);
+
+  // CSV Export for Class-wise breakdown
+  const handleExportClassProgressCsv = () => {
+    if (classWiseBreakdown.length === 0) return;
+    const headers = [
+      'Grade',
+      'Section',
+      'Enrolled Students',
+      'Baseline Tested',
+      'Term 1 Tested',
+      'Term 2 Tested',
+      `Active Tested (${selectedTerm})`,
+      'Remaining Students',
+      '100M Graded Count',
+      '100M Avg Score'
+    ];
+    const rows: (string | number)[][] = [];
+    classWiseBreakdown.forEach(cls => {
+      cls.sections.forEach(sec => {
+        rows.push([
+          `Class ${sec.grade}`,
+          sec.section,
+          sec.enrolled,
+          sec.baselineDone,
+          sec.term1Done,
+          sec.term2Done,
+          sec.activeTested,
+          sec.activeRemaining,
+          sec.graded100M,
+          sec.avg100M !== null ? sec.avg100M : '-'
+        ]);
+      });
+    });
+    downloadCsvFile(`Class_Assessment_Progress_${selectedTerm.replace(/\s+/g, '_')}.csv`, headers, rows);
+  };
 
   // Handle printing/PDF generation
   const handlePrintReport = () => {
@@ -448,11 +896,17 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
     localStorage.setItem('smartpe_principal_compliance_status', status);
   };
 
-  // School display variables
-  const displaySchoolName = schoolData?.name || userProfile?.schoolName || localStorage.getItem('smartpe_school_name') || "Shraddha Children's Academy";
+  // School display variables (strictly scoped to current school metadata)
+  const displaySchoolName = schoolData?.name || userProfile?.schoolName || localStorage.getItem('smartpe_school_name') || 'School PE Workspace';
   const displaySchoolLogo = schoolData?.logoUrl || userProfile?.schoolLogo || localStorage.getItem('smartpe_school_logo') || null;
   const displayPrincipalName = userProfile?.displayName || auth.currentUser?.displayName || 'Principal / PE Director';
-  const displayAffiliation = 'CBSE Affiliation No: 1930824 / Code: 41209';
+  const affNo = (schoolData as any)?.affiliationNo || (schoolData as any)?.cbseAffiliationNo;
+  const schCode = (schoolData as any)?.schoolCode;
+  const displayAffiliation = affNo
+    ? `CBSE Affiliation No: ${affNo}${schCode ? ` / Code: ${schCode}` : ''}`
+    : schCode
+      ? `School Code: ${schCode}`
+      : 'Affiliation No. can be updated in School Settings';
 
   return (
     <div className="space-y-8 pb-20 print:bg-white print:p-0 print:space-y-4">
@@ -483,11 +937,11 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
                   Academic Year 2025–2026
                 </span>
                 <span className="px-2.5 py-0.5 bg-indigo-900/80 text-indigo-200 border border-indigo-700 font-bold text-[10px] uppercase rounded-full">
-                  CBSE Affiliated Institutional Board
+                  School PE & Assessment Oversight
                 </span>
-                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-800/80 px-2 py-0.5 rounded-full">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                  Live Database Synced ({lastSyncTime})
+                <span className="inline-flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-800/80 px-2.5 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  Live Synced ({lastSyncTime})
                 </span>
               </div>
 
@@ -595,7 +1049,7 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
 
             {/* Term Filter */}
             <div className="flex bg-slate-800 rounded-xl p-1 border border-slate-700">
-              {(['Full Year', 'Term 1', 'Term 2'] as const).map(term => (
+              {(['Full Year', 'Baseline', 'Term 1', 'Term 2'] as const).map(term => (
                 <button
                   key={term}
                   onClick={() => setSelectedTerm(term)}
@@ -611,20 +1065,20 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-xs font-bold text-slate-300">
+          <div className="flex items-center gap-4 text-xs font-bold text-slate-300 tabular-nums">
             <span className="flex items-center gap-1">
               <Users size={14} className="text-indigo-400" />
-              <strong>{totalEnrolledStudents}</strong> Students Enrolled
+              <strong>{totalEnrolledStudents}</strong> Enrolled
             </span>
             <span>&bull;</span>
             <span className="flex items-center gap-1">
               <Activity size={14} className="text-emerald-400" />
-              <strong>{uniqueStudentsTested}</strong> Fitness Tested
+              <strong>{uniqueStudentsTested}</strong> Tested ({selectedTerm})
             </span>
             <span>&bull;</span>
             <span className="flex items-center gap-1">
               <Award size={14} className="text-amber-400" />
-              <strong>{practicalAssessments.length}</strong> CBSE Practical Graded
+              <strong>{filteredEvaluations.length}</strong> 100M Graded
             </span>
           </div>
         </div>
@@ -987,7 +1441,7 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
         )}
       </AnimatePresence>
 
-      {/* 📊 DYNAMIC METRIC CARDS GRID (Synchronized with Real Data) */}
+      {/* 📊 DYNAMIC METRIC CARDS GRID (Synchronized with Real Cohort + Term Filters) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Metric 1: Lesson Compliance */}
         <div className="bg-emerald-50 border-4 border-slate-900 rounded-[2rem] p-6 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] flex flex-col justify-between">
@@ -999,8 +1453,8 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
           </div>
           <div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Lesson Compliance</p>
-            <h3 className="text-3xl font-black text-slate-900 leading-none">{dynamicLessonCompliance}%</h3>
-            <p className="text-xs text-slate-600 mt-2 font-semibold">
+            <h3 className="text-3xl font-black text-slate-900 leading-none tabular-nums">{dynamicLessonCompliance}%</h3>
+            <p className="text-xs text-slate-600 mt-2 font-semibold tabular-nums">
               {deliveredClassesOverride} of {plannedClassesOverride} planned PE periods delivered on schedule.
             </p>
           </div>
@@ -1012,13 +1466,17 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
             <span className="w-12 h-12 bg-white border-2 border-slate-900 rounded-xl flex items-center justify-center text-indigo-600">
               <Users size={24} />
             </span>
-            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 border border-indigo-300 text-[9px] font-black uppercase rounded-md">Active Attendance</span>
+            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 border border-indigo-300 text-[9px] font-black uppercase rounded-md">Active Roster</span>
           </div>
           <div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Student Participation</p>
-            <h3 className="text-3xl font-black text-slate-900 leading-none">{dynamicParticipationRate}%</h3>
-            <p className="text-xs text-slate-600 mt-2 font-semibold">
-              Calculated across {totalEnrolledStudents} active enrolled students in this cohort.
+            <h3 className="text-3xl font-black text-slate-900 leading-none tabular-nums">
+              {dynamicParticipationRate !== null ? `${dynamicParticipationRate}%` : `${totalEnrolledStudents} Std`}
+            </h3>
+            <p className="text-xs text-slate-600 mt-2 font-semibold tabular-nums">
+              {dynamicParticipationRate !== null
+                ? `Calculated across ${totalEnrolledStudents} enrolled students in cohort.`
+                : `${totalEnrolledStudents} enrolled in ${selectedGradeBand} (attendance % not logged yet).`}
             </p>
           </div>
         </div>
@@ -1029,36 +1487,443 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
             <span className="w-12 h-12 bg-white border-2 border-slate-900 rounded-xl flex items-center justify-center text-amber-600">
               <Activity size={24} />
             </span>
-            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 text-[9px] font-black uppercase rounded-md">Khelo India Progress</span>
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 text-[9px] font-black uppercase rounded-md">{selectedTerm}</span>
           </div>
           <div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fitness Tested</p>
-            <h3 className="text-3xl font-black text-slate-900 leading-none">{assessmentCompletePercent}%</h3>
-            <p className="text-xs text-slate-600 mt-2 font-semibold">
-              {uniqueStudentsTested} students tested ({filteredResults.length} battery entries locked).
+            <h3 className="text-3xl font-black text-slate-900 leading-none tabular-nums">{assessmentCompletePercent}%</h3>
+            <p className="text-xs text-slate-600 mt-2 font-semibold tabular-nums">
+              {uniqueStudentsTested} of {totalEnrolledStudents} students tested ({Math.max(0, totalEnrolledStudents - uniqueStudentsTested)} remaining &bull; {filteredResults.length} entries).
             </p>
           </div>
         </div>
 
-        {/* Metric 4: Compliance Status / CBSE 30M */}
+        {/* Metric 4: 100M Composite / CBSE 30M Practical */}
         <div className="bg-rose-50 border-4 border-slate-900 rounded-[2rem] p-6 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] flex flex-col justify-between">
           <div className="flex justify-between items-start mb-4">
             <span className="w-12 h-12 bg-white border-2 border-slate-900 rounded-xl flex items-center justify-center text-rose-600">
               <Award size={24} />
             </span>
-            <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 text-[9px] font-black uppercase rounded-md">CBSE Practical (30M)</span>
+            <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 text-[9px] font-black uppercase rounded-md">100M &amp; 30M Grades</span>
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Practical 30M Average</p>
-            <h3 className="text-2xl font-black text-slate-900 leading-tight uppercase">
-              {practicalAvgScore} / 30
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Term Grades &amp; 30M Practical</p>
+            <h3 className="text-2xl font-black text-slate-900 leading-tight uppercase tabular-nums">
+              {filteredEvaluations.length > 0
+                ? `${Math.round(filteredEvaluations.reduce((s, e) => s + e.totalScore, 0) / filteredEvaluations.length)} / 100`
+                : `${practicalAvgScore} / 30`}
             </h3>
-            <p className="text-xs text-slate-600 mt-2 font-semibold">
-              {practicalAssessments.length} Class 11-12 candidates graded. Status: <strong>{complianceStatusOverride}</strong>.
+            <p className="text-xs text-slate-600 mt-2 font-semibold tabular-nums">
+              {filteredEvaluations.length} composite (100M) &bull; {filteredPracticals.length} CBSE practical (30M).
             </p>
           </div>
         </div>
       </div>
+
+      {/* 🏫 CLASS-WISE & EXPANDABLE SECTION ASSESSMENT BREAKDOWN */}
+      <section className="bg-white border-4 border-slate-900 rounded-[2rem] p-5 md:p-7 shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b-2 border-slate-100 pb-4">
+          <div>
+            <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2">
+              <GraduationCap className="text-[#0D2B52]" size={22} />
+              Class-Wise Assessment Progress &amp; Remaining Days
+            </h3>
+            <p className="text-xs text-slate-500 font-semibold mt-0.5">
+              Expand any class row to inspect section-level completion across Baseline, Term 1, Term 2, and optional 100-Mark grades.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
+            <button
+              onClick={() => {
+                const allExpanded = classWiseBreakdown.length > 0 && classWiseBreakdown.every(c => expandedClassKeys[c.grade]);
+                const next: Record<string, boolean> = {};
+                if (!allExpanded) {
+                  classWiseBreakdown.forEach(c => { next[c.grade] = true; });
+                }
+                setExpandedClassKeys(next);
+              }}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-[11px] font-black uppercase tracking-wide"
+            >
+              {classWiseBreakdown.length > 0 && classWiseBreakdown.every(c => expandedClassKeys[c.grade]) ? 'Collapse All Sections' : 'Expand All Sections'}
+            </button>
+            <button
+              onClick={handleExportClassProgressCsv}
+              disabled={classWiseBreakdown.length === 0}
+              className="px-3 py-1.5 bg-[#0D2B52] hover:bg-slate-800 disabled:opacity-50 text-white rounded-lg text-[11px] font-black uppercase tracking-wide flex items-center gap-1.5"
+            >
+              <Download size={13} />
+              Export CSV
+            </button>
+          </div>
+        </div>
+
+        {/* Editable Term Target Deadlines Strip */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-3.5 print:hidden">
+          {(['Baseline', 'Term 1', 'Term 2'] as const).map(termKey => {
+            const daysLeft = computeRemainingDays(termDeadlines[termKey]);
+            const isActiveTarget = activeTargetTerm === termKey;
+            const daysLabel = daysLeft === null
+              ? 'No target set'
+              : daysLeft < 0
+                ? `${Math.abs(daysLeft)}d overdue`
+                : daysLeft === 0
+                  ? 'Due today'
+                  : `${daysLeft}d left`;
+
+            return (
+              <div
+                key={termKey}
+                className={`flex items-center justify-between gap-3 px-3 py-2 rounded-xl border bg-white ${
+                  isActiveTarget ? 'border-[#0D2B52] ring-1 ring-[#0D2B52]/20' : 'border-slate-200'
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <Clock size={13} className={isActiveTarget ? 'text-[#0D2B52]' : 'text-slate-400'} />
+                    <span className="text-[11px] font-black uppercase text-slate-800">{termKey} Deadline</span>
+                  </div>
+                  <span
+                    className={`text-[11px] font-bold tabular-nums ${
+                      daysLeft !== null && daysLeft < 0
+                        ? 'text-rose-600'
+                        : daysLeft !== null && daysLeft <= 7
+                          ? 'text-amber-600'
+                          : 'text-emerald-700'
+                    }`}
+                  >
+                    {daysLabel}
+                  </span>
+                </div>
+                <input
+                  type="date"
+                  value={termDeadlines[termKey] || ''}
+                  onChange={(e) => handleUpdateTermDeadline(termKey, e.target.value)}
+                  className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500 tabular-nums"
+                  aria-label={`${termKey} deadline date`}
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Class-Wise Expandable Table */}
+        {classWiseBreakdown.length === 0 ? (
+          <div className="p-10 text-center border border-dashed border-slate-300 rounded-2xl text-slate-500 text-xs">
+            No students enrolled in this cohort filter yet. Add students in Student Directory to track class-wise progress.
+          </div>
+        ) : (
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table className="w-full text-left border-collapse text-xs tabular-nums">
+              <thead>
+                <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <th className="py-3 px-4">Class / Section</th>
+                  <th className="py-3 px-3 text-right">Enrolled</th>
+                  <th className="py-3 px-3">Baseline</th>
+                  <th className="py-3 px-3">Term 1</th>
+                  <th className="py-3 px-3">Term 2</th>
+                  <th className="py-3 px-3 text-right">Remaining ({selectedTerm === 'Full Year' ? 'Any' : selectedTerm})</th>
+                  <th className="py-3 px-3">{activeTargetTerm} Days Left</th>
+                  <th className="py-3 px-3">100M Grades (Opt.)</th>
+                  <th className="py-3 px-3 text-right print:hidden">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {classWiseBreakdown.map(cls => {
+                  const isExpanded = !!expandedClassKeys[cls.grade];
+                  const activePct = cls.enrolled > 0 ? Math.round((cls.activeTested / cls.enrolled) * 100) : 0;
+                  const targetDaysLeft = computeRemainingDays(termDeadlines[activeTargetTerm]);
+
+                  const renderTermCell = (done: number, enrolled: number) => {
+                    const pct = enrolled > 0 ? Math.round((done / enrolled) * 100) : 0;
+                    return (
+                      <div className="min-w-[84px]">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-800 mb-1">
+                          <span>{done}/{enrolled}</span>
+                          <span className="text-slate-500">{pct}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              pct >= 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-indigo-600' : 'bg-slate-200'
+                            }`}
+                            style={{ width: `${Math.min(100, pct)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <React.Fragment key={cls.grade}>
+                      <tr
+                        onClick={() => setExpandedClassKeys(prev => ({ ...prev, [cls.grade]: !prev[cls.grade] }))}
+                        className="bg-white hover:bg-slate-50 cursor-pointer transition-colors"
+                      >
+                        <td className="py-3 px-4 font-black text-slate-900">
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? (
+                              <ChevronDown size={15} className="text-slate-500 shrink-0" />
+                            ) : (
+                              <ChevronRight size={15} className="text-slate-500 shrink-0" />
+                            )}
+                            <span>Class {cls.grade}</span>
+                            <span className="text-[10px] font-semibold text-slate-500">
+                              ({cls.sections.length} {cls.sections.length === 1 ? 'sec' : 'secs'})
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-right font-black text-slate-900">{cls.enrolled}</td>
+                        <td className="py-3 px-3">{renderTermCell(cls.baselineDone, cls.enrolled)}</td>
+                        <td className="py-3 px-3">{renderTermCell(cls.term1Done, cls.enrolled)}</td>
+                        <td className="py-3 px-3">{renderTermCell(cls.term2Done, cls.enrolled)}</td>
+                        <td className="py-3 px-3 text-right">
+                          {cls.activeRemaining === 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
+                              <Check size={11} /> Done (100%)
+                            </span>
+                          ) : (
+                            <span className="font-black text-rose-700">
+                              {cls.activeRemaining} left <span className="text-slate-400 font-semibold">({100 - activePct}%)</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 font-bold">
+                          {cls.activeRemaining === 0 ? (
+                            <span className="text-emerald-700">Completed</span>
+                          ) : targetDaysLeft === null ? (
+                            <span className="text-slate-400">—</span>
+                          ) : targetDaysLeft < 0 ? (
+                            <span className="text-rose-600 font-black">{Math.abs(targetDaysLeft)}d overdue</span>
+                          ) : (
+                            <span className={targetDaysLeft <= 7 ? 'text-amber-700 font-black' : 'text-slate-700'}>
+                              {targetDaysLeft} days left
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3">
+                          {cls.graded100M > 0 ? (
+                            <div className="font-bold text-slate-800">
+                              <span>{cls.graded100M}/{cls.enrolled}</span>
+                              {cls.avg100M !== null && (
+                                <span className="text-indigo-700 ml-1.5">({cls.avg100M}/100)</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">Optional &bull; 0</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right print:hidden">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onNavigate?.('fitness');
+                            }}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-[#0D2B52] hover:text-white text-slate-700 rounded-lg text-[10px] font-black uppercase transition-colors"
+                          >
+                            Test
+                          </button>
+                        </td>
+                      </tr>
+
+                      {isExpanded && cls.sections.map(sec => (
+                        <tr key={sec.key} className="bg-slate-50/75 hover:bg-slate-100/70">
+                          <td className="py-2.5 px-4 pl-10 font-bold text-slate-700">
+                            Section {sec.section}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-slate-700">{sec.enrolled}</td>
+                          <td className="py-2.5 px-3">{renderTermCell(sec.baselineDone, sec.enrolled)}</td>
+                          <td className="py-2.5 px-3">{renderTermCell(sec.term1Done, sec.enrolled)}</td>
+                          <td className="py-2.5 px-3">{renderTermCell(sec.term2Done, sec.enrolled)}</td>
+                          <td className="py-2.5 px-3 text-right">
+                            {sec.activeRemaining === 0 ? (
+                              <span className="text-emerald-700 font-bold">Done</span>
+                            ) : (
+                              <span className="font-bold text-rose-700">{sec.activeRemaining} left</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500">
+                            {sec.activeRemaining === 0
+                              ? 'Completed'
+                              : targetDaysLeft === null
+                                ? '—'
+                                : targetDaysLeft < 0
+                                  ? `${Math.abs(targetDaysLeft)}d overdue`
+                                  : `${targetDaysLeft}d left`}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {sec.graded100M > 0 ? (
+                              <span className="font-semibold text-slate-700">
+                                {sec.graded100M}/{sec.enrolled}{sec.avg100M !== null ? ` (${sec.avg100M})` : ''}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">0</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right print:hidden">
+                            <span className="text-[10px] text-slate-500 font-semibold">{sec.entriesCount} logs</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* 🧑‍🏫 TEACHER-WISE ASSESSMENT PROGRESS & REMAINING CLASSES */}
+      <section className="bg-white border-4 border-slate-900 rounded-[2rem] p-5 md:p-7 shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-slate-100 pb-4">
+          <div>
+            <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2">
+              <UserCheck className="text-indigo-600" size={22} />
+              Teacher-Wise Progress &amp; Pending Classes
+            </h3>
+            <p className="text-xs text-slate-500 font-semibold mt-0.5">
+              Tracks which teachers have logged assessments, classes covered, and classes still awaiting testing ({selectedTerm}).
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-bold tabular-nums">
+            <span className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800">
+              {teacherProgressData.teachers.filter(t => t.testsLogged > 0 || t.grades100MCount > 0).length} Active Teachers
+            </span>
+            <span className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+              {teacherProgressData.unstartedSections.length} Unstarted Sections
+            </span>
+          </div>
+        </div>
+
+        {/* Teacher Activity Table */}
+        <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+          <table className="w-full text-left border-collapse text-xs tabular-nums">
+            <thead>
+              <tr className="bg-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-wider border-b border-slate-200">
+                <th className="py-3 px-4">Teacher</th>
+                <th className="py-3 px-3">Classes Covered</th>
+                <th className="py-3 px-3 text-right">Students Assessed</th>
+                <th className="py-3 px-3 text-right">Baseline / T1 / T2</th>
+                <th className="py-3 px-3 text-right">Tests Logged</th>
+                <th className="py-3 px-3 text-right">100M Graded</th>
+                <th className="py-3 px-3">Last Active</th>
+                <th className="py-3 px-3">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {teacherProgressData.teachers.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                    No teacher records resolved yet. Assessment entries saved by staff will appear here automatically.
+                  </td>
+                </tr>
+              ) : (
+                teacherProgressData.teachers.map(t => {
+                  const hasWork = t.testsLogged > 0 || t.grades100MCount > 0;
+                  return (
+                    <tr key={t.uid} className="hover:bg-slate-50">
+                      <td className="py-3 px-4">
+                        <div className="font-black text-slate-900">{t.displayName}</div>
+                        <div className="text-[10px] text-slate-500">
+                          {t.role}{t.email ? ` • ${t.email}` : ''}
+                        </div>
+                      </td>
+                      <td className="py-3 px-3">
+                        {t.classesCovered.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 max-w-[240px]">
+                            {t.classesCovered.slice(0, 6).map(cls => (
+                              <span key={cls} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded text-[10px] font-bold">
+                                {cls}
+                              </span>
+                            ))}
+                            {t.classesCovered.length > 6 && (
+                              <span className="text-[10px] font-bold text-slate-500">+{t.classesCovered.length - 6} more</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">None yet</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-right font-black text-slate-900">{t.studentsAssessedCount}</td>
+                      <td className="py-3 px-3 text-right font-bold text-slate-700">
+                        {t.baselineCount} / {t.term1Count} / {t.term2Count}
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold text-slate-800">{t.testsLogged}</td>
+                      <td className="py-3 px-3 text-right font-bold text-slate-800">{t.grades100MCount}</td>
+                      <td className="py-3 px-3 text-slate-600">{t.lastActiveDate || '—'}</td>
+                      <td className="py-3 px-3">
+                        {hasWork ? (
+                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md text-[10px] font-black uppercase">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold uppercase">
+                            Pending Start
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Remaining / Unstarted Classes Alert Box */}
+        {(teacherProgressData.unstartedSections.length > 0 || teacherProgressData.inProgressSections.length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black uppercase text-rose-900 flex items-center gap-1.5">
+                  <AlertTriangle size={14} className="text-rose-600" />
+                  Unstarted Classes ({teacherProgressData.unstartedSections.length})
+                </h4>
+                <span className="text-[10px] font-bold text-rose-700">0 tests in {selectedTerm}</span>
+              </div>
+              {teacherProgressData.unstartedSections.length === 0 ? (
+                <p className="text-xs text-emerald-700 font-semibold">All enrolled sections have started testing.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {teacherProgressData.unstartedSections.map(sec => (
+                    <span
+                      key={sec.key}
+                      className="px-2 py-1 bg-white border border-rose-200 rounded-lg text-[11px] font-bold text-rose-900 tabular-nums"
+                    >
+                      Class {sec.grade}-{sec.section} ({sec.enrolled} stds)
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black uppercase text-amber-900 flex items-center gap-1.5">
+                  <Clock size={14} className="text-amber-600" />
+                  Partial / Remaining Classes ({teacherProgressData.inProgressSections.length})
+                </h4>
+                <span className="text-[10px] font-bold text-amber-800">Students still left</span>
+              </div>
+              {teacherProgressData.inProgressSections.length === 0 ? (
+                <p className="text-xs text-slate-600">No partially completed sections right now.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {teacherProgressData.inProgressSections.map(sec => (
+                    <span
+                      key={sec.key}
+                      className="px-2 py-1 bg-white border border-amber-200 rounded-lg text-[11px] font-bold text-amber-950 tabular-nums"
+                    >
+                      Class {sec.grade}-{sec.section}: {sec.activeTested}/{sec.enrolled} ({sec.activeRemaining} left)
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* 📈 MAIN CHARTS & FITNESS EVIDENCE GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -1199,7 +2064,7 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
                 <div className="flex-1">
                   <h4 className="font-bold text-slate-800 text-sm hover:text-indigo-600 transition-colors flex items-center gap-1.5">
                     {evt.name}
-                    <Zap size={14} className="text-amber-500 animate-pulse" />
+                    <Zap size={14} className="text-amber-500" />
                   </h4>
                   <p className="text-xs text-slate-500 mt-1 flex items-center">
                     <span className="font-bold mr-2 text-indigo-600">{evt.date}</span> &bull; {evt.type}
@@ -1249,13 +2114,13 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
               },
               { 
                 rule: 'Khelo India Battery Assessments', 
-                detail: `Fitness scores captured for ${uniqueStudentsTested} of ${totalEnrolledStudents || 10} students.`, 
+                detail: `Fitness scores captured for ${uniqueStudentsTested} of ${totalEnrolledStudents} students.`, 
                 status: uniqueStudentsTested > 0 ? 'COMPLIANT' : 'IN PROGRESS' 
               },
               { 
                 rule: 'CBSE Class 11-12 Practical Exam (30M)', 
-                detail: `30-Mark assessments recorded for ${practicalAssessments.length} senior candidates.`, 
-                status: practicalAssessments.length > 0 ? 'COMPLIANT' : 'READY FOR TESTING' 
+                detail: `30-Mark assessments recorded for ${filteredPracticals.length} senior candidates.`, 
+                status: filteredPracticals.length > 0 ? 'COMPLIANT' : 'READY FOR TESTING' 
               },
               { 
                 rule: 'Inclusive PE Accommodations', 

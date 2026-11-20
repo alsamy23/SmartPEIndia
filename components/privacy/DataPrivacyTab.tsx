@@ -127,27 +127,61 @@ export const DataPrivacyTab: React.FC<DataPrivacyTabProps> = ({
     }
   };
 
-  const handleSubmitDeletionRequest = async () => {
+  const handleImmediateSchoolDataDelete = async (closeAccount: boolean) => {
     const expected = (schoolName || 'CONFIRM').trim().toUpperCase();
     if (deletionConfirmText.trim().toUpperCase() !== expected && deletionConfirmText.trim().toUpperCase() !== 'DELETE') {
-      toast.error(`Please type "${schoolName}" to confirm.`);
+      toast.error(`Please type "${schoolName}" or "DELETE" to confirm.`);
       return;
     }
 
     setSubmittingDeletion(true);
     try {
-      const req = await privacyAuditService.submitDeletionRequest(
-        schoolId,
-        schoolName,
-        deletionReason
-      );
-      setDeletionRequest(req);
+      const summary = await privacyAuditService.deleteSchoolWorkspaceData(schoolId, {
+        deleteSchoolRecord: closeAccount,
+        deleteCurrentUserAccount: closeAccount,
+        reason: deletionReason || 'Immediate deletion initiated by School Administrator'
+      });
+
+      setDeletionRequest(null);
       setIsDeletionModalOpen(false);
       setDeletionConfirmText('');
       setDeletionReason('');
-      toast.success('Formal school data deletion request submitted. Our compliance team has been notified.');
+
+      if (closeAccount) {
+        if (summary.requiresRecentLogin) {
+          toast.success(`All ${summary.deletedRecordsCount} school & profile records were permanently deleted. Signed out cleanly.`);
+        } else {
+          toast.success(`All ${summary.deletedRecordsCount} records and your account were permanently deleted.`);
+        }
+      } else {
+        toast.success(`Deleted ${summary.deletedRecordsCount} school records immediately. Your workspace is now clean.`);
+      }
     } catch (err) {
-      toast.error('Could not submit deletion request.');
+      console.error('Immediate deletion error:', err);
+      toast.error('Failed to delete workspace data. Please try again.');
+    } finally {
+      setSubmittingDeletion(false);
+    }
+  };
+
+  const handleDeletePersonalAccount = async () => {
+    if (deletionConfirmText.trim().toUpperCase() !== 'DELETE') {
+      toast.error('Please type "DELETE" to confirm permanent account deletion.');
+      return;
+    }
+
+    setSubmittingDeletion(true);
+    try {
+      const summary = await privacyAuditService.deletePersonalAccountData(
+        deletionReason || 'Educator chose to discontinue using SmartPE'
+      );
+      setIsDeletionModalOpen(false);
+      setDeletionConfirmText('');
+      setDeletionReason('');
+      toast.success(`Deleted ${summary.deletedRecordsCount} personal records and closed your account.`);
+    } catch (err) {
+      console.error('Personal account deletion error:', err);
+      toast.error('Failed to delete personal account.');
     } finally {
       setSubmittingDeletion(false);
     }
@@ -209,23 +243,35 @@ export const DataPrivacyTab: React.FC<DataPrivacyTabProps> = ({
         </div>
       </div>
 
-      {/* Pending Deletion Alert if Active */}
+      {/* Legacy Pending Deletion Alert if present */}
       {deletionRequest && deletionRequest.status === 'pending_verification' && (
-        <div className="p-6 bg-rose-50 border-4 border-rose-500 rounded-[2rem] shadow-[4px_4px_0px_0px_rgba(225,29,72,1)] space-y-2">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="text-rose-600" size={24} />
-            <div>
-              <h4 className="font-black text-rose-950 uppercase tracking-tight text-sm sm:text-base">
-                School Data Deletion Request In Review
-              </h4>
-              <p className="text-xs text-rose-800 font-semibold">
-                Requested on {new Date(deletionRequest.requestedAt).toLocaleDateString()} by {deletionRequest.requestedByEmail}.
-              </p>
+        <div className="p-6 bg-rose-50 border-4 border-rose-500 rounded-[2rem] shadow-[4px_4px_0px_0px_rgba(225,29,72,1)] flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="text-rose-600" size={24} />
+              <div>
+                <h4 className="font-black text-rose-950 uppercase tracking-tight text-sm sm:text-base">
+                  Pending Deletion Record Found
+                </h4>
+                <p className="text-xs text-rose-800 font-semibold">
+                  Recorded on {new Date(deletionRequest.requestedAt).toLocaleDateString()} by {deletionRequest.requestedByEmail}.
+                </p>
+              </div>
             </div>
+            <p className="text-xs text-rose-900/90 font-medium pl-9">
+              {isAdmin
+                ? 'As Administrator, you have direct privilege to purge all workspace data immediately without waiting.'
+                : 'Contact your School Administrator or delete your personal account anytime below.'}
+            </p>
           </div>
-          <p className="text-xs text-rose-900/90 font-medium pl-9">
-            Our compliance team is verifying this request. A 14-day retention buffer applies before permanent purging to protect against accidental administrative data loss. If this request was made in error, contact <a href="mailto:contact@smartpeindia.app" className="underline font-bold">contact@smartpeindia.app</a> immediately.
-          </p>
+          {isAdmin && (
+            <button
+              onClick={() => setIsDeletionModalOpen(true)}
+              className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs uppercase tracking-wider cursor-pointer"
+            >
+              Delete Immediately Now
+            </button>
+          )}
         </div>
       )}
 
@@ -476,8 +522,8 @@ export const DataPrivacyTab: React.FC<DataPrivacyTabProps> = ({
 
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
                 <div>
-                  <div className="font-black text-slate-900">Corporate SMTP & Email Engine</div>
-                  <div className="text-[10px] text-slate-500">Transactional Alerts & Welcome Onboarding</div>
+                  <div className="font-black text-slate-900">Brevo Transactional Email Engine</div>
+                  <div className="text-[10px] text-slate-500">Transactional Alerts &amp; Educator Onboarding</div>
                 </div>
                 <span className="text-[10px] font-black text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                   Transactional
@@ -487,21 +533,23 @@ export const DataPrivacyTab: React.FC<DataPrivacyTabProps> = ({
           </div>
 
           <div className="pt-2 text-[11px] text-slate-500 font-medium">
-            🔒 All sub-processors adhere to SOC 2 Type II and ISO 27001 data protection standards.
+            🔒 Google Cloud &amp; Firebase infrastructure maintains SOC 2 Type II and ISO 27001 certifications; Gemini AI receives zero student PII; offline browser cache clears upon sign-out.
           </div>
         </div>
       </div>
 
-      {/* Card 5: Safe School Workspace Deletion */}
+      {/* Card 5: Direct Anytime Data & Account Deletion */}
       <div className="bg-rose-50/50 border-4 border-rose-900/40 rounded-[2.5rem] p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(159,18,57,0.2)] space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
             <h4 className="text-xl font-black uppercase tracking-tight text-rose-950 flex items-center gap-2">
               <Trash2 size={20} className="text-rose-600" />
-              Request School Workspace Deletion
+              {isAdmin ? 'Delete School / Account Data Anytime' : 'Delete My Account & Data Anytime'}
             </h4>
             <p className="text-xs text-rose-900/80 font-medium max-w-2xl">
-              Initiates a formal data purging workflow for this school workspace. To prevent accidental data loss, deletions undergo multi-step confirmation and a standard 14-day security grace period.
+              {isAdmin
+                ? 'School Administrators have direct privilege to permanently delete all school records or close the entire workspace immediately—no approval request or waiting period required.'
+                : 'If you do not wish to continue using this platform, you can permanently delete your educator profile and personal records anytime immediately.'}
             </p>
           </div>
 
@@ -510,7 +558,7 @@ export const DataPrivacyTab: React.FC<DataPrivacyTabProps> = ({
             className="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-[2px_2px_0px_0px_rgba(159,18,57,1)] flex items-center gap-2 cursor-pointer"
           >
             <Trash2 size={16} />
-            <span>Request Deletion</span>
+            <span>{isAdmin ? 'Delete Data Immediately' : 'Delete My Account'}</span>
           </button>
         </div>
       </div>
@@ -533,23 +581,25 @@ export const DataPrivacyTab: React.FC<DataPrivacyTabProps> = ({
         defaultTab={privacyModalTab}
       />
 
-      {/* Safe School Deletion Modal */}
+      {/* Direct Immediate Deletion Modal */}
       {isDeletionModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2.5rem] border-4 border-slate-900 max-w-lg w-full p-8 shadow-2xl space-y-6">
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-[2.5rem] border-4 border-slate-900 max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-5 my-auto">
             <div className="flex items-center justify-between border-b-2 border-slate-100 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-3 bg-rose-100 text-rose-600 rounded-2xl border-2 border-rose-300">
                   <Trash2 size={24} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Request School Deletion</h3>
-                  <p className="text-xs font-bold text-rose-600">Safe Multi-Step Deletion Workflow</p>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                    {isAdmin ? 'Delete Data Immediately' : 'Delete My Account'}
+                  </h3>
+                  <p className="text-xs font-bold text-rose-600">Direct Permanent Deletion • No Waiting Period</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsDeletionModalOpen(false)}
-                className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-700"
+                className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 ✕
               </button>
@@ -557,23 +607,41 @@ export const DataPrivacyTab: React.FC<DataPrivacyTabProps> = ({
 
             <div className="bg-rose-50 border-2 border-rose-200 rounded-2xl p-4 text-xs font-medium text-rose-900 space-y-2">
               <p className="font-black uppercase tracking-wider text-rose-700 flex items-center gap-1.5">
-                <AlertTriangle size={16} /> Important Retention Information:
+                <AlertTriangle size={16} /> Immediate &amp; Permanent Action:
               </p>
               <ul className="list-disc list-inside space-y-1 text-[11px] text-rose-900/90 font-medium">
-                <li>This will mark the entire workspace for <strong>{schoolName}</strong> for decommissioning.</li>
-                <li>Please export all student records and practical assessment PDFs before proceeding.</li>
-                <li>Data required for legally mandated audit logs and security timestamps will be preserved according to statutory retention rules.</li>
+                {isAdmin ? (
+                  <>
+                    <li>All students, fitness test results, teams, CBSE practicals, term marks, interventions, and timetables for <strong>{schoolName}</strong> are deleted immediately.</li>
+                    <li>Local browser offline caches are wiped at the same time.</li>
+                    <li>This action cannot be undone. Export a backup below first if needed.</li>
+                  </>
+                ) : (
+                  <>
+                    <li>Your user profile, school membership link, and any personal records you created will be permanently erased immediately.</li>
+                    <li>You will be signed out right away and local offline caches will be cleared.</li>
+                  </>
+                )}
               </ul>
+              <button
+                type="button"
+                onClick={handleExportData}
+                disabled={isExporting}
+                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-300 text-rose-800 rounded-lg text-[11px] font-black uppercase tracking-wider hover:bg-rose-100 cursor-pointer"
+              >
+                <Download size={13} />
+                <span>{isExporting ? 'Exporting...' : 'Download JSON/CSV Backup First'}</span>
+              </button>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 block">
-                  Optional Reason for Deletion:
+                  Optional Reason (e.g. Discontinuing Platform):
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. End of academic year / school migration"
+                  placeholder="Optional feedback or reason..."
                   value={deletionReason}
                   onChange={(e) => setDeletionReason(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-rose-600"
@@ -582,11 +650,15 @@ export const DataPrivacyTab: React.FC<DataPrivacyTabProps> = ({
 
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-700 mb-1 block">
-                  Type <span className="font-black text-rose-600 select-all">"{schoolName}"</span> or <span className="font-black text-rose-600">"DELETE"</span> to confirm:
+                  {isAdmin ? (
+                    <>Type <span className="font-black text-rose-600 select-all">"{schoolName}"</span> or <span className="font-black text-rose-600">"DELETE"</span> to confirm:</>
+                  ) : (
+                    <>Type <span className="font-black text-rose-600">"DELETE"</span> to confirm:</>
+                  )}
                 </label>
                 <input
                   type="text"
-                  placeholder="Type school name..."
+                  placeholder={isAdmin ? 'Type DELETE or school name...' : 'Type DELETE...'}
                   value={deletionConfirmText}
                   onChange={(e) => setDeletionConfirmText(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-300 rounded-xl text-xs font-black outline-none focus:border-rose-600 uppercase"
@@ -594,24 +666,54 @@ export const DataPrivacyTab: React.FC<DataPrivacyTabProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-2">
               <button
+                type="button"
                 onClick={() => setIsDeletionModalOpen(false)}
-                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
               >
                 Cancel
               </button>
-              <button
-                onClick={handleSubmitDeletionRequest}
-                disabled={
-                  submittingDeletion ||
-                  (deletionConfirmText.trim().toUpperCase() !== (schoolName || '').trim().toUpperCase() &&
-                   deletionConfirmText.trim().toUpperCase() !== 'DELETE')
-                }
-                className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-[2px_2px_0px_0px_rgba(159,18,57,1)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
-              >
-                {submittingDeletion ? 'Submitting...' : 'Submit Deletion Request'}
-              </button>
+
+              {isAdmin ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleImmediateSchoolDataDelete(false)}
+                    disabled={
+                      submittingDeletion ||
+                      (deletionConfirmText.trim().toUpperCase() !== (schoolName || '').trim().toUpperCase() &&
+                       deletionConfirmText.trim().toUpperCase() !== 'DELETE')
+                    }
+                    className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {submittingDeletion ? 'Deleting...' : 'Delete School Data Only'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleImmediateSchoolDataDelete(true)}
+                    disabled={
+                      submittingDeletion ||
+                      (deletionConfirmText.trim().toUpperCase() !== (schoolName || '').trim().toUpperCase() &&
+                       deletionConfirmText.trim().toUpperCase() !== 'DELETE')
+                    }
+                    className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-[2px_2px_0px_0px_rgba(159,18,57,1)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 size={14} />
+                    <span>{submittingDeletion ? 'Deleting...' : 'Delete All & Close Account'}</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleDeletePersonalAccount}
+                  disabled={submittingDeletion || deletionConfirmText.trim().toUpperCase() !== 'DELETE'}
+                  className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-[2px_2px_0px_0px_rgba(159,18,57,1)] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Trash2 size={14} />
+                  <span>{submittingDeletion ? 'Deleting...' : 'Delete Account Permanently'}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

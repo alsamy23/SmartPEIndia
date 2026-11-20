@@ -89,6 +89,11 @@ export interface AnalyticsEventParams {
     category?: string;
     [key: string]: any;
   };
+  resource_shared: {
+    resource_type: string;
+    channel?: string;
+    [key: string]: any;
+  };
   signup: {
     method?: string;
     user_role?: string;

@@ -11,14 +11,13 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.email == 'alsamy36@gmail.com' ||
-        request.auth.token.email == 'admin@smartpeindia.com' ||
-        request.auth.token.email == 'admin@smartpeindia.app' ||
-        request.auth.token.email == 'contact@smartpeindia.app' ||
-        request.auth.token.email == 'info@smartpeindia.app' ||
-        request.auth.uid == 'admin@smartpeindia.app'
-      );
+      return isAuthenticated() &&
+        request.auth.token.email_verified == true && (
+          request.auth.token.email == 'alsamy36@gmail.com' ||
+          request.auth.token.email == 'admin@smartpeindia.app' ||
+          request.auth.token.email == 'contact@smartpeindia.app' ||
+          request.auth.token.email == 'info@smartpeindia.app'
+        );
     }
 
     function isOwner(userId) {
@@ -363,6 +362,47 @@ service cloud.firestore {
       );
     }
 
+    // 12b. Composite PE Term Evaluations (100-Mark Grading): Strictly scoped & validated per school/teacher tenant
+    function isValidCompositeEvaluation(data) {
+      return data.keys().hasAll([
+        'id', 'schoolId', 'teacherId', 'studentId', 'studentName', 'term', 'totalScore', 'weights', 'fitnessSnapshot', 'discipline', 'games'
+      ]) &&
+      data.id is string && data.id.size() > 0 && data.id.size() <= 160 &&
+      data.schoolId is string && data.schoolId.size() > 0 && data.schoolId.size() <= 160 &&
+      data.teacherId is string && data.teacherId.size() > 0 && data.teacherId.size() <= 160 &&
+      data.studentId is string && data.studentId.size() > 0 && data.studentId.size() <= 160 &&
+      data.studentName is string && data.studentName.size() <= 200 &&
+      data.term is string && data.term.size() <= 60 &&
+      data.totalScore is number && data.totalScore >= 0 && data.totalScore <= 100 &&
+      data.weights is map &&
+      data.fitnessSnapshot is map &&
+      data.discipline is map &&
+      data.games is map;
+    }
+
+    match /composite_evaluations/{evalId} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow create: if isAuthenticated() && isValidCompositeEvaluation(request.resource.data) && (
+        isSuperAdmin() ||
+        request.resource.data.teacherId == request.auth.uid ||
+        isSchoolMember(request.resource.data.schoolId)
+      );
+      allow update: if isAuthenticated() && isValidCompositeEvaluation(request.resource.data) && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.teacherId == request.auth.uid ||
+        isSchoolMember(resource.data.schoolId)
+      );
+    }
+
     // 13. Sports Days: Scoped strictly to school members and admins
     match /sportsDays/{schoolId} {
       allow read: if isAuthenticated() && (isSchoolMember(schoolId) || isSuperAdmin());
@@ -386,7 +426,7 @@ service cloud.firestore {
       allow update, delete: if isSuperAdmin();
     }
 
-    // 16. School Deletion Requests: Verified school admins can submit; read by requester, school admin, or super admin
+    // 16. School Deletion Requests: Verified school admins can submit, read, or clean up; super admin can manage
     match /deletion_requests/{reqId} {
       allow create: if isAuthenticated() && (
         request.resource.data.requestedByUid == request.auth.uid &&
@@ -397,7 +437,12 @@ service cloud.firestore {
         isSchoolAdmin(resource.data.schoolId) ||
         isSuperAdmin()
       );
-      allow update, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin();
+      allow delete: if isSuperAdmin() || (
+        isAuthenticated() &&
+        resource != null &&
+        isSchoolAdmin(resource.data.schoolId)
+      );
     }
 
     // 17. Mail Logs: Super Admin only
@@ -405,11 +450,12 @@ service cloud.firestore {
       allow read, write: if isSuperAdmin();
     }
 
-    // 18. Login Activity & App Usage Logs: Authenticated users can record logins; Super Admin can monitor all
+    // 18. Login Activity & App Usage Logs: Authenticated users can record/delete their own logs; Super Admin can monitor all
     match /login_activity/{logId} {
       allow create: if isAuthenticated();
       allow read: if isSuperAdmin() || (isAuthenticated() && resource.data.uid == request.auth.uid);
-      allow update, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin();
+      allow delete: if isSuperAdmin() || (isAuthenticated() && resource != null && resource.data.uid == request.auth.uid);
     }
 
     // 19. Default fallback: Deny all by default unless super admin

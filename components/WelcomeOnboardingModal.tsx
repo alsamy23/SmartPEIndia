@@ -48,10 +48,10 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
           <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-6 rounded-3xl border-2 border-slate-900 shadow-md space-y-3">
             <div className="flex items-center space-x-2 text-emerald-400 font-black text-xs uppercase tracking-wider">
               <Gift size={16} />
-              <span>Smart PE India Registration Confirmation</span>
+              <span>Smart PE Digital Platform Activation</span>
             </div>
             <p className="text-sm font-medium leading-relaxed text-slate-200">
-              Your account for <strong className="text-white">{schoolName || 'your school'}</strong> has been activated with full 365-day free access to all Physical Education AI tools, lesson planners, and Khelo India fitness scorecards.
+              Your workspace for <strong className="text-white">{schoolName || 'your institution'}</strong> is active with 365-day free educator access to AI lesson planning, Khelo India &amp; SAI-aligned fitness assessments, and CBSE paper tools.
             </p>
           </div>
 
@@ -59,17 +59,17 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
             <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-center space-y-1">
               <Sparkles size={20} className="text-primary mx-auto" />
               <p className="text-xs font-black text-slate-900 uppercase">AI Lesson Plans</p>
-              <p className="text-[10px] text-slate-500 font-medium">60-sec CBSE generators</p>
+              <p className="text-[10px] text-slate-500 font-medium">CBSE &amp; ICSE generators</p>
             </div>
             <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-center space-y-1">
               <Trophy size={20} className="text-amber-500 mx-auto" />
               <p className="text-xs font-black text-slate-900 uppercase">Khelo India</p>
-              <p className="text-[10px] text-slate-500 font-medium">Govt. battery scores</p>
+              <p className="text-[10px] text-slate-500 font-medium">SAI-aligned battery scores</p>
             </div>
             <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-center space-y-1">
               <ClipboardList size={20} className="text-emerald-600 mx-auto" />
               <p className="text-xs font-black text-slate-900 uppercase">Question Papers</p>
-              <p className="text-[10px] text-slate-500 font-medium">Board pattern tests</p>
+              <p className="text-[10px] text-slate-500 font-medium">Board-pattern tests</p>
             </div>
           </div>
 

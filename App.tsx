@@ -48,7 +48,6 @@ import About from './components/About.tsx';
 import Contact from './components/Contact.tsx';
 import KheloIndia from './components/KheloIndia.tsx';
 import RulesBot from './components/RulesBot.tsx';
-import FitnessTests from './components/FitnessTests.tsx';
 import FitnessDashboard from './components/FitnessDashboard.tsx';
 import StudentManagement from './components/StudentManagement.tsx';
 import TeamManagement from './components/TeamManagement.tsx';
@@ -72,6 +71,8 @@ import DepartmentOffice from './components/DepartmentOffice.tsx';
 import BrandWelcomeHub from './components/BrandWelcomeHub.tsx';
 import PricingAndPlans from './components/PricingAndPlans.tsx';
 import PracticalAssessmentHub from './components/PracticalAssessmentHub.tsx';
+import PrivacyPolicyPage from './components/privacy/PrivacyPolicyPage.tsx';
+import WelcomeOnboardingModal from './components/WelcomeOnboardingModal.tsx';
 import CbsePhysicalEducationPage from './components/seo/CbsePhysicalEducationPage.tsx';
 import KheloIndiaFitnessPage from './components/seo/KheloIndiaFitnessPage.tsx';
 import AiLessonPlannerPage from './components/seo/AiLessonPlannerPage.tsx';
@@ -85,6 +86,7 @@ import { FloatingVoiceAgentButton } from './components/FloatingVoiceAgentButton.
 import { UserSupportModal } from './components/UserSupportModal.tsx';
 import { logError } from './services/logService.ts';
 import { fitnessService } from './services/fitnessService.ts';
+import { offlineCacheService } from './services/offlineCacheService.ts';
 import { auth } from './services/firebase.ts';
 import { onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth';
 import { trackEvent } from './services/analytics.ts';
@@ -92,7 +94,7 @@ import { toast, SHOW_TOAST_EVENT, SHOW_CONFIRM_EVENT, ToastConfig, ConfirmConfig
 import { userActivityService } from './services/userActivityService.ts';
 import { isBrandSuperAdmin } from './types.ts';
 
-type Tab = 'dashboard' | 'cbse-physical-education' | 'khelo-india-fitness-assessment' | 'ai-pe-lesson-planner' | 'physical-education-assessment' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'physical-development' | 'coaching-assessment' | 'coaching-academy' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
+type Tab = 'dashboard' | 'cbse-physical-education' | 'khelo-india-fitness-assessment' | 'ai-pe-lesson-planner' | 'physical-education-assessment' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'physical-development' | 'coaching-assessment' | 'coaching-academy' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'privacy' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
 
 // Helper to determine initial tab from URL pathname, query, or hash
 const getInitialTab = (): Tab => {
@@ -112,12 +114,15 @@ const getInitialTab = (): Tab => {
     'physical-development': 'physical-development',
     'development-profile': 'physical-development',
     'lesson-planner': 'planner',
+    'planner': 'planner',
     'yearly-planner': 'yearly',
+    'curriculum': 'yearly',
     'weekly-planner': 'weekly-planner',
     'workload-planner': 'workload-planner',
     'skill-progressions': 'skillmastery',
     'theory': 'theory',
     'fitness-tests': 'fitness',
+    'fitness': 'fitness',
     'khelo-india': 'khelo',
     'tournament-fixtures': 'tournament-fixtures',
     'testpaper': 'testpaper',
@@ -136,6 +141,9 @@ const getInitialTab = (): Tab => {
     'school-admin': 'school-admin',
     'pricing': 'subscription-plans',
     'welcome': 'brand-welcome',
+    'privacy': 'privacy',
+    'privacy-policy': 'privacy',
+    'terms': 'privacy',
     'about': 'about',
     'contact': 'contact'
   };
@@ -177,9 +185,8 @@ const navigation = [
   { 
     section: 'Assess',
     items: [
-      { id: 'physical-development', name: 'Physical Development Profile', icon: Activity, isNew: true, subtitle: 'Unified 6-domain profile, automated calculations & parent reports.' },
+      { id: 'physical-development', name: 'PE Fitness & Development', icon: Activity, isNew: true, subtitle: 'Fitness tests & BMI, 100-mark term grading (30+20+50) & report cards.' },
       { id: 'cbse-practical', name: 'CBSE Practical (30M)', icon: ClipboardCheck, subtitle: 'Class 11 & 12 30-mark practical scoring & award sheet.' },
-      { id: 'fitness', name: 'Student Fitness Assessment', icon: Activity, subtitle: 'All Khelo India & standard fitness tests pre-loaded.' },
       { id: 'khelo', name: 'Khelo India Battery', icon: Trophy, subtitle: 'Official battery tests and student profiles.' },
       { id: 'tournament-fixtures', name: 'Tournament Fixtures', icon: Trophy, subtitle: 'Generate Knockout Brackets & Round Robin League schedules.' },
       { id: 'testpaper', name: 'Question Paper Generator', icon: ClipboardList, subtitle: 'Create MCQ and theory papers for PE.' },
@@ -216,8 +223,9 @@ const navigation = [
   { 
     section: 'Corporate Info',
     items: [
-      { id: 'brand-welcome', name: 'Brand & Welcome Hub', icon: Sparkles, subtitle: 'Welcome guide, promo video, & welcome email generator.' },
+      { id: 'brand-welcome', name: 'Brand & Email Console', icon: Sparkles, superAdminOnly: true, subtitle: 'Internal Brevo diagnostics, nurture simulator & welcome email templates.' },
       { id: 'subscription-plans', name: 'Plans & Free Pass', icon: Zap, subtitle: 'View 1-Year Free Pass & affordable school plans.' },
+      { id: 'privacy', name: 'Privacy & Terms', icon: ShieldCheck, subtitle: 'Data privacy policy, student protection & terms.' },
       { id: 'about', name: 'About smartpeindia', icon: GraduationCap, subtitle: 'Meet the founder L. Samy and the mission.' },
       { id: 'contact', name: 'Contact & Support', icon: Mail, subtitle: 'Get help, report a bug, or collaborate directly.' },
     ]
@@ -394,11 +402,15 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
       <nav className="mt-2 px-4 space-y-1.5 overflow-y-auto max-h-[calc(100vh-420px)] custom-scrollbar">
         {navigation.map((item, idx) => {
           if ('section' in item && item.items) {
+            const visibleItems = item.items.filter(
+              (subItem: any) => !subItem.superAdminOnly || isBrandSuperAdmin(user?.email)
+            );
+            if (visibleItems.length === 0) return null;
             return (
               <div key={`section-${idx}`} className="py-3">
                 <p className="px-6 mb-2 text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">{item.section}</p>
                 <div className="space-y-1">
-                  {item.items.map((subItem) => (
+                  {visibleItems.map((subItem) => (
                     <button
                       key={subItem.id}
                       onClick={() => handleTabChange(subItem.id as Tab)}
@@ -674,6 +686,7 @@ const App: React.FC = () => {
   const [highlightStudentId, setHighlightStudentId] = useState<string | null>(null);
   const [isVoiceAgentOpen, setIsVoiceAgentOpen] = useState(false);
   const [spotlightInfo, setSpotlightInfo] = useState<SpotlightData | null>(null);
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [toasts, setToasts] = useState<ToastConfig[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmConfig | null>(null);
 
@@ -771,8 +784,10 @@ const App: React.FC = () => {
       if (currentUser) {
         setIsAuthView(false); // Reset auth view when user logs in
         userActivityService.recordUserPresence(currentUser).catch(() => {});
-        // Show lightweight welcome toast instead of blocking pop-up modal
-        if (!sessionStorage.getItem('welcome_notified')) {
+        if (sessionStorage.getItem('smartpe_show_onboarding') === 'true') {
+          sessionStorage.removeItem('smartpe_show_onboarding');
+          setShowOnboardingModal(true);
+        } else if (!sessionStorage.getItem('welcome_notified')) {
           const name = currentUser.displayName || currentUser.email?.split('@')[0] || 'Educator';
           toast.success(`Welcome back, ${name}!`);
           sessionStorage.setItem('welcome_notified', 'true');
@@ -846,6 +861,9 @@ const App: React.FC = () => {
     toast.confirm('Are you sure you want to log out?', async () => {
       try {
         await signOut(auth);
+        offlineCacheService.clearSensitiveCacheOnLogout();
+        setSchoolBranding({ schoolName: null, schoolLogo: null });
+        sessionStorage.removeItem('welcome_notified');
       } catch (err) {
         console.error(err);
       }
@@ -994,6 +1012,19 @@ const App: React.FC = () => {
       'khelo-india-fitness-assessment': '/khelo-india-fitness-assessment',
       'ai-pe-lesson-planner': '/ai-pe-lesson-planner',
       'physical-education-assessment': '/physical-education-assessment',
+      'planner': '/lesson-planner',
+      'yearly': '/yearly-planner',
+      'weekly-planner': '/weekly-planner',
+      'khelo': '/khelo-india',
+      'tournament-fixtures': '/tournament-fixtures',
+      'testpaper': '/testpaper',
+      'theory': '/theory',
+      'fitness': '/fitness-tests',
+      'rules': '/rules',
+      'subscription-plans': '/pricing',
+      'about': '/about',
+      'contact': '/contact',
+      'privacy': '/privacy',
     };
 
     if (seoRoutes[tabId]) {
@@ -1045,8 +1076,8 @@ const App: React.FC = () => {
       case 'compliance': return <ComplianceAdvisor />;
       case 'khelo': return <KheloIndia />;
       case 'rules': return <RulesBot />;
-      case 'physical-development': return <UnifiedPhysicalDevelopmentHub onNavigate={handleTabChange} initialStudentId={selectedReportStudentId || undefined} />;
-      case 'fitness': return <FitnessTests />;
+      case 'physical-development': return <UnifiedPhysicalDevelopmentHub onNavigate={handleTabChange} initialStudentId={selectedReportStudentId || undefined} initialMode="term_grading" />;
+      case 'fitness': return <UnifiedPhysicalDevelopmentHub onNavigate={handleTabChange} initialStudentId={selectedReportStudentId || undefined} initialMode="fitness_tests" />;
       case 'cbse-practical': return <PracticalAssessmentHub />;
       case 'coaching-assessment':
       case 'coaching-academy': return <CoachingAcademyHub onSwitchToSchoolPe={() => handleTabChange('dashboard')} initialReportId={coachingReportId || undefined} />;
@@ -1061,8 +1092,13 @@ const App: React.FC = () => {
       case 'parentletters': return <ParentLetters />;
       case 'widgets': return <ClassroomWidgets />;
       case 'skill-analysis': return <SkillAnalysis />;
-      case 'brand-welcome': return <BrandWelcomeHub userEmail={user?.email} userName={user?.displayName} onNavigateToPlans={() => handleTabChange('subscription-plans')} />;
+      case 'brand-welcome':
+        if (isBrandSuperAdmin(user?.email)) {
+          return <BrandWelcomeHub userEmail={user?.email} userName={user?.displayName} schoolName={schoolBranding.schoolName} onNavigateToPlans={() => handleTabChange('subscription-plans')} />;
+        }
+        return <Dashboard apiStatus={apiStatus} debugInfo={debugInfo} onTestConnection={handleTestConnection} isTesting={isTesting} onNavigate={handleTabChange} />;
       case 'subscription-plans': return <PricingAndPlans userEmail={user?.email} />;
+      case 'privacy': return <PrivacyPolicyPage onNavigate={handleTabChange} />;
       case 'school-overview': return <FitnessManagementIntro onLogin={() => {
         if (auth.currentUser) {
           handleTabChange('school-results');
@@ -1251,6 +1287,15 @@ const App: React.FC = () => {
 
           {/* Instant WhatsApp Support & Automated Problem Reporter */}
           <UserSupportModal />
+
+          {/* First-Signup Quick-Start Onboarding Modal */}
+          <WelcomeOnboardingModal
+            isOpen={showOnboardingModal}
+            onClose={() => setShowOnboardingModal(false)}
+            userName={user?.displayName || user?.email?.split('@')[0] || 'Educator'}
+            schoolName={schoolBranding.schoolName}
+            onNavigateTab={handleTabChange}
+          />
 
           {/* Mobile Bottom Navigation - Displayed exclusively for School PE, hidden in Coaching & Academy to avoid layout collision */}
           {activeWorkspace !== 'academy' && activeTab !== 'coaching-academy' && activeTab !== 'coaching-assessment' && (

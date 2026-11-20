@@ -25,10 +25,10 @@ function getEmailConfig(): EmailConfig {
   return {
     brevoApiKey: process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY,
     resendApiKey: process.env.RESEND_API_KEY,
-    fromEmail: process.env.FROM_EMAIL || "SmartPE India <admin@smartpeindia.com>",
+    fromEmail: process.env.FROM_EMAIL || "SmartPE India <noreply@smartpeindia.app>",
     appName: process.env.APP_NAME || "SmartPE India",
     appUrl: process.env.APP_URL || "https://smartpeindia.app",
-    supportEmail: process.env.SUPPORT_EMAIL || "admin@smartpeindia.com"
+    supportEmail: process.env.SUPPORT_EMAIL || "contact@smartpeindia.app"
   };
 }
 
@@ -36,7 +36,7 @@ function getEmailConfig(): EmailConfig {
  * Parse sender name and email from "Name <email@domain.com>" or plain email string
  */
 function parseSender(fromEmailString?: string): { name: string; email: string } {
-  const fallbackEmail = "admin@smartpeindia.com";
+  const fallbackEmail = "noreply@smartpeindia.app";
   const fallbackName = "SmartPE India";
   if (!fromEmailString || !fromEmailString.trim()) {
     return { name: fallbackName, email: fallbackEmail };
@@ -244,10 +244,10 @@ function buildPersonalizedWelcomeEmail(
                   <strong>Need assistance or have questions?</strong>
                 </p>
                 <p style="margin: 0 0 16px 0; font-size: 13px; color: #64748b;">
-                  Reach out directly to us at <a href="mailto:admin@smartpeindia.com" style="color: #0D2B52; font-weight: bold;">admin@smartpeindia.com</a>. We are here to help make your physical education program run smoothly and efficiently.
+                  Reach out directly to us at <a href="mailto:contact@smartpeindia.app" style="color: #0D2B52; font-weight: bold;">contact@smartpeindia.app</a>. We are here to help make your physical education program run smoothly and efficiently.
                 </p>
                 <p class="founder-name">SmartPE India Team</p>
-                <p class="founder-title">Physical Education Software for Indian Schools • ${appUrl.replace(/^https?:\/\//, "")}</p>
+                <p class="founder-title">PE Digital Platform for Indian Schools • ${appUrl.replace(/^https?:\/\//, "")}</p>
               </div>
             </div>
 
@@ -262,7 +262,8 @@ function buildPersonalizedWelcomeEmail(
                 <a href="${appUrl}/cbse-physical-education">CBSE PE</a> •
                 <a href="${appUrl}/khelo-india-fitness-assessment">Khelo India</a> •
                 <a href="${appUrl}/ai-pe-lesson-planner">AI Lesson Planner</a> •
-                <a href="mailto:admin@smartpeindia.com">Contact Support</a>
+                <a href="${appUrl}/#privacy">Privacy Policy</a> •
+                <a href="mailto:contact@smartpeindia.app">Contact Support</a>
               </div>
               <p style="margin: 0; font-size: 11px; color: #64748b;">
                 © ${new Date().getFullYear()} ${appName}. All rights reserved. You received this email because your account was registered on ${appUrl.replace(/^https?:\/\//, "")}.
@@ -282,14 +283,14 @@ Welcome to ${appName}${institutionContext}! Your 1-Year Free Founding Educator P
 
 ⚡ Key Tools in Your SmartPE Workspace:
 1. AI PE Lesson Planner & Drill Generator — Structured 40-min lesson plans aligned with CBSE, ICSE & State boards.
-2. Student Fitness & Khelo India Assessments — SAI percentile scores, BMI tracking, and printable student health report cards.
+2. Student Fitness & Khelo India Assessments — SAI-aligned percentile scores, BMI tracking, and printable student health report cards.
 3. CBSE Theory Master & Question Paper Maker — Board-pattern PE question papers with answer keys for Classes 9–12.
-4. CBSE Practical 30-Mark Hub (Subject 048) — Inspection-ready practical score compiling and evaluation sheets.
+4. CBSE Practical 30-Mark Hub (Subject 048) — Practical score compiling and evaluation sheets.
 5. Tournament & Sports Day Manager — Knockout brackets and round-robin league schedules.
 
 Launch your workspace anytime at: ${appUrl}
 
-Need assistance? Contact us directly at admin@smartpeindia.com.
+Need assistance? Contact us directly at contact@smartpeindia.app.
 
 Best regards,
 SmartPE India Team

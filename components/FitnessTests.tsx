@@ -72,7 +72,17 @@ const isAdminUser = (email?: string | null) => {
   return ADMIN_EMAILS.includes(email.toLowerCase());
 };
 
-const FitnessTests: React.FC = () => {
+interface FitnessTestsProps {
+  sharedStudents?: Student[];
+  sharedResults?: FitnessResult[];
+  sharedUserProfile?: any;
+}
+
+const FitnessTests: React.FC<FitnessTestsProps> = ({
+  sharedStudents,
+  sharedResults,
+  sharedUserProfile
+}) => {
   const [activeTab, setActiveTab] = useState<'fitness' | 'games'>('fitness');
   const [selectedBattery, setSelectedBattery] = useState<KIFTBattery | null>(null);
 
@@ -89,7 +99,7 @@ const FitnessTests: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FitnessAssessment | null>(null);
   const [isSaved, setIsSaved] = useState(false);
-  const [students, setStudents] = useState<Student[]>([]);
+  const [students, setStudents] = useState<Student[]>(() => sharedStudents || []);
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [selectedGradeFilter, setSelectedGradeFilter] = useState('ALL');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState('ALL');
@@ -99,9 +109,9 @@ const FitnessTests: React.FC = () => {
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchSavedStatus, setBatchSavedStatus] = useState<{ [studentId: string]: boolean }>({});
   const [selectedTerm, setSelectedTerm] = useState('Baseline');
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(() => sharedUserProfile ?? null);
   const [studentResults, setStudentResults] = useState<FitnessResult[]>([]);
-  const [allResults, setAllResults] = useState<FitnessResult[]>([]);
+  const [allResults, setAllResults] = useState<FitnessResult[]>(() => sharedResults || []);
   const [showReportModal, setShowReportModal] = useState(false);
   const [profileModalStudent, setProfileModalStudent] = useState<Student | null>(null);
   const [sequentialMode, setSequentialMode] = useState<boolean>(true);
@@ -278,7 +288,31 @@ const FitnessTests: React.FC = () => {
     return matchResultInStudentBucket(testId, testName, studentMatchingResults);
   };
 
+  // Keep synced with shared streams when embedded inside UnifiedPhysicalDevelopmentHub
   useEffect(() => {
+    if (sharedStudents !== undefined) {
+      setStudents(sharedStudents);
+    }
+  }, [sharedStudents]);
+
+  useEffect(() => {
+    if (sharedResults !== undefined) {
+      setAllResults(sharedResults);
+    }
+  }, [sharedResults]);
+
+  useEffect(() => {
+    if (sharedUserProfile !== undefined) {
+      setUserProfile(sharedUserProfile);
+    }
+  }, [sharedUserProfile]);
+
+  useEffect(() => {
+    // Skip duplicate subscriptions if parent hub already feeds shared streams
+    if (sharedStudents !== undefined && sharedResults !== undefined) {
+      return;
+    }
+
     let unsubStudents: (() => void) | undefined;
     let unsubResults: (() => void) | undefined;
 
@@ -310,7 +344,7 @@ const FitnessTests: React.FC = () => {
       unsubStudents?.();
       unsubResults?.();
     };
-  }, [auth.currentUser?.uid]);
+  }, [auth.currentUser?.uid, sharedStudents !== undefined && sharedResults !== undefined]);
 
   // In single student mode, auto-fill testValue when student, test, or term changes
   useEffect(() => {

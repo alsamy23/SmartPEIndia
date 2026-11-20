@@ -526,8 +526,16 @@ export const TEST_DEFINITIONS_MAP = new Map<string, TestDefinition>(
   MASTER_TEST_DEFINITIONS.map(t => [t.id, t])
 );
 
+const TEST_ID_ALIASES: Record<string, string> = {
+  shuttle_run: 'shuttle_4x10',
+  curl_ups: 'curlups',
+  '600m_run': 'run_600m',
+  run_800m: 'run_600m',
+};
+
 export function getTestDefinition(testId: string): TestDefinition {
-  const found = TEST_DEFINITIONS_MAP.get(testId);
+  const normalizedId = TEST_ID_ALIASES[testId] || testId;
+  const found = TEST_DEFINITIONS_MAP.get(normalizedId);
   if (found) return found;
 
   // Fallback dynamic test definition
@@ -647,7 +655,7 @@ export function calculateTestScoreAndLevel(
   }
 
   // 3. Time mm:ss (e.g. 600m or 800m run)
-  if (testDef.measurementType === 'time_mm_ss' || clean.includes(':')) {
+  if (testDef.id === 'run_600m' || testDef.id === 'run_long' || testDef.measurementType === 'time_mm_ss' || clean.includes(':')) {
     const minutes = parseFitnessValue(clean);
     let scorePercent = 60;
     if (minutes > 0) {
@@ -673,6 +681,12 @@ export function calculateTestScoreAndLevel(
       else if (numVal <= 5.0) scorePercent = 78;
       else if (numVal <= 5.8) scorePercent = 65;
       else if (numVal <= 6.8) scorePercent = 50;
+      else scorePercent = 35;
+    } else if (testDef.id === 'sprint_30m') {
+      if (numVal <= 4.9) scorePercent = 92;
+      else if (numVal <= 5.7) scorePercent = 78;
+      else if (numVal <= 6.6) scorePercent = 65;
+      else if (numVal <= 7.6) scorePercent = 50;
       else scorePercent = 35;
     } else if (testDef.id === 'sprint_50m') {
       if (numVal <= 7.5) scorePercent = 92;

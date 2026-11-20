@@ -32,21 +32,21 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
   canonicalUrl: 'https://smartpeindia.app/',
   allowCrawling: true,
   metaTitlePrefix: 'SmartPE India',
-  metaDescription: "India's #1 PE Teacher App. Generate CBSE PE lesson plans in 60s, calculate Khelo India student fitness test percentiles, and create official tournament fixture brackets online.",
-  socialTitle: "SmartPE India | #1 PE Teacher App – Lesson Plans, Fitness Tests & Fixtures",
-  socialDescription: "India's #1 PE Teacher App. Generate CBSE PE lesson plans in 60s, calculate Khelo India student fitness test percentiles, and create official tournament fixture brackets online.",
+  metaDescription: "Digital Physical Education Platform for Indian schools. Create CBSE PE lesson plans in 60s, track Khelo India student fitness test scores, and build tournament fixtures online.",
+  socialTitle: "SmartPE India | PE Digital Platform – Lesson Plans, Fitness Tests & Fixtures",
+  socialDescription: "Digital Physical Education Platform for Indian schools. Create CBSE PE lesson plans in 60s, track Khelo India student fitness test scores, and build tournament fixtures online.",
   socialImageUrl: 'https://smartpeindia.app/logo.png',
   shareUrlFormat: 'domain_only',
   sitemapActive: true,
-  keywords: 'PE teacher app, physical education software, CBSE PE lesson planner, student fitness test app, Khelo India fitness assessment, tournament fixture maker, school PE management, smartpeindia, smartpeindia.app',
+  keywords: 'PE digital platform, digital physical education platform, PE teacher app, CBSE PE lesson planner, student fitness test platform, Khelo India fitness assessment, tournament fixture maker, school PE management, smartpeindia, smartpeindia.app',
   author: 'SmartPE India',
   siteName: 'SmartPE India',
   twitterHandle: '@smartpeindia',
   routeOverrides: {
     dashboard: {
-      title: 'SmartPE India | #1 PE Teacher App – Lesson Plans, Fitness Tests & Fixtures',
-      description: "India's #1 PE Teacher App. Generate CBSE PE lesson plans in 60s, calculate Khelo India student fitness test percentiles, and create official tournament fixture brackets online.",
-      keywords: 'PE teacher app, physical education software, CBSE PE lesson planner, student fitness test app, Khelo India fitness assessment, tournament fixture maker, school PE management',
+      title: 'SmartPE India | PE Digital Platform – Lesson Plans, Fitness Tests & Fixtures',
+      description: "Digital Physical Education Platform for Indian schools. Create CBSE PE lesson plans in 60s, track Khelo India student fitness test scores, and build tournament fixtures online.",
+      keywords: 'PE digital platform, digital physical education platform, CBSE PE lesson planner, student fitness test platform, Khelo India fitness assessment, tournament fixture maker, school PE management',
       canonicalPath: '/'
     },
     'cbse-physical-education': {
@@ -57,7 +57,7 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
     },
     'khelo-india-fitness-assessment': {
       title: 'Khelo India Fitness Assessment for Schools | SmartPE India',
-      description: 'Manage student fitness assessment data using SmartPE. Record SAI battery test scores, calculate percentiles, and generate official fitness report cards.',
+      description: 'Manage student fitness assessment data using SmartPE. Record SAI-aligned battery test scores, calculate percentiles, and print fitness report cards.',
       keywords: 'Khelo India fitness assessment, student fitness assessment, school fitness assessment, student fitness tracker, PE fitness report card, fitness test calculator',
       canonicalPath: '/khelo-india-fitness-assessment'
     },
@@ -77,19 +77,19 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
       title: 'Smart PE India | PE Lesson Planner (CBSE & ICSE)',
       description: 'Generate comprehensive PE lesson plans with age-appropriate warm-ups, skill drills, safety measures, and equipment checklists in seconds.',
       keywords: 'AI Lesson Planner, Physical Education Lesson Plan, CBSE PE Plan, ICSE Physical Education, smartpeindia',
-      canonicalPath: '/#lesson-planner'
+      canonicalPath: '/lesson-planner'
     },
     yearly: {
       title: 'Smart PE India | Yearly PE Curriculum & 40-Week Syllabus Planner',
       description: 'Auto-map 40 weeks of physical education curriculum for CBSE and ICSE grades with Smart PE India.',
       keywords: 'Yearly PE Plan, Physical Education Syllabus, Sports Curriculum, CBSE PE Planning',
-      canonicalPath: '/#yearly-planner'
+      canonicalPath: '/yearly-planner'
     },
     'weekly-planner': {
       title: 'Smart PE India | Academic Weekly PE Planner & Homework Splitter',
       description: 'Plan weekly physical education theory and practical sessions with 1-click homework assignment generators.',
       keywords: 'Weekly PE Planner, PE Homework Generator, Academic Sports Schedule',
-      canonicalPath: '/#weekly-planner'
+      canonicalPath: '/weekly-planner'
     },
     'workload-planner': {
       title: 'Smart PE India | Department Workload & Timetable Planner',
@@ -107,31 +107,31 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
       title: 'Smart PE India | Theory Master & CBSE Physical Education Study Hub',
       description: 'Complete physical education theory curriculum, study guides, diagrams, and worksheets for Class 9, 10, 11, and 12.',
       keywords: 'CBSE Physical Education Theory, Class 11 PE, Class 12 PE, Sports Science Notes',
-      canonicalPath: '/#theory'
+      canonicalPath: '/theory'
     },
     fitness: {
       title: 'Smart PE India | Khelo India Fitness Assessment & Score Calculator',
       description: 'Standardized Khelo India battery tests, BMI calculation, cardiorespiratory endurance, agility, and motor fitness assessment with instant ratings.',
       keywords: 'Khelo India Fitness Test, BMI Calculator, PE Fitness Assessment, Student Fitness Card, SAI Fitness',
-      canonicalPath: '/#fitness-tests'
+      canonicalPath: '/fitness-tests'
     },
     khelo: {
       title: 'Smart PE India | Khelo India Battery Test Portal & Fitness Cards',
-      description: 'Official Khelo India PE battery test engine. Generate official fitness report cards and track student physical literacy standards.',
-      keywords: 'Khelo India Battery Test, Fitness Report Card, Ministry of Sports PE, SAI Protocol',
-      canonicalPath: '/#khelo-india'
+      description: 'Khelo India–aligned PE battery test engine. Generate printable fitness report cards and track student physical literacy standards.',
+      keywords: 'Khelo India Battery Test, Fitness Report Card, PE Battery Assessment, SAI Protocol',
+      canonicalPath: '/khelo-india'
     },
     'tournament-fixtures': {
       title: 'Smart PE India | Tournament Fixtures & Bracket Generator',
       description: 'Generate single knockout, double elimination, and round-robin tournament fixtures with automatic seedings and bye allocations.',
       keywords: 'Tournament Fixture Maker, Knockout Brackets, Sports League Schedule, Intramural Fixtures',
-      canonicalPath: '/#tournament-fixtures'
+      canonicalPath: '/tournament-fixtures'
     },
     testpaper: {
       title: 'Smart PE India | PE Question Paper & MCQ Generator',
       description: 'Create CBSE and ICSE physical education exam papers, MCQs, short answers, and answer keys with marking schemes.',
       keywords: 'PE Question Paper Generator, Physical Education Exam Maker, CBSE PE Test Paper',
-      canonicalPath: '/#testpaper'
+      canonicalPath: '/testpaper'
     },
     'skill-analysis': {
       title: 'Smart PE India | AI Sports Skill & Technique Analysis Lab',
@@ -143,7 +143,7 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
       title: 'Smart PE India | Sports Rules & Regulations AI Assistant',
       description: 'Instant answers for official sports court dimensions, referee signals, foul classifications, and rulebook queries.',
       keywords: 'Sports Rules Bot, Court Dimensions, Referee Handbook, Game Regulations',
-      canonicalPath: '/#rules'
+      canonicalPath: '/rules'
     },
     'principal-dashboard': {
       title: 'Smart PE India | Principal & Sports Inspection Dashboard',
@@ -212,10 +212,10 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
       canonicalPath: '/#school-admin'
     },
     'subscription-plans': {
-      title: 'Smart PE India | Pricing Plans & 1-Year Free Pass',
-      description: 'Explore 1-Year Free Passes and school subscription plans for physical education teachers and sports departments.',
-      keywords: 'Smart PE India Pricing, PE Software Plans, Free PE Tools India',
-      canonicalPath: '/#pricing'
+      title: 'Smart PE India | School PE Digital Platform Plans & Educator Access',
+      description: 'Explore complimentary educator tools and affordable school PE digital platform plans for physical education departments.',
+      keywords: 'Smart PE India Pricing, School PE Digital Platform Plans, PE Educator Tools India',
+      canonicalPath: '/pricing'
     },
     'brand-welcome': {
       title: 'Smart PE India | Educator Brand Hub & Welcome Center',
@@ -227,13 +227,19 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
       title: 'Smart PE India | About Platform & Founder L. Samy',
       description: 'Discover the story behind Smart PE India and founder Lurtha Samy (L. Samy), empowering physical educators across India.',
       keywords: 'About Smart PE India, L Samy PE, Physical Education Mission India',
-      canonicalPath: '/#about'
+      canonicalPath: '/about'
     },
     'contact': {
       title: 'Smart PE India | Contact Support & School Inquiries',
       description: 'Get in touch with the Smart PE India team for technical support, school implementations, and feature suggestions.',
       keywords: 'Contact Smart PE India, PE Support, School Partnership',
-      canonicalPath: '/#contact'
+      canonicalPath: '/contact'
+    },
+    'privacy': {
+      title: 'Smart PE India | Data Privacy Policy & Terms of Service',
+      description: 'Review SmartPE India data protection policy, student privacy safeguards, DPDP compliance, offline caching transparency, and terms of service.',
+      keywords: 'SmartPE India Privacy Policy, Student Data Protection, DPDP School Compliance, Terms of Service',
+      canonicalPath: '/privacy'
     }
   }
 };
