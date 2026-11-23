@@ -164,6 +164,9 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           let customSchoolName = '';
           let customSchoolLogo = '';
 
+          let pendingRefToDelete: any = null;
+          let claimedInviteDocId: string | undefined;
+
           if (!querySnapshot.empty) {
             const pendingMemberDoc = querySnapshot.docs.find(d => d.id.startsWith('pending_')) || querySnapshot.docs[0];
             const data = pendingMemberDoc.data();
@@ -172,11 +175,8 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             customSchoolName = data.schoolName || '';
             customSchoolLogo = data.schoolLogo || '';
             if (pendingMemberDoc.id.startsWith('pending_')) {
-              try {
-                await deleteDoc(pendingMemberDoc.ref);
-              } catch (e) {
-                console.warn("Could not delete pending doc:", e);
-              }
+              claimedInviteDocId = pendingMemberDoc.id;
+              pendingRefToDelete = pendingMemberDoc.ref;
             }
           } else {
             schoolId = `school_${user.uid}`;
@@ -216,8 +216,17 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             displayName: cleanName,
             email: cleanEmail,
             schoolName: finalSchoolName,
-            schoolLogo: customSchoolLogo
+            schoolLogo: customSchoolLogo,
+            ...(claimedInviteDocId ? { inviteDocId: claimedInviteDocId } : {})
           });
+
+          if (pendingRefToDelete) {
+            try {
+              await deleteDoc(pendingRefToDelete);
+            } catch (e) {
+              console.warn("Could not delete pending doc:", e);
+            }
+          }
 
           localStorage.setItem('smartpe_active_workspace', 'school');
         }
@@ -383,6 +392,9 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           let customSchoolName = '';
           let customSchoolLogo = '';
 
+          let pendingRefToDelete: any = null;
+          let claimedInviteDocId: string | undefined;
+
           if (!querySnapshot.empty) {
             // Claim existing pending membership
             const pendingMemberDoc = querySnapshot.docs.find(d => d.id.startsWith('pending_')) || querySnapshot.docs[0];
@@ -393,11 +405,8 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             customSchoolLogo = data.schoolLogo || '';
             
             if (pendingMemberDoc.id.startsWith('pending_')) {
-              try {
-                await deleteDoc(pendingMemberDoc.ref);
-              } catch (e) {
-                console.warn("Could not delete pending doc:", e);
-              }
+              claimedInviteDocId = pendingMemberDoc.id;
+              pendingRefToDelete = pendingMemberDoc.ref;
             }
           } else {
             // Create new school
@@ -440,8 +449,17 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             displayName,
             email: user.email,
             schoolName: finalSchoolName,
-            schoolLogo: customSchoolLogo
+            schoolLogo: customSchoolLogo,
+            ...(claimedInviteDocId ? { inviteDocId: claimedInviteDocId } : {})
           });
+
+          if (pendingRefToDelete) {
+            try {
+              await deleteDoc(pendingRefToDelete);
+            } catch (e) {
+              console.warn("Could not delete pending doc:", e);
+            }
+          }
 
           localStorage.setItem('smartpe_active_workspace', 'school');
 

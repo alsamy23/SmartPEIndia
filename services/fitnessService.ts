@@ -759,14 +759,15 @@ export const fitnessService = {
           if (!snap.empty) {
             const matchDoc = snap.docs.find(d => d.id !== uid) || snap.docs[0];
             const data = matchDoc.data();
-            const memberRecord: SchoolMember = {
+            const memberRecord: SchoolMember & { inviteDocId?: string } = {
               uid: uid,
               schoolId: data.schoolId || `school_${uid}`,
               role: data.role || 'teacher',
               displayName: auth.currentUser?.displayName || data.displayName || 'Teacher',
               email: userEmail,
               schoolName: data.schoolName || '',
-              schoolLogo: data.schoolLogo || ''
+              schoolLogo: data.schoolLogo || '',
+              ...(matchDoc.id.startsWith('pending_') ? { inviteDocId: matchDoc.id } : {})
             };
 
             await setDoc(doc(db, 'schoolMembers', uid), memberRecord, { merge: true });

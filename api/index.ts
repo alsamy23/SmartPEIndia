@@ -28,11 +28,34 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
+// Respect X-Forwarded-For from Vercel / Cloud Run reverse proxies for accurate per-IP rate limiting
+app.set("trust proxy", 1);
+
+// Global lightweight security headers (non-framing so dev AI Studio iframe continues working; framing blocked on /api/* and production hosting configs)
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+  }
+  next();
+});
+
 // Controlled Request Limits (Anti-DOS):
 // General JSON body: 2MB max
 // Raw/Audio transcribe body: 15MB max (applied directly on /api/ai/transcribe)
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
+
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  const rawIp = Array.isArray(forwarded)
+    ? forwarded[0]
+    : typeof forwarded === "string"
+      ? forwarded.split(",")[0]
+      : req.ip || req.socket?.remoteAddress || "unknown";
+  return String(rawIp || "unknown").trim().replace(/^::ffff:/, "");
+}
 
 // Rate Limiting Storage (In-memory, clean interval every 5 mins)
 interface RateLimitBucket {
@@ -227,9 +250,17 @@ const getOpenRouterKeys = (): string[] => {
       if (!keys.includes(clean)) keys.push(clean);
     }
   }
+  const maybeSkOrNames = ["GEMINI_API_KEY", "GOOGLE_API_KEY", "API_KEY"];
+  for (const name of maybeSkOrNames) {
+    const val = process.env[name];
+    if (val && val.trim().replace(/^["']|["']$/g, '').startsWith("sk-or-")) {
+      const clean = val.trim().replace(/^["']|["']$/g, '');
+      if (!keys.includes(clean)) keys.push(clean);
+    }
+  }
   for (let i = 1; i <= 20; i++) {
     const val = process.env[`GEMINI_KEY_${i}`];
-    if (val && val.startsWith("sk-or-")) {
+    if (val && val.trim().replace(/^["']|["']$/g, '').startsWith("sk-or-")) {
       const clean = val.trim().replace(/^["']|["']$/g, '');
       if (!keys.includes(clean)) keys.push(clean);
     }
@@ -238,9 +269,15 @@ const getOpenRouterKeys = (): string[] => {
 };
 
 const getGroqKey = () => {
-  const key = process.env.GROQ_API_KEY;
-  if (key && key.trim() !== "" && key !== "undefined" && key !== "null") {
-    return key.trim().replace(/^["']|["']$/g, '');
+  const directKey = process.env.GROQ_API_KEY;
+  if (directKey && directKey.trim() !== "" && directKey !== "undefined" && directKey !== "null") {
+    return directKey.trim().replace(/^["']|["']$/g, '');
+  }
+  for (let i = 1; i <= 20; i++) {
+    const val = process.env[`GEMINI_KEY_${i}`];
+    if (val && val.trim().replace(/^["']|["']$/g, '').startsWith("gsk_")) {
+      return val.trim().replace(/^["']|["']$/g, '');
+    }
   }
   return null;
 };
@@ -264,12 +301,22 @@ const getAI = () => {
 // API Router
 const apiRouter = express.Router();
 
+// Enforce strict security headers on all API endpoints
+apiRouter.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 apiRouter.get("/health", (req, res) => {
   try {
     const status = getAI();
     const emailStatus = getEmailConfig();
     res.json({ 
-      status: (status.hasGemini || status.hasGroq) ? "ok" : "missing",
+      status: (status.hasGemini || status.hasGroq || status.hasOpenRouter) ? "ok" : "missing",
       emailConfigured: emailStatus.configured,
       emailProvider: emailStatus.provider,
       ...status
@@ -952,76 +999,179 @@ apiRouter.post("/email/announcement", requireAdmin, async (req: AuthenticatedReq
   }
 });
 
+// Helper to extract compact JSON schema instructions for fallback providers (Groq / OpenRouter)
+function summarizeSchemaForPrompt(schema: any, depth = 0): string {
+  if (!schema || typeof schema !== "object" || depth > 4) return "any";
+  const t = String(schema.type || "").toUpperCase();
+  if (t === "ARRAY") {
+    return `[${summarizeSchemaForPrompt(schema.items, depth + 1)}]`;
+  }
+  if (t === "OBJECT" && schema.properties && typeof schema.properties === "object") {
+    const entries = Object.entries(schema.properties).map(([k, v]: [string, any]) => {
+      const valDesc = summarizeSchemaForPrompt(v, depth + 1);
+      return `"${k}": ${valDesc}`;
+    });
+    return `{ ${entries.join(", ")} }`;
+  }
+  if (t === "STRING") return schema.description ? `"string (${String(schema.description).slice(0, 60)})"` : `"string"`;
+  if (t === "NUMBER" || t === "INTEGER") return "number";
+  if (t === "BOOLEAN") return "boolean";
+  return "string";
+}
+
+function extractPromptText(contents: any): string {
+  if (typeof contents === "string") return contents;
+  if (Array.isArray(contents)) {
+    return contents
+      .map((c: any) => {
+        if (typeof c === "string") return c;
+        if (c?.text) return String(c.text);
+        if (Array.isArray(c?.parts)) return c.parts.map((p: any) => p?.text || "").join("\n");
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  if (contents?.parts && Array.isArray(contents.parts)) {
+    return contents.parts.map((p: any) => p?.text || "").join("\n");
+  }
+  if (contents?.text) return String(contents.text);
+  return "";
+}
+
 // AI Diagnostic / Test Route
 apiRouter.get("/ai/test", async (req, res) => {
   try {
     const geminiKeys = getGeminiKeys();
-    if (geminiKeys.length > 0) {
-      const ai = new GoogleGenAI({ 
-        apiKey: geminiKeys[0],
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+    for (const key of geminiKeys) {
+      const ai = new GoogleGenAI({
+        apiKey: key,
+        httpOptions: { headers: { "User-Agent": "aistudio-build" } }
       });
-      const testModels = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
+      const testModels = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-4-hydrogen"];
       for (const tModel of testModels) {
         try {
           const response = await ai.models.generateContent({
             model: tModel,
-            contents: [{ role: 'user', parts: [{ text: "Say 'Gemini Connection Successful'" }] }]
+            contents: [{ role: "user", parts: [{ text: "Say 'Gemini Connection Successful'" }] }]
           });
           return res.json({ message: response.text, provider: "gemini", model: tModel });
-        } catch (mErr) {
+        } catch (mErr: any) {
+          const msg = String(mErr?.message || mErr || "");
+          console.warn(`[AI Test] Gemini ${tModel} failed:`, msg.slice(0, 200));
+          if (msg.includes("API_KEY_INVALID") || msg.toLowerCase().includes("api key not valid")) {
+            break;
+          }
           continue;
         }
       }
     }
-    
+
     const groqKey = getGroqKey();
     if (groqKey) {
       const groq = new Groq({ apiKey: groqKey });
-      const testModels = [
-        "openai/gpt-oss-120b",
-        "openai/gpt-oss-20b",
-        "qwen/qwen3.8-27b"
-      ];
-      
-      let lastTestErr: any = null;
+      const testModels = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
       for (const tModel of testModels) {
         try {
           const completion = await groq.chat.completions.create({
             messages: [{ role: "user", content: "Say 'Groq Connection Successful'" }],
-            model: tModel,
+            model: tModel
           });
           return res.json({ message: completion.choices[0]?.message?.content, provider: "groq", model: tModel });
-        } catch (err) {
-          lastTestErr = err;
+        } catch (err: any) {
+          console.warn(`[AI Test] Groq ${tModel} failed:`, err?.message);
           continue;
         }
       }
-      if (lastTestErr) throw lastTestErr;
     }
 
-    res.status(500).json({ error: "No AI API keys configured" });
+    const openRouterKeys = getOpenRouterKeys();
+    for (const orKey of openRouterKeys) {
+      for (const orModel of ["meta-llama/llama-3.3-70b-instruct:free", "openrouter/free"]) {
+        try {
+          const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${orKey}`,
+              "Content-Type": "application/json",
+              "HTTP-Referer": "https://smartpeindia.app",
+              "X-Title": "SmartPE India"
+            },
+            body: JSON.stringify({
+              model: orModel,
+              messages: [{ role: "user", content: "Say 'OpenRouter Connection Successful'" }]
+            })
+          });
+          if (orRes.ok) {
+            const orData: any = await orRes.json();
+            const txt = orData?.choices?.[0]?.message?.content;
+            if (txt) return res.json({ message: txt, provider: "openrouter", model: orModel });
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    res.status(503).json({ error: "No working AI provider keys succeeded on the server." });
   } catch (error: any) {
     console.error("AI test error:", error);
     res.status(500).json({ error: error.message || "AI test diagnostics failed" });
   }
 });
 
-// AI Generation Endpoint (Protected by User Rate Limiting & Optional Firebase Auth)
+// AI Generation Endpoint (Protected by Per-User/IP Rate Limiting, Input Validation & Multi-Provider Fallback)
 apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const userKey = req.user?.uid || req.ip || "anon";
-    // Limit to 60 generations per minute per user/IP
-    const rl = checkRateLimit(`ai_generate_${userKey}`, 60, 60 * 1000);
+    const clientIp = getClientIp(req);
+    const isAuthenticatedUser = Boolean(req.user?.uid);
+    const userKey = isAuthenticatedUser ? `u:${req.user!.uid}` : `ip:${clientIp}`;
+    const maxPerMinute = isAuthenticatedUser ? 45 : 25;
+
+    const rl = checkRateLimit(`ai_generate_${userKey}`, maxPerMinute, 60 * 1000);
     if (!rl.allowed) {
-      return res.status(429).json({ 
+      res.setHeader("Retry-After", String(rl.retryAfter || 60));
+      return res.status(429).json({
         error: "Rate limit exceeded. Please wait a moment before sending another AI request.",
         retryAfter: rl.retryAfter
       });
     }
 
+    if (!req.body || typeof req.body !== "object") {
+      return res.status(400).json({ error: "Invalid JSON request body." });
+    }
+
     const { model, contents, config } = req.body;
-    
+
+    // Input length & shape validation before dispatching upstream
+    if (model !== undefined && (typeof model !== "string" || model.length > 120)) {
+      return res.status(400).json({ error: "Invalid AI model identifier." });
+    }
+    const extractedPrompt = extractPromptText(contents).trim();
+    if (!contents || (!extractedPrompt && !Array.isArray(contents))) {
+      return res.status(400).json({ error: "Prompt contents are required." });
+    }
+    let serializedContentsLength = 0;
+    try {
+      serializedContentsLength = typeof contents === "string" ? contents.length : JSON.stringify(contents).length;
+    } catch {
+      return res.status(400).json({ error: "Malformed AI prompt payload." });
+    }
+    if (serializedContentsLength === 0 || serializedContentsLength > 32000) {
+      return res.status(400).json({
+        error: serializedContentsLength === 0
+          ? "Prompt contents cannot be empty."
+          : "Prompt exceeds maximum allowed length (32,000 characters)."
+      });
+    }
+    if (config?.systemInstruction !== undefined) {
+      if (typeof config.systemInstruction !== "string" || config.systemInstruction.length > 8000) {
+        return res.status(400).json({
+          error: "System instruction must be a string under 8,000 characters."
+        });
+      }
+    }
+
     const resolveModel = (modelName: string): string => {
       const m = (modelName || "").toLowerCase();
       if (m.includes("3.1-pro") || m.includes("pro-preview") || m.includes("pro")) {
@@ -1030,6 +1180,9 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
       if (m.includes("3.8-flash") || m.includes("flash-large")) {
         return "gemini-3.8-flash";
       }
+      if (m.includes("4-hydrogen") || m.includes("hydrogen")) {
+        return "gemini-4-hydrogen";
+      }
       return "gemini-3.1-flash-lite";
     };
 
@@ -1037,9 +1190,9 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
     const geminiKeys = getGeminiKeys();
     const groqKey = getGroqKey();
     const openRouterKeys = getOpenRouterKeys();
-    
+
     if (geminiKeys.length === 0 && !groqKey && openRouterKeys.length === 0) {
-      return res.status(503).json({ 
+      return res.status(503).json({
         error: "AI service is temporarily unconfigured on this server.",
         message: "Please configure GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY in the Environment Variables."
       });
@@ -1047,93 +1200,133 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
 
     let lastError: any = null;
 
-    // 1. Try Gemini first (with key rotation and multi-model fallback)
+    // 1. Try Gemini first (with key rotation, referrer header recovery, and multi-model fallback)
     if (geminiKeys.length > 0) {
       const keysToTry = [...geminiKeys];
-      const modelsToTry = [
-        resolvedModel,
-        "gemini-3.1-flash-lite",
-        "gemini-3.8-flash",
-        "gemini-2.5-flash",
-        "gemini-4-hydrogen"
+      const uniqueModels = [
+        ...new Set([
+          resolvedModel,
+          "gemini-2.5-flash",
+          "gemini-3.1-flash-lite",
+          "gemini-4-hydrogen"
+        ])
       ];
-      const uniqueModels = [...new Set(modelsToTry)];
 
       for (const key of keysToTry) {
-        const ai = new GoogleGenAI({ 
-          apiKey: key,
-          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-        });
-        
+        let customHeaders: Record<string, string> = { "User-Agent": "aistudio-build" };
+
         for (const currentModel of uniqueModels) {
-          const perModelAbort = new AbortController();
-          const timeoutTimer = setTimeout(() => perModelAbort.abort(), 18000);
-          try {
-            const formattedContents = Array.isArray(contents) 
-              ? contents 
-              : (typeof contents === 'string' ? [{ role: 'user', parts: [{ text: contents }] }] : [contents]);
+          let stripThinking = false;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const perModelAbort = new AbortController();
+            const timeoutTimer = setTimeout(() => perModelAbort.abort(), 14000);
+            try {
+              const ai = new GoogleGenAI({
+                apiKey: key,
+                httpOptions: { headers: customHeaders }
+              });
 
-            const finalConfig = { ...config };
-            const isSupportedModel = currentModel.includes("gemini-3");
-            
-            if (isSupportedModel && !finalConfig.thinkingConfig) {
-              finalConfig.thinkingConfig = { thinkingLevel: 'LOW' };
-            } else if (!isSupportedModel && finalConfig.thinkingConfig) {
-              delete finalConfig.thinkingConfig;
-            }
+              const formattedContents = Array.isArray(contents)
+                ? contents
+                : (typeof contents === "string" ? [{ role: "user", parts: [{ text: contents }] }] : [contents]);
 
-            const response = await ai.models.generateContent({
-              model: currentModel,
-              contents: formattedContents,
-              config: {
-                ...finalConfig,
-                abortSignal: perModelAbort.signal
+              const finalConfig = { ...(config || {}) };
+              const isSupportedModel = currentModel.includes("gemini-3");
+
+              if (stripThinking || !isSupportedModel) {
+                delete finalConfig.thinkingConfig;
+              } else if (isSupportedModel && !finalConfig.thinkingConfig) {
+                finalConfig.thinkingConfig = { thinkingLevel: "LOW" };
               }
-            });
-            
-            clearTimeout(timeoutTimer);
-            return res.json({ 
-              text: response.text, 
-              provider: "gemini",
-              model: currentModel 
-            });
-          } catch (modelErr: any) {
-            clearTimeout(timeoutTimer);
-            const msg = String(modelErr?.message || modelErr || '');
-            console.warn(`Model ${currentModel} failed:`, msg);
-            lastError = modelErr;
-            // Non-retryable bad request (400 INVALID_ARGUMENT) — stop trying other models with identical payload
-            if (msg.includes('INVALID_ARGUMENT') || msg.includes('400 Bad Request')) {
-              return res.status(400).json({ error: msg || 'Invalid AI request payload' });
-            }
-            // Key invalid for this key — skip remaining models for this key and try next key
-            if (msg.includes('API_KEY_INVALID') || msg.toLowerCase().includes('api key not valid')) {
+
+              const response = await ai.models.generateContent({
+                model: currentModel,
+                contents: formattedContents,
+                config: {
+                  ...finalConfig,
+                  abortSignal: perModelAbort.signal
+                }
+              });
+
+              clearTimeout(timeoutTimer);
+              return res.json({
+                text: response.text,
+                provider: "gemini",
+                model: currentModel
+              });
+            } catch (modelErr: any) {
+              clearTimeout(timeoutTimer);
+              const msg = String(modelErr?.message || modelErr || "");
+              const lowerMsg = msg.toLowerCase();
+              console.warn(`[AI Core] Gemini model=${currentModel} attempt=${attempt + 1} failed:`, msg.slice(0, 260));
+              lastError = modelErr;
+
+              // Check key/credential/referrer failures FIRST (Note: Gemini returns status=INVALID_ARGUMENT with API_KEY_INVALID!)
+              const isReferrerBlocked =
+                msg.includes("API_KEY_HTTP_REFERRER_BLOCKED") ||
+                lowerMsg.includes("referer") ||
+                lowerMsg.includes("referrer");
+              if (isReferrerBlocked && !customHeaders["Referer"]) {
+                const originHeader =
+                  (typeof req.headers.origin === "string" && req.headers.origin) ||
+                  (typeof req.headers.referer === "string" && req.headers.referer) ||
+                  "https://smartpeindia.app/";
+                customHeaders = { ...customHeaders, Referer: originHeader };
+                continue;
+              }
+
+              const isBadKey =
+                msg.includes("API_KEY_INVALID") ||
+                lowerMsg.includes("api key not valid") ||
+                msg.includes("API_KEY_SERVICE_BLOCKED") ||
+                msg.includes("CONSUMER_SUSPENDED") ||
+                lowerMsg.includes("permission_denied") ||
+                lowerMsg.includes("api key expired");
+              if (isBadKey) {
+                // Skip remaining models for this broken key and immediately move to next key or fallback provider
+                stripThinking = false;
+                break;
+              }
+
+              // If model rejected thinkingConfig, retry once without thinkingConfig
+              if (!stripThinking && lowerMsg.includes("thinking")) {
+                stripThinking = true;
+                continue;
+              }
+
+              // Otherwise break retry loop for this model and move to next model
               break;
             }
-            continue;
+          }
+
+          // If key itself was flagged bad on previous model, stop trying other models with same bad key
+          const lastMsg = String(lastError?.message || "").toLowerCase();
+          if (
+            lastMsg.includes("api_key_invalid") ||
+            lastMsg.includes("api key not valid") ||
+            lastMsg.includes("api_key_service_blocked") ||
+            lastMsg.includes("consumer_suspended") ||
+            lastMsg.includes("api key expired")
+          ) {
+            break;
           }
         }
       }
     }
 
+    const promptText = extractedPrompt || JSON.stringify(contents);
+    const isJson = config?.responseMimeType === "application/json";
+    const schemaSummary = isJson && config?.responseSchema ? summarizeSchemaForPrompt(config.responseSchema) : "";
+    const jsonSchemaHint = isJson
+      ? ` You must respond with strictly valid raw JSON only (no markdown code fences or commentary).${schemaSummary ? ` Required JSON structure: ${schemaSummary}` : ""}`
+      : "";
+    const systemPrompt = (config?.systemInstruction || "You are an expert AI physical education assistant.") + jsonSchemaHint;
+
     // 2. Fallback to Groq if Gemini was exhausted
     if (groqKey) {
       try {
-        console.log("Attempting fallback with Groq...");
+        console.log("[AI Core] Falling back to Groq...");
         const groq = new Groq({ apiKey: groqKey });
-        
-        let promptText = "";
-        if (typeof contents === 'string') {
-          promptText = contents;
-        } else if (Array.isArray(contents)) {
-          promptText = contents.map((c: any) => {
-            if (typeof c === 'string') return c;
-            if (c.parts) return c.parts.map((p: any) => p.text || '').join('\n');
-            return '';
-          }).join('\n\n');
-        } else if (contents?.parts) {
-          promptText = contents.parts.map((p: any) => p.text || '').join('\n');
-        }
 
         const groqModels = [
           "llama-3.3-70b-versatile",
@@ -1142,117 +1335,129 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
           "llama-3.1-8b-instant"
         ];
 
-        const isJson = config?.responseMimeType === "application/json";
-        const systemPrompt = (config?.systemInstruction || "You are an expert AI physical education assistant.") + 
-          (isJson ? " You must respond with valid JSON." : "");
-
         for (const gModel of groqModels) {
-          try {
-            const completion = await groq.chat.completions.create({
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: promptText }
-              ],
-              model: gModel,
-              response_format: isJson ? { type: "json_object" } : undefined
-            });
+          for (const useResponseFormat of (isJson ? [true, false] : [false])) {
+            try {
+              const completion = await groq.chat.completions.create({
+                messages: [
+                  { role: "system", content: systemPrompt },
+                  { role: "user", content: promptText }
+                ],
+                model: gModel,
+                ...(useResponseFormat ? { response_format: { type: "json_object" as const } } : {})
+              });
 
-            return res.json({ 
-              text: completion.choices[0]?.message?.content, 
-              provider: "groq",
-              model: gModel 
-            });
-          } catch (gErr: any) {
-            console.warn(`Groq model ${gModel} failed:`, gErr?.message);
-            lastError = gErr;
-            continue;
+              const outText = completion.choices[0]?.message?.content;
+              if (outText) {
+                return res.json({
+                  text: outText,
+                  provider: "groq",
+                  model: gModel
+                });
+              }
+            } catch (gErr: any) {
+              const gMsg = String(gErr?.message || gErr || "");
+              console.warn(`[AI Core] Groq model=${gModel} jsonMode=${useResponseFormat} failed:`, gMsg.slice(0, 200));
+              lastError = gErr;
+              if (gErr?.status === 401 || gMsg.toLowerCase().includes("invalid api key")) {
+                break;
+              }
+              if (useResponseFormat && gMsg.includes("400")) {
+                continue; // Retry without response_format
+              }
+              break;
+            }
+          }
+          if (lastError?.status === 401 || String(lastError?.message || "").toLowerCase().includes("invalid api key")) {
+            break;
           }
         }
       } catch (groqErr) {
         lastError = groqErr;
-        console.error("Groq fallback completely failed:", groqErr);
+        console.error("[AI Core] Groq fallback completely failed:", groqErr);
       }
     }
 
     // 3. Fallback to OpenRouter if Gemini & Groq were exhausted
     if (openRouterKeys.length > 0) {
-      let promptText = "";
-      if (typeof contents === 'string') {
-        promptText = contents;
-      } else if (Array.isArray(contents)) {
-        promptText = contents.map((c: any) => {
-          if (typeof c === 'string') return c;
-          if (c.parts) return c.parts.map((p: any) => p.text || '').join('\n');
-          return '';
-        }).join('\n\n');
-      } else if (contents?.parts) {
-        promptText = contents.parts.map((p: any) => p.text || '').join('\n');
-      }
-
-      const isJson = config?.responseMimeType === "application/json";
-      const systemPrompt = (config?.systemInstruction || "You are an expert AI physical education assistant.") + 
-        (isJson ? " You must respond with valid JSON only, without markdown fences." : "");
       const openRouterModels = [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-3-27b-it:free",
+        "mistralai/mistral-small-3.1-24b-instruct:free",
+        "qwen/qwen-2.5-72b-instruct:free",
+        "openrouter/free",
         "google/gemini-2.5-flash",
-        "openai/gpt-4o-mini",
-        "meta-llama/llama-3.3-70b-instruct:free"
+        "openai/gpt-4o-mini"
       ];
 
       for (const orKey of openRouterKeys) {
         for (const orModel of openRouterModels) {
-          const orAbort = new AbortController();
-          const orTimer = setTimeout(() => orAbort.abort(), 18000);
-          try {
-            const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${orKey}`,
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://smartpeindia.app",
-                "X-Title": "SmartPE India"
-              },
-              body: JSON.stringify({
-                model: orModel,
-                messages: [
-                  { role: "system", content: systemPrompt },
-                  { role: "user", content: promptText }
-                ],
-                ...(isJson ? { response_format: { type: "json_object" } } : {})
-              }),
-              signal: orAbort.signal
-            });
-            clearTimeout(orTimer);
-
-            if (!orRes.ok) {
-              const errText = await orRes.text().catch(() => "");
-              lastError = new Error(`OpenRouter ${orRes.status}: ${errText.slice(0, 150)}`);
-              if (orRes.status === 401 || orRes.status === 403) break;
-              continue;
-            }
-
-            const orData: any = await orRes.json();
-            const textOut = orData?.choices?.[0]?.message?.content;
-            if (textOut) {
-              return res.json({
-                text: textOut,
-                provider: "openrouter",
-                model: orModel
+          let keyInvalid = false;
+          for (const useResponseFormat of (isJson ? [true, false] : [false])) {
+            const orAbort = new AbortController();
+            const orTimer = setTimeout(() => orAbort.abort(), 16000);
+            try {
+              const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${orKey}`,
+                  "Content-Type": "application/json",
+                  "HTTP-Referer": "https://smartpeindia.app",
+                  "X-Title": "SmartPE India"
+                },
+                body: JSON.stringify({
+                  model: orModel,
+                  messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: promptText }
+                  ],
+                  ...(useResponseFormat ? { response_format: { type: "json_object" } } : {})
+                }),
+                signal: orAbort.signal
               });
+              clearTimeout(orTimer);
+
+              if (!orRes.ok) {
+                const errText = await orRes.text().catch(() => "");
+                console.warn(`[AI Core] OpenRouter model=${orModel} status=${orRes.status}:`, errText.slice(0, 180));
+                lastError = new Error(`OpenRouter ${orRes.status}: ${errText.slice(0, 150)}`);
+                if (orRes.status === 401 || orRes.status === 403) {
+                  keyInvalid = true;
+                  break;
+                }
+                if (useResponseFormat && orRes.status === 400) {
+                  continue; // Retry without response_format
+                }
+                break;
+              }
+
+              const orData: any = await orRes.json();
+              const textOut = orData?.choices?.[0]?.message?.content;
+              if (textOut) {
+                return res.json({
+                  text: textOut,
+                  provider: "openrouter",
+                  model: orModel
+                });
+              }
+            } catch (orErr: any) {
+              clearTimeout(orTimer);
+              lastError = orErr;
+              console.warn(`[AI Core] OpenRouter model=${orModel} error:`, orErr?.message);
+              break;
             }
-          } catch (orErr: any) {
-            clearTimeout(orTimer);
-            lastError = orErr;
-            console.warn(`OpenRouter model ${orModel} failed:`, orErr?.message);
-            continue;
           }
+          if (keyInvalid) break;
         }
       }
     }
 
+    console.error("[AI Core] All providers exhausted for /api/ai/generate:", lastError?.message || lastError);
+
     // Sanitize error outputs for production safety
-    let statusCode = 500;
-    let errorMessage = "AI generation could not be completed at this time.";
-    const errorStr = (lastError?.message || "").toLowerCase();
+    let statusCode = 503;
+    let errorMessage = "The AI service is temporarily unavailable on the server. Please try again shortly.";
+    const errorStr = String(lastError?.message || "").toLowerCase();
 
     if (errorStr.includes("quota") || errorStr.includes("429") || errorStr.includes("resource_exhausted")) {
       statusCode = 429;
@@ -1268,15 +1473,9 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
     ) {
       statusCode = 503;
       errorMessage = "Upstream AI service credentials are temporarily unavailable. Please try again shortly.";
-    } else if (lastError?.message) {
-      if (lastError.message.includes("does not exist") || lastError.message.includes("model_not_found")) {
-        errorMessage = "AI model is currently updating. Please try again in a moment.";
-      } else {
-        errorMessage = lastError.message;
-      }
     }
 
-    res.status(statusCode).json({ 
+    res.status(statusCode).json({
       error: errorMessage,
       message: errorMessage
     });
@@ -1286,27 +1485,34 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
   }
 });
 
-// Dedicated Audio Transcription Endpoint (Protected by User Rate Limiting & Optional Auth)
+// Dedicated Audio Transcription Endpoint (Protected by User/IP Rate Limiting & Optional Auth)
 apiRouter.post("/ai/transcribe", express.json({ limit: "15mb" }), optionalAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const userKey = req.user?.uid || req.ip || "anon";
-    // Limit to 20 voice transcriptions per minute per user/IP
-    const rl = checkRateLimit(`ai_transcribe_${userKey}`, 20, 60 * 1000);
+    const clientIp = getClientIp(req);
+    const isAuthenticatedUser = Boolean(req.user?.uid);
+    const userKey = isAuthenticatedUser ? `u:${req.user!.uid}` : `ip:${clientIp}`;
+    const maxPerMinute = isAuthenticatedUser ? 20 : 10;
+
+    const rl = checkRateLimit(`ai_transcribe_${userKey}`, maxPerMinute, 60 * 1000);
     if (!rl.allowed) {
-      return res.status(429).json({ 
+      res.setHeader("Retry-After", String(rl.retryAfter || 60));
+      return res.status(429).json({
         error: "Too many voice requests. Please wait a moment before recording again.",
         retryAfter: rl.retryAfter
       });
     }
 
-    const { 
-      audioBase64, 
-      mimeType = "audio/webm", 
-      prompt = "Transcribe this audio recording verbatim and accurately. Keep sports terminology, referee rules, physical education vocabulary, player names, and tactical terms exact." 
+    const {
+      audioBase64,
+      mimeType = "audio/webm",
+      prompt = "Transcribe this audio recording verbatim and accurately. Keep sports terminology, referee rules, physical education vocabulary, player names, and tactical terms exact."
     } = req.body;
 
     if (!audioBase64 || typeof audioBase64 !== "string") {
       return res.status(400).json({ error: "Missing audioBase64 data in request body." });
+    }
+    if (typeof prompt !== "string" || prompt.length > 4000) {
+      return res.status(400).json({ error: "Transcription prompt exceeds maximum length." });
     }
 
     // Protect against massive memory bloat (>10MB base64 string)

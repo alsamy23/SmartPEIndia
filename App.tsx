@@ -173,6 +173,11 @@ const PROTECTED_ROUTE_COPY: Record<string, { title: string; subtitle: string; ba
     title: 'Sign In Required for System Logs',
     subtitle: 'Sign in with your educator account to inspect real-time diagnostic logs and sync audit records.',
   },
+  'principal-dashboard': {
+    badge: 'Principal Dashboard',
+    title: 'Sign In Required for Principal Dashboard',
+    subtitle: 'Sign in with your school educator or administrator account to inspect school fitness coverage, practical scores, and compliance dashboards.',
+  },
   'super-admin-dashboard': {
     badge: 'Super Admin Hub',
     title: 'Sign In Required for Super Admin Hub',
@@ -303,7 +308,7 @@ const navigation = [
   { 
     section: 'Record',
     items: [
-      { id: 'principal-dashboard', name: 'Principal Dashboard', icon: ShieldCheck, subtitle: 'Deliver inspection-ready reports to decision makers.' },
+      { id: 'principal-dashboard', name: 'Principal Dashboard', icon: ShieldCheck, protected: true, subtitle: 'Deliver inspection-ready reports to decision makers.' },
       { id: 'school-students', name: 'Student Directory', icon: Users, protected: true },
       { id: 'school-overview', name: 'School Fitness Database', icon: Zap, subtitle: 'Store and track every student\'s scores.' },
       { id: 'school-results', name: 'Live Results', icon: Activity, protected: true },
