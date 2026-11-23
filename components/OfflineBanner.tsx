@@ -9,7 +9,7 @@ interface OfflineBannerProps {
 }
 
 export const OfflineBanner: React.FC<OfflineBannerProps> = ({ onSyncComplete }) => {
-  const [isOffline, setIsOffline] = useState<boolean>(!navigator.onLine);
+  const [isOffline, setIsOffline] = useState<boolean>(false);
   const [justCameOnline, setJustCameOnline] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [status, setStatus] = useState(offlineCacheService.getOfflineStatus());
@@ -17,6 +17,21 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ onSyncComplete }) 
 
   const refreshStatus = () => {
     setStatus(offlineCacheService.getOfflineStatus());
+  };
+
+  const checkServerConnectivity = async (): Promise<boolean> => {
+    try {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(`/api/health?t=${Date.now()}`, {
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      window.clearTimeout(timer);
+      return res.ok;
+    } catch {
+      return false;
+    }
   };
 
   const handleSyncPending = async () => {
@@ -48,7 +63,20 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ onSyncComplete }) 
   };
 
   useEffect(() => {
+    let mounted = true;
+
+    // Verify if browser actually lacks connectivity when navigator.onLine is false
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      checkServerConnectivity().then((reachable) => {
+        if (mounted && !reachable) {
+          setIsOffline(true);
+          refreshStatus();
+        }
+      });
+    }
+
     const handleOnline = async () => {
+      if (!mounted) return;
       setIsOffline(false);
       setJustCameOnline(true);
       setIsDismissed(false);
@@ -61,11 +89,13 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ onSyncComplete }) 
       }
 
       setTimeout(() => {
-        setJustCameOnline(false);
+        if (mounted) setJustCameOnline(false);
       }, 5000);
     };
 
-    const handleOffline = () => {
+    const handleOffline = async () => {
+      const reachable = await checkServerConnectivity();
+      if (!mounted || reachable) return;
       setIsOffline(true);
       setJustCameOnline(false);
       setIsDismissed(false);
@@ -79,6 +109,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ onSyncComplete }) 
     const interval = setInterval(refreshStatus, 10000);
 
     return () => {
+      mounted = false;
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       clearInterval(interval);
@@ -89,7 +120,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ onSyncComplete }) 
 
   if (isOffline) {
     return (
-      <div id="offline-status-banner" className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white px-4 py-2.5 text-xs font-bold shadow-md border-b border-amber-500/30 flex items-center justify-between flex-wrap gap-2 transition-all">
+      <div id="offline-status-banner" className="w-full bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white px-4 py-2 text-xs font-bold shadow-sm border-b border-amber-500/30 flex items-center justify-between flex-wrap gap-2 transition-all">
         <div className="flex items-center gap-2">
           <span className="flex h-2.5 w-2.5 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-200 opacity-75"></span>

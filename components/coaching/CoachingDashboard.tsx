@@ -643,7 +643,7 @@ export const CoachingDashboard: React.FC<CoachingDashboardProps> = ({
       </div>
 
       {/* Two Column Layout: Recent Evaluations & Upcoming Reassessments */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* Left 2 Cols: Recent Evaluations */}
         <div className="lg:col-span-2 bg-white border-2 border-slate-900 rounded-3xl p-6 shadow-sm space-y-4">

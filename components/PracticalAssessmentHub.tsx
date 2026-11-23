@@ -131,26 +131,34 @@ export const PracticalAssessmentHub: React.FC = () => {
   useEffect(() => {
     let unsubStudents: (() => void) | undefined;
     let unsubPractical: (() => void) | undefined;
-    const currentTeacherId = auth.currentUser?.uid || 'guest_teacher';
+    const authenticatedUid = auth.currentUser?.uid || null;
+    const currentTeacherId = authenticatedUid || 'guest_teacher';
 
     const loadDataAndSubscribe = async () => {
       setLoading(true);
       try {
-        const schoolMember = await fitnessService.getSchoolMember(currentTeacherId);
-        setUserProfile(schoolMember);
-        const schoolId = schoolMember?.schoolId;
-        const isAdmin = schoolMember?.role === 'admin' || fitnessService.isSuperAdmin();
+        let schoolId: string | undefined;
+        let isAdmin = false;
 
-        if (schoolId) {
-          const s = await fitnessService.getSchool(schoolId);
-          setSchool(s);
-          if (s?.code) setCenterCode(s.code);
-        }
-        if (schoolMember?.displayName) {
-          setInternalExaminer(schoolMember.displayName);
+        if (authenticatedUid) {
+          const schoolMember = await fitnessService.getSchoolMember(authenticatedUid);
+          setUserProfile(schoolMember);
+          schoolId = schoolMember?.schoolId;
+          isAdmin = schoolMember?.role === 'admin' || fitnessService.isSuperAdmin();
+
+          if (schoolId) {
+            const s = await fitnessService.getSchool(schoolId);
+            setSchool(s);
+            if (s?.code) setCenterCode(s.code);
+          }
+          if (schoolMember?.displayName) {
+            setInternalExaminer(schoolMember.displayName);
+          }
+        } else {
+          setUserProfile(null);
         }
 
-        // Subscriptions using verified schoolId
+        // Subscriptions safely fall back to local cache when unauthenticated
         unsubStudents = fitnessService.subscribeToStudents(currentTeacherId, schoolId, isAdmin, (list) => {
           setStudents(list);
           setLoading(false);
@@ -181,9 +189,10 @@ export const PracticalAssessmentHub: React.FC = () => {
   const handleSeedGrade12 = async () => {
     setSeedingGrade12(true);
     try {
-      const currentTeacherId = auth.currentUser?.uid || 'guest_teacher';
-      const schoolMember = await fitnessService.getSchoolMember(currentTeacherId);
-      const schoolId = schoolMember?.schoolId || (auth.currentUser ? `personal_${auth.currentUser.uid}` : 'master_registry');
+      const authenticatedUid = auth.currentUser?.uid || null;
+      const currentTeacherId = authenticatedUid || 'guest_teacher';
+      const schoolMember = authenticatedUid ? await fitnessService.getSchoolMember(authenticatedUid) : null;
+      const schoolId = schoolMember?.schoolId || (authenticatedUid ? `personal_${authenticatedUid}` : 'master_registry');
 
       const sampleGrade12: Student[] = [
         { id: `std_1201_${Date.now()}`, rollNumber: '1201', name: 'Aarav Sharma', grade: '12', section: 'A', gender: 'Male', age: 17, schoolId, teacherId: currentTeacherId, attendance: 95, performance: 'Excellent' },
@@ -199,8 +208,9 @@ export const PracticalAssessmentHub: React.FC = () => {
       ];
 
       await fitnessService.bulkSaveStudents(sampleGrade12);
+      setStudents(prev => [...sampleGrade12, ...prev.filter(p => !sampleGrade12.some(s => s.rollNumber === p.rollNumber && s.grade === p.grade))]);
       setSelectedGrade('12');
-      toast.success('Successfully linked and created 10 CBSE Grade 12 students in the database!');
+      toast.success(authenticatedUid ? 'Successfully linked and created 10 CBSE Grade 12 students in the database!' : 'Loaded 10 sample CBSE Grade 12 students locally for preview!');
     } catch (e) {
       console.error(e);
       toast.error('Failed to seed Grade 12 students');
@@ -264,8 +274,8 @@ export const PracticalAssessmentHub: React.FC = () => {
 
     let updated = { ...existing, [field]: value };
 
-    // Clamping limits
-    if (field === 'fitnessTestScore') updated.fitnessTestScore = Math.min(7, Math.max(0, Number(value) || 0));
+    // Clamping limits (6 + 7 + 7 + 5 + 5 = 30)
+    if (field === 'fitnessTestScore') updated.fitnessTestScore = Math.min(6, Math.max(0, Number(value) || 0));
     if (field === 'yogicPracticesScore') updated.yogicPracticesScore = Math.min(7, Math.max(0, Number(value) || 0));
     if (field === 'gameProficiencyScore') updated.gameProficiencyScore = Math.min(7, Math.max(0, Number(value) || 0));
     if (field === 'recordFileScore') updated.recordFileScore = Math.min(5, Math.max(0, Number(value) || 0));
@@ -294,11 +304,11 @@ export const PracticalAssessmentHub: React.FC = () => {
   const applyPresetForStudent = (student: Student, preset: 'excellent' | 'good' | 'average') => {
     let fit = 6, yoga = 6, game = 6, rec = 5, viva = 5;
     if (preset === 'excellent') {
-      fit = 7; yoga = 7; game = 7; rec = 5; viva = 5; // 30/30
+      fit = 6; yoga = 7; game = 7; rec = 5; viva = 5; // 30/30
     } else if (preset === 'good') {
-      fit = 6; yoga = 6; game = 6; rec = 4; viva = 4; // 26/30
+      fit = 5; yoga = 6; game = 6; rec = 4; viva = 4; // 25/30
     } else if (preset === 'average') {
-      fit = 5; yoga = 5; game = 5; rec = 4; viva = 3; // 22/30
+      fit = 4; yoga = 5; game = 5; rec = 4; viva = 3; // 21/30
     }
 
     const currentTeacherId = auth.currentUser?.uid || 'teacher';
@@ -423,7 +433,7 @@ export const PracticalAssessmentHub: React.FC = () => {
       'Gender',
       'Class',
       'Section',
-      'Physical Fitness (Max 7)',
+      'Physical Fitness (Max 6)',
       'Yogic Practices (Max 7)',
       'Game Proficiency (Max 7)',
       'Record File (Max 5)',
@@ -516,7 +526,7 @@ export const PracticalAssessmentHub: React.FC = () => {
               CBSE Physical Education Practical Exam (30 Marks)
             </h1>
             <p className="text-sm text-indigo-100/80 max-w-2xl font-medium">
-              Grade 11 & 12 standardized practical scoring portal: 5 Criteria (Fitness 7M + Yoga 7M + Game 7M + Record 5M + Viva 5M) with official award sheet generation.
+              Grade 11 & 12 standardized practical scoring portal: 5 Criteria (Fitness 6M + Yoga 7M + Game 7M + Record 5M + Viva 5M) with official award sheet generation.
             </p>
           </div>
 
@@ -546,7 +556,7 @@ export const PracticalAssessmentHub: React.FC = () => {
           <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
             <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest block">Criterion 1</span>
             <p className="text-xs font-black text-white">Physical Fitness (SAI/KIFT)</p>
-            <span className="text-[11px] font-bold text-indigo-200">Max 7 Marks</span>
+            <span className="text-[11px] font-bold text-indigo-200">Max 6 Marks</span>
           </div>
 
           <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
@@ -792,7 +802,7 @@ export const PracticalAssessmentHub: React.FC = () => {
                   <th className="p-3.5 w-16 text-center">Sex</th>
                   <th className="p-3.5 text-center bg-indigo-950/60 w-28">
                     Fitness
-                    <span className="block text-[9px] text-[#D4A017] font-bold">Max 7</span>
+                    <span className="block text-[9px] text-[#D4A017] font-bold">Max 6</span>
                   </th>
                   <th className="p-3.5 text-center bg-indigo-950/40 w-28">
                     Yoga
@@ -858,15 +868,15 @@ export const PracticalAssessmentHub: React.FC = () => {
                         {student.gender === 'Female' ? 'F' : 'M'}
                       </td>
 
-                      {/* Fitness Score (Max 7) */}
+                      {/* Fitness Score (Max 6) */}
                       <td className="p-2 text-center bg-indigo-50/20">
                         <input
                           type="number"
                           min="0"
-                          max="7"
+                          max="6"
                           disabled={isAbsent}
                           value={isAbsent ? '' : (assessment.fitnessTestScore || '')}
-                          placeholder="0-7"
+                          placeholder="0-6"
                           onChange={e => updateScoreField(student, 'fitnessTestScore', e.target.value)}
                           className="w-16 p-1.5 text-center font-black text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100"
                         />
@@ -1036,11 +1046,11 @@ export const PracticalAssessmentHub: React.FC = () => {
 
                   {/* 5 Criteria Steppers */}
                   <div className="space-y-2.5 pt-3">
-                    {/* Fitness (Max 7) */}
+                    {/* Fitness (Max 6) */}
                     <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
                       <div>
                         <span className="text-xs font-black text-slate-800">1. Physical Fitness</span>
-                        <span className="text-[10px] text-slate-400 block font-bold">SAI KIFT Battery (Max 7)</span>
+                        <span className="text-[10px] text-slate-400 block font-bold">SAI KIFT Battery (Max 6)</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <button
@@ -1053,7 +1063,7 @@ export const PracticalAssessmentHub: React.FC = () => {
                         <span className="w-8 text-center font-black text-sm text-indigo-900">{assessment.fitnessTestScore || 0}</span>
                         <button
                           type="button"
-                          onClick={() => updateScoreField(student, 'fitnessTestScore', Math.min(7, (assessment.fitnessTestScore || 0) + 1))}
+                          onClick={() => updateScoreField(student, 'fitnessTestScore', Math.min(6, (assessment.fitnessTestScore || 0) + 1))}
                           className="w-7 h-7 bg-white hover:bg-slate-200 text-slate-700 rounded-lg flex items-center justify-center font-bold border border-slate-300 cursor-pointer"
                         >
                           <Plus size={12} />

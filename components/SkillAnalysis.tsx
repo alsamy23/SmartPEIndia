@@ -496,16 +496,16 @@ const SkillAnalysis: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 xl:gap-8">
         {/* Controls */}
-        <div className="lg:col-span-3 space-y-6">
-          <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden">
+        <div className="lg:col-span-4 space-y-6 min-w-0">
+          <div className="bg-slate-900 rounded-[2.5rem] p-5 xl:p-6 text-white relative overflow-hidden">
             <div className="relative z-10 space-y-6">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-white/10 rounded-2xl">
+                <div className="p-3 bg-white/10 rounded-2xl shrink-0">
                   <Video size={24} className="text-primary" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="font-black uppercase tracking-tight">Active Station</h3>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Station ID: PE-REPLAY</p>
                 </div>
@@ -515,17 +515,17 @@ const SkillAnalysis: React.FC = () => {
                 <button 
                   onClick={startCamera}
                   disabled={isCameraLoading}
-                  className="w-full py-5 bg-primary text-white border-2 border-slate-900 rounded-[2rem] font-black text-xs uppercase tracking-widest hover:bg-primary-container transition-all shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] flex items-center justify-center gap-3 disabled:opacity-50"
+                  className="w-full py-4 px-4 bg-primary text-white border-2 border-slate-900 rounded-2xl font-black text-xs uppercase tracking-wider hover:bg-primary-container transition-all shadow-[4px_4px_0px_0px_rgba(255,255,255,0.12)] flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  {isCameraLoading ? <Loader2 className="animate-spin" size={20} /> : <Play size={20} />}
+                  {isCameraLoading ? <Loader2 className="animate-spin shrink-0" size={18} /> : <Play size={18} className="shrink-0" />}
                   <span>{isCameraLoading ? 'Initializing...' : 'Start Lab'}</span>
                 </button>
               ) : (
                 <button 
                   onClick={stopCamera}
-                  className="w-full py-5 bg-rose-600 text-white border-2 border-slate-900 rounded-[2rem] font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] flex items-center justify-center gap-3"
+                  className="w-full py-4 px-4 bg-rose-600 text-white border-2 border-slate-900 rounded-2xl font-black text-xs uppercase tracking-wider hover:bg-rose-700 transition-all shadow-[4px_4px_0px_0px_rgba(255,255,255,0.12)] flex items-center justify-center gap-2"
                 >
-                  <Square size={20} />
+                  <Square size={18} className="shrink-0" />
                   <span>Stop Lab</span>
                 </button>
               )}
@@ -590,7 +590,7 @@ const SkillAnalysis: React.FC = () => {
         </div>
 
         {/* Video Screens */}
-        <div className="lg:col-span-9 space-y-6">
+        <div className="lg:col-span-8 space-y-6 min-w-0">
           {error && (
             <div className="p-6 bg-rose-50 border-2 border-rose-200 rounded-[2rem] flex items-center gap-4 text-rose-700">
               <Info size={24} />

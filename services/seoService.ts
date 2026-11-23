@@ -95,13 +95,13 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
       title: 'Smart PE India | Department Workload & Timetable Planner',
       description: 'Manage PE teacher period allocations, OCR timetable scanning, and curriculum workloads across school departments.',
       keywords: 'PE Workload Planner, Teacher Timetable OCR, Sports Department Management',
-      canonicalPath: '/#workload-planner'
+      canonicalPath: '/workload-planner'
     },
     skillmastery: {
       title: 'Smart PE India | Skill Progressions & Rubrics Hub',
       description: 'Grade-level sports skill progressions, assessment rubrics, and fundamental movement skills tracking.',
       keywords: 'PE Skill Progressions, Assessment Rubrics, Fundamental Movement Skills',
-      canonicalPath: '/#skill-progressions'
+      canonicalPath: '/skill-progressions'
     },
     theory: {
       title: 'Smart PE India | Theory Master & CBSE Physical Education Study Hub',
@@ -109,11 +109,29 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
       keywords: 'CBSE Physical Education Theory, Class 11 PE, Class 12 PE, Sports Science Notes',
       canonicalPath: '/theory'
     },
+    'physical-development': {
+      title: 'Smart PE India | PE Fitness & Physical Development Profile',
+      description: 'Integrated fitness tests, BMI tracking, 100-mark term grading, and student physical development reports.',
+      keywords: 'Physical Development Profile, CBSE Term Grading, PE Fitness Tracker',
+      canonicalPath: '/physical-development'
+    },
     fitness: {
       title: 'Smart PE India | Khelo India Fitness Assessment & Score Calculator',
       description: 'Standardized Khelo India battery tests, BMI calculation, cardiorespiratory endurance, agility, and motor fitness assessment with instant ratings.',
       keywords: 'Khelo India Fitness Test, BMI Calculator, PE Fitness Assessment, Student Fitness Card, SAI Fitness',
       canonicalPath: '/fitness-tests'
+    },
+    'cbse-practical': {
+      title: 'Smart PE India | CBSE Physical Education Practical (30 Marks)',
+      description: 'Class 11 & 12 CBSE 30-mark practical exam scoring and official award sheet generation.',
+      keywords: 'CBSE PE Practical 30 Marks, Subject Code 048, CBSE Award Sheet',
+      canonicalPath: '/cbse-practical'
+    },
+    'coaching-academy': {
+      title: 'Smart PE India | Coaching & Sports Academy Studio',
+      description: 'Individual player development, sports library, progressive assessments, and parent reports for academies.',
+      keywords: 'Sports Coaching Academy App, Athlete Assessment, Player Development Report',
+      canonicalPath: '/coaching-academy'
     },
     khelo: {
       title: 'Smart PE India | Khelo India Battery Test Portal & Fitness Cards',
@@ -137,7 +155,7 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
       title: 'Smart PE India | AI Sports Skill & Technique Analysis Lab',
       description: 'Compare athlete mechanics, track biomechanics cues, and analyze technique breakdowns for athletics, cricket, basketball, and football.',
       keywords: 'AI Skill Analysis, Sports Technique Analyzer, Biomechanics PE Coach',
-      canonicalPath: '/#skill-analysis'
+      canonicalPath: '/skill-analysis'
     },
     rules: {
       title: 'Smart PE India | Sports Rules & Regulations AI Assistant',
@@ -149,67 +167,79 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
       title: 'Smart PE India | Principal & Sports Inspection Dashboard',
       description: 'Inspection-ready school sports reports, physical literacy metrics, department workloads, and student wellness analytics for leadership.',
       keywords: 'Principal Dashboard, School Sports Analytics, PE Inspection Report',
-      canonicalPath: '/#principal-dashboard'
+      canonicalPath: '/principal-dashboard'
     },
     'department-office': {
       title: 'Smart PE India | PE Department Office & Equipment Log',
       description: 'Manage physical education sports inventory, equipment checkouts, substitute teacher coverage, and house points ledgers.',
       keywords: 'PE Department Office, Sports Equipment Inventory, Substitute PE Plan, House System',
-      canonicalPath: '/#department-office'
+      canonicalPath: '/department-office'
     },
     parentletters: {
       title: 'Smart PE India | Sports Parent Letters & Permission Slips',
       description: 'Generate formal, bilingual parent communications for sports days, fitness assessments, and inter-school tournaments.',
       keywords: 'PE Parent Letters, Sports Day Permission Slip, School Fitness Circular',
-      canonicalPath: '/#parentletters'
+      canonicalPath: '/parent-letters'
     },
     widgets: {
       title: 'Smart PE India | PE Classroom Timers, Whistles & Field Widgets',
       description: 'Interactive sports countdown timers, interval training buzzers, digital scoreboards, and field widgets for PE educators.',
       keywords: 'PE Classroom Widgets, Sports Interval Timer, Digital Scoreboard, PE Tools',
-      canonicalPath: '/#widgets'
+      canonicalPath: '/widgets'
     },
     compliance: {
       title: 'Smart PE India | CBSE & NEP 2020 Sports Compliance Advisor',
       description: 'Ensure school physical education curriculum aligns with National Education Policy (NEP 2020) and CBSE health mandates.',
       keywords: 'NEP 2020 PE Compliance, CBSE Health and Physical Education Guidelines',
-      canonicalPath: '/#compliance'
+      canonicalPath: '/compliance'
     },
     tools: {
       title: 'Smart PE India | AI Tool Center & Teacher Utilities',
       description: 'All-in-one AI assistant suite for physical education lesson prompts, rubric makers, warm-up generators, and fitness converters.',
       keywords: 'AI PE Tools, Physical Education Utilities, Sports Teacher AI',
-      canonicalPath: '/#tools'
+      canonicalPath: '/tools'
+    },
+    'school-overview': {
+      title: 'Smart PE India | School Fitness Database Overview',
+      description: 'Store and track every student fitness record, manage classes, and export school progress cards.',
+      keywords: 'School Fitness Database, Student Fitness Management',
+      canonicalPath: '/school-fitness-database'
     },
     'school-students': {
       title: 'Smart PE India | Student Directory & Fitness Rosters',
       description: 'Manage school student profiles, grade rosters, medical flags, and historical fitness test performance.',
       keywords: 'Student PE Directory, School Fitness Roster, Physical Education Records',
-      canonicalPath: '/#students'
+      canonicalPath: '/students'
     },
     'school-results': {
       title: 'Smart PE India | School Fitness Database & Live Analytics',
       description: 'Real-time school fitness analytics, class-wise distribution graphs, and performance metrics across academic terms.',
       keywords: 'School Fitness Database, PE Analytics, Class Fitness Comparison',
-      canonicalPath: '/#school-results'
+      canonicalPath: '/school-results'
     },
     'school-teams': {
       title: 'Smart PE India | School Sports Teams & House Squads',
       description: 'Organize school athletic squads, intramural house teams, captain rosters, and training attendance.',
       keywords: 'School Sports Teams, House Squads, Athletic Roster Management',
-      canonicalPath: '/#teams'
+      canonicalPath: '/teams'
     },
     'fitness-reports': {
       title: 'Smart PE India | Student Fitness Report Cards & Printouts',
       description: 'Generate and print colorful, comprehensive student physical literacy and Khelo India progress report cards.',
       keywords: 'Student Fitness Report Card, Physical Literacy Card, PE Progress Report',
-      canonicalPath: '/#fitness-reports'
+      canonicalPath: '/fitness-reports'
     },
     'school-admin': {
       title: 'Smart PE India | School PE Settings & SEO Control Center',
       description: 'Manage physical education team staff access, master timetable OCR ingestion, and search engine optimization settings for smartpeindia.app.',
       keywords: 'School Admin, PE Timetable OCR, School Fitness Management, SEO Controls',
-      canonicalPath: '/#school-admin'
+      canonicalPath: '/school-admin'
+    },
+    logs: {
+      title: 'Smart PE India | System Logs & Health Monitor',
+      description: 'Monitor real-time client and API incident reports.',
+      keywords: 'System Logs, SmartPE Telemetry',
+      canonicalPath: '/logs'
     },
     'subscription-plans': {
       title: 'Smart PE India | School PE Digital Platform Plans & Educator Access',
@@ -221,7 +251,7 @@ export const DEFAULT_SEO_CONFIG: SEOConfig = {
       title: 'Smart PE India | Educator Brand Hub & Welcome Center',
       description: 'Welcome guide, platform overview, video walkthroughs, and setup guides for physical educators joining Smart PE India.',
       keywords: 'Smart PE India Welcome, PE Platform Tour, Teacher Onboarding',
-      canonicalPath: '/#welcome'
+      canonicalPath: '/welcome'
     },
     'about': {
       title: 'Smart PE India | About Platform & Founder L. Samy',

@@ -73,21 +73,21 @@ const SkillMastery: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div className="bg-indigo-900 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
-        <div className="relative z-10 max-w-2xl">
+      <div className="bg-indigo-900 rounded-[2.5rem] p-6 sm:p-10 text-white shadow-2xl relative overflow-hidden">
+        <div className="relative z-10 max-w-4xl w-full">
           <h2 className="text-3xl font-black mb-4 uppercase tracking-tighter">Skill Mastery Progressions</h2>
-          <p className="text-indigo-200 text-lg mb-8 leading-relaxed">
+          <p className="text-indigo-200 text-lg mb-8 leading-relaxed max-w-2xl">
             Unlike standard lessons, Skill Progressions focus on the long-term technical development of a specific move or skill.
           </p>
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 w-full">
             <input 
-              className="flex-1 bg-white/10 border border-white/20 rounded-2xl px-6 py-4 outline-none focus:ring-2 focus:ring-orange-400 transition-all placeholder-indigo-300 text-white font-medium"
+              className="w-full min-w-0 bg-white/10 border border-white/20 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-orange-400 transition-all placeholder-indigo-300 text-white font-medium"
               placeholder="Sport (e.g. Football)"
               value={sport}
               onChange={e => setSport(e.target.value)}
             />
             <input 
-              className="flex-1 bg-white/10 border border-white/20 rounded-2xl px-6 py-4 outline-none focus:ring-2 focus:ring-orange-400 transition-all placeholder-indigo-300 text-white font-medium"
+              className="w-full min-w-0 bg-white/10 border border-white/20 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-orange-400 transition-all placeholder-indigo-300 text-white font-medium"
               placeholder="Specific Skill (e.g. Penalty Kick)"
               value={skill}
               onChange={e => setSkill(e.target.value)}
@@ -95,14 +95,14 @@ const SkillMastery: React.FC = () => {
             <button 
               onClick={handleGenerate}
               disabled={loading}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-black px-8 py-4 rounded-2xl transition-all shadow-xl shadow-orange-600/20 flex items-center justify-center space-x-2 disabled:opacity-50"
+              className="bg-orange-500 hover:bg-orange-600 text-white font-black px-6 py-4 rounded-2xl transition-all shadow-xl shadow-orange-600/20 flex items-center justify-center space-x-2 shrink-0 whitespace-nowrap disabled:opacity-50"
             >
               {loading ? <Loader2 className="animate-spin" /> : <Zap size={20} />}
               <span>{loading ? 'Analyzing...' : 'Map Progression'}</span>
             </button>
           </div>
         </div>
-        <Target className="absolute -right-10 -bottom-10 w-96 h-96 text-white/5 rotate-12" />
+        <Target className="absolute -right-10 -bottom-10 w-96 h-96 text-white/5 rotate-12 pointer-events-none" />
       </div>
 
       {loading && (

@@ -641,6 +641,9 @@ export const fitnessService = {
     if (!forceFresh && schoolCache[schoolId] !== undefined) {
       return schoolCache[schoolId];
     }
+    if (!auth.currentUser) {
+      return schoolCache[schoolId] ?? null;
+    }
     try {
       const docSnap = await getDoc(doc(db, 'schools', schoolId));
       const school = docSnap.exists() ? docSnap.data() as School : null;
@@ -710,6 +713,9 @@ export const fitnessService = {
   },
 
   getSchoolMember: async (uid: string): Promise<SchoolMember | null> => {
+    if (!auth.currentUser || !uid || uid === 'guest_teacher' || uid === 'guest') {
+      return null;
+    }
     if (schoolMemberCache[uid] !== undefined && schoolMemberCache[uid] !== null) {
       return schoolMemberCache[uid];
     }
@@ -853,6 +859,7 @@ export const fitnessService = {
   },
 
   getSchoolMembers: async (schoolId: string): Promise<SchoolMember[]> => {
+    if (!auth.currentUser) return [];
     try {
       const q = query(collection(db, 'schoolMembers'), where('schoolId', '==', schoolId));
       const snapshot = await getDocs(q);
@@ -873,8 +880,8 @@ export const fitnessService = {
     // Save to offline local storage immediately
     offlineCacheService.saveStudentOffline(student);
 
-    // If online, save to Firestore
-    if (typeof navigator === 'undefined' || navigator.onLine) {
+    // If authenticated & online, save to Firestore
+    if (auth.currentUser && (typeof navigator === 'undefined' || navigator.onLine)) {
       try {
         await setDoc(doc(db, 'students', student.id), student);
       } catch (err) {
@@ -889,7 +896,7 @@ export const fitnessService = {
       offlineCacheService.saveStudentOffline(student);
     });
 
-    if (typeof navigator === 'undefined' || navigator.onLine) {
+    if (auth.currentUser && (typeof navigator === 'undefined' || navigator.onLine)) {
       const promises = students.map(student => setDoc(doc(db, 'students', student.id), student));
       try {
         await Promise.all(promises);
@@ -904,6 +911,7 @@ export const fitnessService = {
   },
 
   getAllSchools: async (): Promise<School[]> => {
+    if (!auth.currentUser) return [];
     try {
       const snapshot = await getDocs(collection(db, 'schools'));
       return snapshot.docs.map(doc => doc.data() as School);
@@ -914,6 +922,7 @@ export const fitnessService = {
   },
 
   getAllRegisteredUsers: async (): Promise<any[]> => {
+    if (!auth.currentUser) return [];
     try {
       const userMap = new Map<string, any>();
 
@@ -1059,6 +1068,7 @@ export const fitnessService = {
   },
 
   getAllAcademicPrograms: async (): Promise<any[]> => {
+    if (!auth.currentUser) return [];
     try {
       const snapshot = await getDocs(collection(db, 'academic_programs'));
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -1069,6 +1079,9 @@ export const fitnessService = {
   },
 
   getStudents: async (teacherId: string, schoolId?: string, isAdmin = false): Promise<Student[]> => {
+    if (!auth.currentUser) {
+      return offlineCacheService.getStudentsFromOfflineCache();
+    }
     try {
       if (isBrandSuperAdmin(auth.currentUser?.email)) {
         const snapshot = await getDocs(collection(db, 'students'));
@@ -1111,7 +1124,7 @@ export const fitnessService = {
     // Delete from local cache
     offlineCacheService.deleteStudentOffline(id);
 
-    if (typeof navigator === 'undefined' || navigator.onLine) {
+    if (auth.currentUser && (typeof navigator === 'undefined' || navigator.onLine)) {
       try {
         let q;
         if (schoolId) {
@@ -1179,6 +1192,7 @@ export const fitnessService = {
   },
 
   getTeams: async (teacherId: string, schoolId?: string, isAdmin = false): Promise<Team[]> => {
+    if (!auth.currentUser) return [];
     try {
       if (isBrandSuperAdmin(auth.currentUser?.email)) {
         const snapshot = await getDocs(collection(db, 'teams'));
@@ -1221,6 +1235,7 @@ export const fitnessService = {
   },
 
   getRecentResults: async (teacherId: string, schoolId?: string, isAdmin = false, limitCount = 10): Promise<FitnessResult[]> => {
+    if (!auth.currentUser) return [];
     try {
       let q;
       const effectiveSchoolId = schoolId || (teacherId ? `personal_${teacherId}` : undefined);
@@ -1291,6 +1306,13 @@ export const fitnessService = {
       }
     }
 
+    if (!auth.currentUser) {
+      callback(channel.lastData ?? offlineCacheService.getResultsFromOfflineCache(channelKey));
+      return () => {
+        channel.callbacks.delete(callback);
+      };
+    }
+
     // Open at most ONE live Firestore listener per school/scope
     if (!channel.unsubFirestore) {
       const q = isSuper
@@ -1325,6 +1347,10 @@ export const fitnessService = {
   },
 
   subscribeToStudentResults: (studentId: string, schoolId: string | undefined, callback: (results: FitnessResult[]) => void) => {
+    if (!auth.currentUser) {
+      callback([]);
+      return () => {};
+    }
     const effectiveSchoolId = schoolId || (auth.currentUser ? `personal_${auth.currentUser.uid}` : '');
     const q = query(
       collection(db, 'results'), 
@@ -1342,6 +1368,7 @@ export const fitnessService = {
   },
 
   getAllSchoolResultsOnce: async (teacherId: string, schoolId?: string, isAdmin = false): Promise<FitnessResult[]> => {
+    if (!auth.currentUser) return [];
     try {
       let q;
       const effectiveSchoolId = schoolId || `personal_${teacherId}`;
@@ -1388,6 +1415,13 @@ export const fitnessService = {
       }
     }
 
+    if (!auth.currentUser) {
+      callback(channel.lastData ?? offlineCacheService.getStudentsFromOfflineCache());
+      return () => {
+        channel.callbacks.delete(callback);
+      };
+    }
+
     if (!channel.unsubFirestore) {
       const q = isSuper
         ? query(collection(db, 'students'))
@@ -1420,6 +1454,10 @@ export const fitnessService = {
   },
 
   subscribeToTeams: (teacherId: string, schoolId: string | undefined, isAdmin: boolean, callback: (teams: Team[]) => void) => {
+    if (!auth.currentUser) {
+      callback([]);
+      return () => {};
+    }
     let q;
     const effectiveSchoolId = schoolId || `personal_${teacherId}`;
     if (isBrandSuperAdmin(auth.currentUser?.email)) {
@@ -1499,7 +1537,7 @@ export const fitnessService = {
       console.warn("Local practical storage write error:", e);
     }
 
-    if (typeof navigator === 'undefined' || navigator.onLine) {
+    if (auth.currentUser && (typeof navigator === 'undefined' || navigator.onLine)) {
       try {
         await setDoc(doc(db, 'practical_assessments', assessment.id), assessment);
       } catch (err) {
@@ -1522,7 +1560,7 @@ export const fitnessService = {
       console.warn("Local practical bulk storage write error:", e);
     }
 
-    if (typeof navigator === 'undefined' || navigator.onLine) {
+    if (auth.currentUser && (typeof navigator === 'undefined' || navigator.onLine)) {
       try {
         const promises = assessments.map(a => setDoc(doc(db, 'practical_assessments', a.id), a));
         await Promise.all(promises);
@@ -1533,21 +1571,23 @@ export const fitnessService = {
   },
 
   getPracticalAssessments: async (teacherId: string, schoolId?: string): Promise<PracticalAssessment[]> => {
-    try {
-      let q;
-      const effectiveSchoolId = schoolId || `personal_${teacherId}`;
-      if (isBrandSuperAdmin(auth.currentUser?.email)) {
-        q = query(collection(db, 'practical_assessments'), limit(2000));
-      } else {
-        q = query(collection(db, 'practical_assessments'), where('schoolId', '==', effectiveSchoolId), limit(2000));
+    if (auth.currentUser) {
+      try {
+        let q;
+        const effectiveSchoolId = schoolId || `personal_${teacherId}`;
+        if (isBrandSuperAdmin(auth.currentUser?.email)) {
+          q = query(collection(db, 'practical_assessments'), limit(2000));
+        } else {
+          q = query(collection(db, 'practical_assessments'), where('schoolId', '==', effectiveSchoolId), limit(2000));
+        }
+        const snapshot = await getDocs(q);
+        const list = snapshot.docs.map(doc => doc.data() as PracticalAssessment);
+        if (list.length > 0) {
+          return list;
+        }
+      } catch (err) {
+        console.warn('Firestore practical assessment fetch failed, reading local storage:', err);
       }
-      const snapshot = await getDocs(q);
-      const list = snapshot.docs.map(doc => doc.data() as PracticalAssessment);
-      if (list.length > 0) {
-        return list;
-      }
-    } catch (err) {
-      console.warn('Firestore practical assessment fetch failed, reading local storage:', err);
     }
 
     // Fallback to local storage
@@ -1573,7 +1613,7 @@ export const fitnessService = {
       console.warn("Error deleting from local practical storage:", e);
     }
 
-    if (typeof navigator === 'undefined' || navigator.onLine) {
+    if (auth.currentUser && (typeof navigator === 'undefined' || navigator.onLine)) {
       try {
         await deleteDoc(doc(db, 'practical_assessments', id));
       } catch (err) {
@@ -1588,9 +1628,15 @@ export const fitnessService = {
       const stored = localStorage.getItem('smartpe_practical_assessments');
       if (stored) {
         callback(JSON.parse(stored));
+      } else {
+        callback([]);
       }
     } catch (e) {
-      // ignore
+      callback([]);
+    }
+
+    if (!auth.currentUser) {
+      return () => {};
     }
 
     let q;

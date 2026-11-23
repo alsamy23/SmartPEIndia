@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 import { SEOHead } from './components/SEOHead.tsx';
 import { OfflineBanner } from './components/OfflineBanner.tsx';
@@ -99,6 +99,87 @@ import { isBrandSuperAdmin } from './types.ts';
 
 type Tab = 'dashboard' | 'super-admin-dashboard' | 'cbse-physical-education' | 'khelo-india-fitness-assessment' | 'ai-pe-lesson-planner' | 'physical-education-assessment' | 'planner' | 'yearly' | 'weekly-planner' | 'skillmastery' | 'workload-planner' | 'compliance' | 'tools' | 'theory' | 'khelo' | 'rules' | 'fitness' | 'cbse-practical' | 'physical-development' | 'coaching-assessment' | 'coaching-academy' | 'testpaper' | 'tournament-fixtures' | 'parentletters' | 'widgets' | 'school-results' | 'school-students' | 'school-teams' | 'school-overview' | 'school-admin' | 'skill-analysis' | 'logs' | 'fitness-reports' | 'about' | 'contact' | 'privacy' | 'principal-dashboard' | 'department-office' | 'brand-welcome' | 'subscription-plans';
 
+const TAB_ROUTES: Record<Tab, string> = {
+  'dashboard': '/',
+  'super-admin-dashboard': '/super-admin',
+  'brand-welcome': '/welcome',
+  'coaching-academy': '/coaching-academy',
+  'coaching-assessment': '/coaching-academy',
+  'cbse-physical-education': '/cbse-physical-education',
+  'khelo-india-fitness-assessment': '/khelo-india-fitness-assessment',
+  'ai-pe-lesson-planner': '/ai-pe-lesson-planner',
+  'physical-education-assessment': '/physical-education-assessment',
+  'planner': '/lesson-planner',
+  'yearly': '/yearly-planner',
+  'weekly-planner': '/weekly-planner',
+  'workload-planner': '/workload-planner',
+  'skillmastery': '/skill-progressions',
+  'theory': '/theory',
+  'physical-development': '/physical-development',
+  'fitness': '/fitness-tests',
+  'cbse-practical': '/cbse-practical',
+  'khelo': '/khelo-india',
+  'tournament-fixtures': '/tournament-fixtures',
+  'testpaper': '/testpaper',
+  'skill-analysis': '/skill-analysis',
+  'rules': '/rules',
+  'principal-dashboard': '/principal-dashboard',
+  'department-office': '/department-office',
+  'parentletters': '/parent-letters',
+  'widgets': '/widgets',
+  'compliance': '/compliance',
+  'tools': '/tools',
+  'school-overview': '/school-fitness-database',
+  'school-students': '/students',
+  'school-results': '/school-results',
+  'fitness-reports': '/fitness-reports',
+  'school-teams': '/teams',
+  'school-admin': '/school-admin',
+  'logs': '/logs',
+  'subscription-plans': '/pricing',
+  'privacy': '/privacy',
+  'about': '/about',
+  'contact': '/contact',
+};
+
+const PROTECTED_ROUTE_COPY: Record<string, { title: string; subtitle: string; badge: string }> = {
+  'school-students': {
+    badge: 'Student Directory',
+    title: 'Sign In Required for Student Directory',
+    subtitle: 'Sign in with your school educator account to enroll students, manage class rosters, and sync student fitness profiles.',
+  },
+  'school-results': {
+    badge: 'Live Results',
+    title: 'Sign In Required for Live Results',
+    subtitle: 'Sign in with your school educator account to inspect live student fitness test submissions and class benchmarks.',
+  },
+  'fitness-reports': {
+    badge: 'Fitness Reports',
+    title: 'Sign In Required for Fitness Reports',
+    subtitle: 'Sign in with your school educator account to generate, filter, and print official student fitness and health report cards.',
+  },
+  'school-teams': {
+    badge: 'Teams & Classes',
+    title: 'Sign In Required for Teams & Classes',
+    subtitle: 'Sign in with your school educator account to organize school houses, grade squads, and team rosters.',
+  },
+  'school-admin': {
+    badge: 'School Settings',
+    title: 'Sign In Required for School Settings',
+    subtitle: 'Sign in as a school administrator or PE teacher to configure school branding, report headers, and staff access.',
+  },
+  'logs': {
+    badge: 'System Logs',
+    title: 'Sign In Required for System Logs',
+    subtitle: 'Sign in with your educator account to inspect real-time diagnostic logs and sync audit records.',
+  },
+  'super-admin-dashboard': {
+    badge: 'Super Admin Hub',
+    title: 'Sign In Required for Super Admin Hub',
+    subtitle: 'Sign in with the authorized brand administrator account to view registered schools, teachers, and platform analytics.',
+  },
+};
+
 // Helper to determine initial tab from URL pathname, query, or hash
 const getInitialTab = (): Tab => {
   if (typeof window === 'undefined') return 'dashboard';
@@ -114,8 +195,12 @@ const getInitialTab = (): Tab => {
   };
 
   const hashToTab: Record<string, Tab> = {
+    'dashboard': 'dashboard',
     'physical-development': 'physical-development',
     'development-profile': 'physical-development',
+    'cbse-practical': 'cbse-practical',
+    'coaching-academy': 'coaching-academy',
+    'coaching-assessment': 'coaching-academy',
     'lesson-planner': 'planner',
     'planner': 'planner',
     'yearly-planner': 'yearly',
@@ -123,6 +208,7 @@ const getInitialTab = (): Tab => {
     'weekly-planner': 'weekly-planner',
     'workload-planner': 'workload-planner',
     'skill-progressions': 'skillmastery',
+    'skillmastery': 'skillmastery',
     'theory': 'theory',
     'fitness-tests': 'fitness',
     'fitness': 'fitness',
@@ -133,18 +219,26 @@ const getInitialTab = (): Tab => {
     'rules': 'rules',
     'principal-dashboard': 'principal-dashboard',
     'department-office': 'department-office',
+    'parent-letters': 'parentletters',
     'parentletters': 'parentletters',
     'widgets': 'widgets',
     'compliance': 'compliance',
     'tools': 'tools',
+    'school-fitness-database': 'school-overview',
+    'school-overview': 'school-overview',
     'students': 'school-students',
+    'school-students': 'school-students',
     'school-results': 'school-results',
     'teams': 'school-teams',
+    'school-teams': 'school-teams',
     'fitness-reports': 'fitness-reports',
     'school-admin': 'school-admin',
+    'logs': 'logs',
     'super-admin': 'super-admin-dashboard',
+    'super-admin-dashboard': 'super-admin-dashboard',
     'pricing': 'subscription-plans',
     'welcome': 'brand-welcome',
+    'brand-welcome': 'brand-welcome',
     'privacy': 'privacy',
     'privacy-policy': 'privacy',
     'terms': 'privacy',
@@ -705,7 +799,10 @@ const App: React.FC = () => {
     };
   });
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [isAuthView, setIsAuthView] = useState(false);
+  const [isAuthView, setIsAuthView] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.location.pathname.replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase() === 'login';
+  });
   const [selectedReportStudentId, setSelectedReportStudentId] = useState<string | null>(null);
   const [coachingReportId, setCoachingReportId] = useState<string | null>(null);
   const [highlightStudentId, setHighlightStudentId] = useState<string | null>(null);
@@ -715,6 +812,7 @@ const App: React.FC = () => {
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [toasts, setToasts] = useState<ToastConfig[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmConfig | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
 
   // Link-sharing and direct hash deep link handler for athletic merit reports
   useEffect(() => {
@@ -767,40 +865,47 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Listen for browser popstate events (Forward/Back button navigation across paths and hashes)
+  // Reset scroll offset on every view/route switch
+  useEffect(() => {
+    if (mainRef.current) {
+      mainRef.current.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    }
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+    }
+  }, [activeTab, isAuthView]);
+
+  // Listen for browser popstate events (Forward/Back button navigation across paths and /login)
   useEffect(() => {
     const handlePopState = () => {
-      const resolvedTab = getInitialTab();
-      setActiveTab(resolvedTab);
+      const currentPath = window.location.pathname.replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase();
+      if (currentPath === 'login') {
+        setIsAuthView(true);
+      } else {
+        setIsAuthView(false);
+        const resolvedTab = getInitialTab();
+        setActiveTab(resolvedTab);
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Synchronize browser history with Login view to handle Android hardware back button natively
-  useEffect(() => {
-    if (isAuthView) {
-      window.history.pushState({ authOpen: true }, '');
-      
-      const handlePopState = (e: PopStateEvent) => {
-        setIsAuthView(false);
-      };
-      
-      window.addEventListener('popstate', handlePopState);
-      return () => {
-        window.removeEventListener('popstate', handlePopState);
-      };
+  const openAuth = useCallback(() => {
+    setIsAuthView(true);
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      window.history.pushState({ authOpen: true, tab: activeTab }, '', '/login');
     }
-  }, [isAuthView]);
+  }, [activeTab]);
 
   const handleCloseAuth = useCallback(() => {
-    if (window.history.state?.authOpen) {
-      window.history.back();
-    } else {
-      setIsAuthView(false);
+    setIsAuthView(false);
+    if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+      const targetPath = TAB_ROUTES[activeTab] || '/';
+      window.history.replaceState({ tab: activeTab }, '', targetPath);
     }
-  }, []);
+  }, [activeTab]);
   
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser: FirebaseUser | null) => {
@@ -811,14 +916,22 @@ const App: React.FC = () => {
         setIsAuthView(false); // Reset auth view when user logs in
         userActivityService.recordUserPresence(currentUser).catch(() => {});
 
+        let landedOnSuperAdmin = false;
         if (isBrandSuperAdmin(currentUser.email)) {
           if (sessionStorage.getItem('smartpe_superadmin_landed') !== currentUser.uid) {
             sessionStorage.setItem('smartpe_superadmin_landed', currentUser.uid);
             const currentPath = window.location.pathname.replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase();
-            if (!currentPath || currentPath === 'dashboard') {
+            if (!currentPath || currentPath === 'dashboard' || currentPath === 'login') {
               setActiveTab('super-admin-dashboard');
+              window.history.replaceState({ tab: 'super-admin-dashboard' }, '', '/super-admin');
+              landedOnSuperAdmin = true;
             }
           }
+        }
+
+        if (!landedOnSuperAdmin && window.location.pathname === '/login') {
+          const fallbackPath = TAB_ROUTES[getInitialTab()] || '/';
+          window.history.replaceState({}, '', fallbackPath);
         }
 
         if (sessionStorage.getItem('smartpe_show_onboarding') === 'true') {
@@ -1047,35 +1160,13 @@ const App: React.FC = () => {
       trackEvent('tool_used', { tool_name: toolTabs[tabId] });
     }
 
-    // Synchronize browser URL pathname for clean SEO routes
-    const seoRoutes: Record<string, string> = {
-      'dashboard': '/',
-      'cbse-physical-education': '/cbse-physical-education',
-      'khelo-india-fitness-assessment': '/khelo-india-fitness-assessment',
-      'ai-pe-lesson-planner': '/ai-pe-lesson-planner',
-      'physical-education-assessment': '/physical-education-assessment',
-      'planner': '/lesson-planner',
-      'yearly': '/yearly-planner',
-      'weekly-planner': '/weekly-planner',
-      'khelo': '/khelo-india',
-      'tournament-fixtures': '/tournament-fixtures',
-      'testpaper': '/testpaper',
-      'theory': '/theory',
-      'fitness': '/fitness-tests',
-      'rules': '/rules',
-      'subscription-plans': '/pricing',
-      'about': '/about',
-      'contact': '/contact',
-      'privacy': '/privacy',
-    };
-
-    if (seoRoutes[tabId]) {
-      const targetPath = seoRoutes[tabId];
-      if (window.location.pathname !== targetPath) {
-        window.history.pushState({ tab: tabId }, '', targetPath);
-      }
+    // Synchronize browser URL pathname across all sidebar & page routes
+    const targetPath = TAB_ROUTES[tabId];
+    if (targetPath && window.location.pathname !== targetPath) {
+      window.history.pushState({ tab: tabId }, '', targetPath);
     }
 
+    setIsAuthView(false);
     setActiveTab(tabId);
     setHighlightStudentId(null);
     if (window.history.state?.sidebarOpen) {
@@ -1096,7 +1187,44 @@ const App: React.FC = () => {
         );
       }
       if (!user) {
-        return <FitnessManagementIntro onLogin={() => setIsAuthView(true)} onTryDemo={() => handleTabChange('fitness')} />;
+        const copy = PROTECTED_ROUTE_COPY[activeTab] || {
+          badge: 'Protected Workspace',
+          title: 'Sign In Required',
+          subtitle: 'Sign in with your school educator account to access this section.',
+        };
+        return (
+          <div className="max-w-2xl mx-auto my-8 sm:my-16 bg-white border-4 border-slate-900 rounded-[2.5rem] p-8 sm:p-12 shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] text-center space-y-6">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-amber-100 border border-amber-300 text-amber-900 rounded-full text-[11px] font-black uppercase tracking-widest">
+              <Shield size={14} className="text-amber-700" />
+              <span>{copy.badge}</span>
+            </div>
+            <div className="space-y-3">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 uppercase tracking-tight font-display">
+                {copy.title}
+              </h1>
+              <p className="text-sm sm:text-base text-slate-600 font-medium leading-relaxed max-w-lg mx-auto">
+                {copy.subtitle}
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={openAuth}
+                className="w-full sm:w-auto px-7 py-4 bg-primary hover:bg-primary-container text-white border-2 border-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] transition-all flex items-center justify-center gap-2"
+              >
+                <Users size={16} />
+                <span>Teacher Login</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTabChange('fitness')}
+                className="w-full sm:w-auto px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-900 border-2 border-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+              >
+                Try Public Fitness Tests
+              </button>
+            </div>
+          </div>
+        );
       }
     }
 
@@ -1107,10 +1235,10 @@ const App: React.FC = () => {
           return <SuperAdminDashboard onNavigate={handleTabChange} />;
         }
         return <Dashboard apiStatus={apiStatus} debugInfo={debugInfo} onTestConnection={handleTestConnection} isTesting={isTesting} onNavigate={handleTabChange} />;
-      case 'cbse-physical-education': return <CbsePhysicalEducationPage onNavigate={handleTabChange} onOpenAuth={() => setIsAuthView(true)} />;
-      case 'khelo-india-fitness-assessment': return <KheloIndiaFitnessPage onNavigate={handleTabChange} onOpenAuth={() => setIsAuthView(true)} />;
-      case 'ai-pe-lesson-planner': return <AiLessonPlannerPage onNavigate={handleTabChange} onOpenAuth={() => setIsAuthView(true)} />;
-      case 'physical-education-assessment': return <PeAssessmentPage onNavigate={handleTabChange} onOpenAuth={() => setIsAuthView(true)} />;
+      case 'cbse-physical-education': return <CbsePhysicalEducationPage onNavigate={handleTabChange} onOpenAuth={openAuth} />;
+      case 'khelo-india-fitness-assessment': return <KheloIndiaFitnessPage onNavigate={handleTabChange} onOpenAuth={openAuth} />;
+      case 'ai-pe-lesson-planner': return <AiLessonPlannerPage onNavigate={handleTabChange} onOpenAuth={openAuth} />;
+      case 'physical-education-assessment': return <PeAssessmentPage onNavigate={handleTabChange} onOpenAuth={openAuth} />;
       case 'yearly': return <YearlyPlanner onNavigate={handleTabChange} />;
       case 'weekly-planner': return <AcademicWeeklyPlanner />;
       case 'workload-planner': return <DepartmentWorkloadPlanner />;
@@ -1128,8 +1256,8 @@ const App: React.FC = () => {
       case 'cbse-practical': return <PracticalAssessmentHub />;
       case 'coaching-assessment':
       case 'coaching-academy': return <CoachingAcademyHub onSwitchToSchoolPe={() => handleTabChange('dashboard')} initialReportId={coachingReportId || undefined} />;
-      case 'school-results': return <FitnessDashboard onNavigate={handleTabChange} onSelectStudent={(id) => { setSelectedReportStudentId(id); setActiveTab('fitness-reports'); }} />;
-      case 'school-students': return <StudentManagement onNavigate={handleTabChange} onSelectStudent={(id) => { setSelectedReportStudentId(id); setActiveTab('fitness-reports'); }} highlightStudentId={highlightStudentId} />;
+      case 'school-results': return <FitnessDashboard onNavigate={handleTabChange} onSelectStudent={(id) => { setSelectedReportStudentId(id); handleTabChange('fitness-reports'); }} />;
+      case 'school-students': return <StudentManagement onNavigate={handleTabChange} onSelectStudent={(id) => { setSelectedReportStudentId(id); handleTabChange('fitness-reports'); }} highlightStudentId={highlightStudentId} />;
       case 'school-teams': return <TeamManagement />;
       case 'school-admin': return <SchoolAdmin />;
       case 'logs': return <AdminLogs />;
@@ -1150,7 +1278,7 @@ const App: React.FC = () => {
         if (auth.currentUser) {
           handleTabChange('school-results');
         } else {
-          setIsAuthView(true);
+          openAuth();
         }
       }} onTryDemo={() => handleTabChange('fitness')} />;
       case 'about': return <About onNavigate={handleTabChange} />;
@@ -1173,7 +1301,7 @@ const App: React.FC = () => {
       <ErrorBoundary>
         <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row overflow-hidden h-screen print:h-auto print:overflow-visible font-sans">
         {/* Toast Notification Container */}
-        <div className="fixed bottom-6 right-6 z-[200] space-y-3 max-w-sm w-full pointer-events-none">
+        <div className="fixed top-20 right-4 sm:right-6 z-[200] space-y-3 max-w-sm w-[calc(100%-2rem)] sm:w-full pointer-events-none">
           {toasts.map(t => (
             <div
               key={t.id}
@@ -1230,9 +1358,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Outdoor Offline Status Banner */}
-        <OfflineBanner />
-
         {/* Mobile Header */}
         <MobileHeader 
           isSidebarOpen={isSidebarOpen} 
@@ -1259,7 +1384,7 @@ const App: React.FC = () => {
           handleTabChange={handleTabChange} 
           handleSelectKey={handleSelectKey} 
           handleLogout={handleLogout} 
-          setIsAuthView={setIsAuthView} 
+          setIsAuthView={(open) => (open ? openAuth() : handleCloseAuth())} 
           setIsSidebarOpen={setIsSidebarOpen} 
           schoolName={schoolBranding.schoolName}
           schoolLogo={schoolBranding.schoolLogo}
@@ -1269,7 +1394,10 @@ const App: React.FC = () => {
         />
 
         {/* Content Area */}
-        <main className={`flex-1 overflow-y-auto bg-slate-50 relative print:overflow-visible print:h-auto print:bg-white pb-32 ${isSidebarOpen ? 'hidden md:block' : ''}`}>
+        <main ref={mainRef} className={`flex-1 overflow-y-auto bg-slate-50 relative print:overflow-visible print:h-auto print:bg-white pb-32 ${isSidebarOpen ? 'hidden md:block' : ''}`}>
+          {/* Outdoor Offline Status Banner (inline inside content pane) */}
+          <OfflineBanner />
+
           <StickyHeader 
             activeTab={activeTab} 
             handleTabChange={handleTabChange} 
@@ -1342,7 +1470,7 @@ const App: React.FC = () => {
             onClose={() => setIsFeedbackModalOpen(false)}
             onRequireLogin={() => {
               setIsFeedbackModalOpen(false);
-              setIsAuthView(true);
+              openAuth();
             }}
           />
 

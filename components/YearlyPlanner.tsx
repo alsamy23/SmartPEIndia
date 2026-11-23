@@ -1181,11 +1181,11 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-6">
-                  <div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+                <div className="space-y-6 min-w-0">
+                  <div className="min-w-0">
                      <label className="block text-xs font-black text-slate-400 uppercase mb-2">Target Grade / Class</label>
-                     <div className="flex gap-2">
+                     <div className="flex flex-col xl:flex-row gap-2 min-w-0">
                        <input 
                          type="text" 
                          value={grade} 
@@ -1194,7 +1194,7 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                            setGrade(val);
                            applyCbsesyllabusDefaults(val, planTrack);
                          }} 
-                         className="flex-1 p-4 bg-slate-50 border rounded-xl font-bold" 
+                         className="w-full min-w-0 xl:flex-1 p-4 bg-slate-50 border rounded-xl font-bold" 
                          placeholder="e.g., 12, 11, 10, 9, 8"
                        />
                        <select 
@@ -1204,7 +1204,7 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                              applyCbsesyllabusDefaults(e.target.value, planTrack);
                            }
                          }} 
-                         className="p-4 bg-slate-100 border rounded-xl font-bold text-xs"
+                         className="w-full xl:w-44 shrink-0 p-4 bg-slate-100 border rounded-xl font-bold text-xs"
                          value={['9','10','11','12'].includes(grade) ? grade : ''}
                        >
                          <option value="">Quick Select</option>
@@ -1218,14 +1218,14 @@ const YearlyPlanner: React.FC<YearlyPlannerProps> = ({ onNavigate }) => {
                        </select>
                      </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                      <label className="block text-xs font-black text-slate-400 uppercase mb-2">Board</label>
-                     <select value={board} onChange={e => setBoard(e.target.value as BoardType)} className="w-full p-4 bg-slate-50 border rounded-xl font-bold">
+                     <select value={board} onChange={e => setBoard(e.target.value as BoardType)} className="w-full min-w-0 p-4 bg-slate-50 border rounded-xl font-bold">
                        {Object.values(BoardType).map(b => <option key={b} value={b}>{b}</option>)}
                      </select>
                   </div>
                 </div>
-                <div className="space-y-6">
+                <div className="space-y-6 min-w-0">
                   <div><label className="block text-xs font-black text-slate-400 uppercase mb-2">Duration</label>
                   <input type="text" value={duration} onChange={e => setDuration(e.target.value)} className="w-full p-4 bg-slate-50 border rounded-xl font-bold" /></div>
                   <div><label className="block text-xs font-black text-slate-400 uppercase mb-2">Start Date</label>

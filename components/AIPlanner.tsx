@@ -64,15 +64,6 @@ const AIPlanner: React.FC = () => {
   };
 
   const handleGenerate = async () => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setShowOfflineModal(true);
-      setError({
-        message: 'Outdoor Offline Mode Active: You are currently offline. Select from pre-loaded PE field templates or saved plans below.',
-        type: 'network'
-      });
-      return;
-    }
-
     setLoading(true);
     setLoadingStep(`Generating in ${language}...`);
     setError(null);
@@ -122,13 +113,18 @@ const AIPlanner: React.FC = () => {
 
     } catch (err: any) {
       console.error(err);
-      const message = err.message || "An unexpected error occurred.";
+      const message = err?.message || "An unexpected error occurred.";
       let type: 'network' | 'quota' | 'key' | 'blocked' | 'generic' = 'generic';
 
-      if (message.includes("Internet") || message.includes("network")) type = 'network';
-      else if (message.includes("Quota") || message.includes("RESOURCE_EXHAUSTED")) type = 'quota';
-      else if (message.includes("API_KEY_INVALID") || message.includes("api key not valid")) type = 'key';
-      else if (message.includes("blocked") || message.includes("safety")) type = 'blocked';
+      if (err?.isNetworkError || /unable to reach the ai service|internet|network/i.test(message)) {
+        type = 'network';
+      } else if (err?.status === 429 || /quota|resource_exhausted/i.test(message)) {
+        type = 'quota';
+      } else if (/api_key_invalid|api key not valid|authentication/i.test(message)) {
+        type = 'key';
+      } else if (/blocked|safety/i.test(message)) {
+        type = 'blocked';
+      }
 
       setError({ message, type });
     } finally {
@@ -249,8 +245,8 @@ https://smartpeindia.app/lesson-planner`;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-      <div className="lg:col-span-4 space-y-8 animate-slide-up print:hidden">
-        <div className="bg-white p-8 rounded-[2rem] shadow-xl shadow-indigo-100/50 border border-slate-100 sticky top-8">
+      <div className="lg:col-span-5 xl:col-span-4 space-y-8 animate-slide-up print:hidden min-w-0">
+        <div className="bg-white p-6 xl:p-7 rounded-[2rem] shadow-xl shadow-indigo-100/50 border border-slate-100 sticky top-8">
           <div className="flex items-center space-x-4 mb-8">
             <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-lg shadow-indigo-200 rotate-2">
               <Sparkles size={24} />
@@ -280,32 +276,32 @@ https://smartpeindia.app/lesson-planner`;
                 </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-               <div className="group">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3.5">
+               <div className="group min-w-0">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Teacher</label>
-                <input type="text" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm" value={teacherName} onChange={e => setTeacherName(e.target.value)} />
+                <input type="text" className="w-full min-w-0 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm" value={teacherName} onChange={e => setTeacherName(e.target.value)} />
                </div>
-               <div className="group">
+               <div className="group min-w-0">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Date</label>
-                <input type="date" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm" value={date} onChange={e => setDate(e.target.value)} />
+                <input type="date" className="w-full min-w-0 bg-slate-50 border border-slate-100 rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm" value={date} onChange={e => setDate(e.target.value)} />
                </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="group">
+            <div className="grid grid-cols-2 gap-3.5">
+              <div className="group min-w-0">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Board</label>
                 <select 
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm"
+                  className="w-full min-w-0 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm"
                   value={board}
                   onChange={e => setBoard(e.target.value as BoardType)}
                 >
                   {Object.values(BoardType).map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
-              <div className="group">
+              <div className="group min-w-0">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Grade</label>
                 <select 
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm"
+                  className="w-full min-w-0 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm"
                   value={grade}
                   onChange={e => setGrade(e.target.value)}
                 >
@@ -314,20 +310,20 @@ https://smartpeindia.app/lesson-planner`;
               </div>
             </div>
 
-            <div className="group">
+            <div className="group min-w-0">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Sport / Activity</label>
-              <input type="text" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm" value={sport} onChange={e => setSport(e.target.value)} />
+              <input type="text" className="w-full min-w-0 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm" value={sport} onChange={e => setSport(e.target.value)} />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="group">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3.5">
+              <div className="group min-w-0">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Specific Topic</label>
-                <input type="text" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm" value={topic} onChange={e => setTopic(e.target.value)} />
+                <input type="text" className="w-full min-w-0 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm" value={topic} onChange={e => setTopic(e.target.value)} />
               </div>
-              <div className="group">
+              <div className="group min-w-0">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Duration</label>
                 <select 
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm"
+                  className="w-full min-w-0 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-3 outline-none focus:ring-2 focus:ring-indigo-100 font-bold text-slate-700 text-sm"
                   value={duration}
                   onChange={e => setDuration(e.target.value)}
                 >

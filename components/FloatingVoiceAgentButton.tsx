@@ -10,7 +10,7 @@ export const FloatingVoiceAgentButton: React.FC<FloatingVoiceAgentButtonProps> =
   if (isOpen) return null;
 
   return (
-    <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-40 print:hidden flex flex-col items-end gap-2 group">
+    <div className="fixed bottom-40 md:bottom-[4.75rem] right-4 sm:right-6 z-40 print:hidden flex flex-col items-end gap-2 group">
       {/* Tooltip badge on hover */}
       <div className="hidden lg:flex items-center gap-1.5 bg-slate-950/90 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-lg border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none transform translate-y-1 group-hover:translate-y-0">
         <Sparkles size={13} className="text-amber-300" />

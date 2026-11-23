@@ -134,7 +134,7 @@ export const PricingAndPlans: React.FC<PricingAndPlansProps> = ({
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-10 p-4 md:p-8">
+    <div className="max-w-6xl mx-auto space-y-10 p-4 md:p-8 overflow-x-hidden">
       {/* Header */}
       <div className="text-center space-y-4 max-w-3xl mx-auto">
         <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 text-xs font-black uppercase tracking-widest">
@@ -170,32 +170,32 @@ export const PricingAndPlans: React.FC<PricingAndPlansProps> = ({
       </div>
 
       {/* Plan Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 xl:gap-8 pt-2">
         {plans.map((plan) => (
           <div
             key={plan.id}
-            className={`relative bg-white rounded-[2.5rem] border-4 border-slate-900 p-8 flex flex-col justify-between transition-all ${
-              plan.popular ? 'shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] scale-[1.02] ring-4 ring-primary/20' : 'shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]'
+            className={`relative bg-white rounded-[2.5rem] border-4 border-slate-900 p-6 xl:p-8 min-w-0 flex flex-col justify-between transition-all ${
+              plan.popular ? 'shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] lg:-translate-y-1 ring-4 ring-primary/20' : 'shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]'
             }`}
           >
             {plan.badge && (
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-primary text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-md">
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-primary text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-md whitespace-nowrap">
                 {plan.badge}
               </div>
             )}
 
-            <div className="space-y-6 pt-2">
+            <div className="space-y-6 pt-2 min-w-0">
               <div>
                 <h3 className="text-2xl font-black text-slate-900 uppercase font-display">{plan.name}</h3>
                 <p className="text-xs text-slate-500 font-bold mt-1 min-h-[32px]">{plan.tagline}</p>
               </div>
 
-              <div className="space-y-1">
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-4xl font-black text-slate-900 tracking-tight">
+              <div className="space-y-1 min-w-0">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="text-3xl xl:text-4xl font-black text-slate-900 tracking-tight break-words">
                     {billingCycle === 'annual' ? plan.priceAnnual : plan.priceMonthly}
                   </span>
-                  <span className="text-xs font-bold text-slate-400 line-through">{plan.originalPrice}</span>
+                  <span className="text-xs font-bold text-slate-400 line-through whitespace-nowrap">{plan.originalPrice}</span>
                 </div>
                 <p className="text-[11px] font-black uppercase tracking-wider text-emerald-600">
                   {plan.id === 'founding_pass' ? 'Active automatically for all accounts' : 'School Purchase Order & Invoice available'}

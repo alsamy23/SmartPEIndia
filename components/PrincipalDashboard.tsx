@@ -248,8 +248,13 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ onNaviga
 
   // 2. Real-time Multiplexed Subscriptions to Students, Fitness Results, Practicals & 100M Evaluations
   useEffect(() => {
-    const currentUserId = auth.currentUser?.uid || 'guest';
-    const schoolId = userProfile?.schoolId || (auth.currentUser ? `personal_${auth.currentUser.uid}` : undefined);
+    const currentUserId = auth.currentUser?.uid;
+    if (!currentUserId) {
+      setIsSyncing(false);
+      return;
+    }
+
+    const schoolId = userProfile?.schoolId || `personal_${currentUserId}`;
     const isSuper = fitnessService.isSuperAdmin();
 
     setIsSyncing(true);

@@ -38,7 +38,7 @@ const Disclaimer: React.FC = () => {
       <button
         onClick={handleReopen}
         title="View Community Disclaimer & Platform Affiliation"
-        className="fixed bottom-3 left-3 z-40 bg-slate-900/80 hover:bg-slate-900 backdrop-blur-md text-slate-400 hover:text-amber-400 border border-slate-700/60 rounded-full px-2.5 py-1 text-[10px] font-bold flex items-center gap-1.5 shadow-lg transition-all hover:scale-105 print:hidden group"
+        className="fixed bottom-24 md:bottom-4 left-3 md:left-[21rem] z-30 bg-slate-900/80 hover:bg-slate-900 backdrop-blur-md text-slate-400 hover:text-amber-400 border border-slate-700/60 rounded-full px-2.5 py-1 text-[10px] font-bold flex items-center gap-1.5 shadow-lg transition-all hover:scale-105 print:hidden group"
       >
         <ShieldAlert size={12} className="text-amber-400" />
         <span className="hidden sm:inline">Independent Platform Info</span>
@@ -47,7 +47,7 @@ const Disclaimer: React.FC = () => {
   }
 
   return (
-    <div className="fixed bottom-2 left-2 right-2 md:left-auto md:right-4 md:max-w-xl z-50 print:hidden animate-in slide-in-from-bottom-2 duration-200">
+    <div className="fixed bottom-[5.5rem] md:bottom-4 left-2 right-20 md:left-[21rem] md:right-auto md:max-w-[min(28rem,calc(100vw-35rem))] z-30 print:hidden animate-in slide-in-from-bottom-2 duration-200">
       <div className="bg-slate-900/95 backdrop-blur-md text-slate-300 px-3.5 py-2.5 rounded-2xl border border-slate-700/80 shadow-2xl shadow-black/50 text-xs">
         {/* Compact Top Bar */}
         <div className="flex items-center justify-between gap-2.5">

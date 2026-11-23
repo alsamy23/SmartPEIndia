@@ -657,16 +657,16 @@ const Dashboard: React.FC<{
                     Try the AI Planner Now &rarr;
                   </button>
                 </div>
-                <div className="md:col-span-5 bg-orange-50/50 p-6 rounded-[2rem] border-2 border-orange-100 space-y-4">
+                <div className="md:col-span-5 bg-orange-50/50 p-6 rounded-[2rem] border-2 border-orange-100 space-y-4 min-w-0">
                   <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest block">Workflow Impact</span>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white p-3 rounded-xl border border-slate-100">
-                      <p className="text-2xl font-black text-[#FF6B00]">60s</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">Draft lesson plans</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2 gap-3">
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-100 min-w-0">
+                      <p className="text-xl 2xl:text-2xl font-black text-[#FF6B00] leading-tight">60s</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">Draft lesson plans</p>
                     </div>
-                    <div className="bg-white p-3 rounded-xl border border-slate-100">
-                      <p className="text-2xl font-black text-slate-900">Digital</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">Field & term logs</p>
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-100 min-w-0">
+                      <p className="text-xl 2xl:text-2xl font-black text-slate-900 leading-tight">Digital</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">Field &amp; term logs</p>
                     </div>
                   </div>
                   <p className="text-[10px] text-slate-600 font-semibold leading-relaxed">
@@ -706,16 +706,16 @@ const Dashboard: React.FC<{
                     Open Department Office &rarr;
                   </button>
                 </div>
-                <div className="md:col-span-5 bg-indigo-50/50 p-6 rounded-[2rem] border-2 border-indigo-100 space-y-4">
+                <div className="md:col-span-5 bg-indigo-50/50 p-6 rounded-[2rem] border-2 border-indigo-100 space-y-4 min-w-0">
                   <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest block">Department Visibility</span>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white p-3 rounded-xl border border-slate-100">
-                      <p className="text-2xl font-black text-indigo-600">Unified</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">Staff roster sync</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2 gap-3">
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-100 min-w-0">
+                      <p className="text-xl 2xl:text-2xl font-black text-indigo-600 leading-tight">Unified</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">Staff roster sync</p>
                     </div>
-                    <div className="bg-white p-3 rounded-xl border border-slate-100">
-                      <p className="text-2xl font-black text-slate-900">Live</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">Equipment audit</p>
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-100 min-w-0">
+                      <p className="text-xl 2xl:text-2xl font-black text-slate-900 leading-tight">Live</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">Equipment audit</p>
                     </div>
                   </div>
                   <p className="text-[10px] text-slate-600 font-semibold leading-relaxed">
@@ -755,16 +755,16 @@ const Dashboard: React.FC<{
                     View Principal Oversight Dashboard &rarr;
                   </button>
                 </div>
-                <div className="md:col-span-5 bg-emerald-50/50 p-6 rounded-[2rem] border-2 border-emerald-100 space-y-4">
+                <div className="md:col-span-5 bg-emerald-50/50 p-6 rounded-[2rem] border-2 border-emerald-100 space-y-4 min-w-0">
                   <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block">Governance & Oversight</span>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white p-3 rounded-xl border border-slate-100">
-                      <p className="text-2xl font-black text-emerald-600">Aligned</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">CBSE Strands 1–4</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2 gap-3">
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-100 min-w-0">
+                      <p className="text-xl 2xl:text-2xl font-black text-emerald-600 leading-tight">Aligned</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">CBSE Strands 1–4</p>
                     </div>
-                    <div className="bg-white p-3 rounded-xl border border-slate-100">
-                      <p className="text-2xl font-black text-slate-900">Custom</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">Parent reports</p>
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-100 min-w-0">
+                      <p className="text-xl 2xl:text-2xl font-black text-slate-900 leading-tight">Custom</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">Parent reports</p>
                     </div>
                   </div>
                   <p className="text-[10px] text-slate-600 font-semibold leading-relaxed">
@@ -1199,8 +1199,8 @@ const Dashboard: React.FC<{
       <section className="bg-slate-900 text-white rounded-[2rem] md:rounded-[3rem] p-8 md:p-12 shadow-2xl relative overflow-hidden border-4 border-slate-900">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-[120px] -mr-48 -mt-48"></div>
         <div className="relative z-10 space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 xl:gap-12">
-            <div className="space-y-3 lg:max-w-sm xl:max-w-lg">
+          <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-8">
+            <div className="space-y-3 2xl:max-w-md">
               <div className="inline-flex items-center px-4 py-1.5 bg-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest">Interactive Onboarding</div>
               <h3 className="text-3xl md:text-4xl font-black uppercase tracking-tight leading-[1.1]">
                 New here? Your first <br/>
@@ -1211,7 +1211,7 @@ const Dashboard: React.FC<{
               </p>
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 flex-1 w-full">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 flex-1 w-full min-w-0">
               {[
                 { step: '01', title: 'Pick Topic', desc: 'Select any sport or curriculum target.', tab: 'planner' },
                 { step: '02', title: 'Draft Plan', desc: 'Create a custom lesson outline in seconds.', tab: 'planner' },
@@ -1221,11 +1221,11 @@ const Dashboard: React.FC<{
                 <button 
                   key={i}
                   onClick={() => onNavigate?.(item.tab)}
-                  className="flex flex-col justify-between p-5 lg:p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-[#FF6B00] hover:bg-white/10 transition-all text-left group"
+                  className="flex flex-col justify-between p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-[#FF6B00] hover:bg-white/10 transition-all text-left group min-w-0"
                 >
-                  <div className="text-3xl lg:text-4xl font-black text-[#005BFF] mb-4 group-hover:text-[#FF6B00] transition-colors">{item.step}</div>
-                  <div>
-                    <h4 className="text-xs lg:text-sm font-black uppercase tracking-wider text-white mb-2">{item.title}</h4>
+                  <div className="text-3xl font-black text-[#005BFF] mb-4 group-hover:text-[#FF6B00] transition-colors">{item.step}</div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs sm:text-sm font-black uppercase tracking-wide text-white mb-2 break-words">{item.title}</h4>
                     <p className="text-[11px] lg:text-xs text-slate-400 leading-relaxed font-medium">{item.desc}</p>
                   </div>
                 </button>

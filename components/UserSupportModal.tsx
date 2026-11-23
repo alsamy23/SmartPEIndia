@@ -106,7 +106,7 @@ export const UserSupportModal: React.FC<UserSupportModalProps> = ({
   return (
     <>
       {/* Floating Support & Alert Trigger (Bottom Right) */}
-      <aside aria-label="Support and feedback" className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+      <aside aria-label="Support and feedback" className="fixed bottom-24 md:bottom-5 right-4 sm:right-6 z-40 flex flex-col items-end print:hidden">
         {/* Subtle Alert Bubble if a background error occurred */}
         <AnimatePresence>
           {hasNewAlert && recentIncident && !isOpen && (

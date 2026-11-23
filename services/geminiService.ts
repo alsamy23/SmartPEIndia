@@ -5,11 +5,6 @@ import { getComprehensiveMindMapFallback, getComprehensiveTheoryFallback } from 
 import { buildGamesRubricFallback, buildUnitPlanFallback, buildAIToolContentFallback, buildTestPaperFallback } from "./toolFallbacks.ts";
 
 export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
-  // Check for internet connection first
-  if (!navigator.onLine) {
-    throw new Error("No Internet Connection: Please check your network settings and try again.");
-  }
-
   // Map deprecated/legacy names to current best supported model
   const m = (payload.model || "").toLowerCase();
   if (m.includes("3.1-pro") || m.includes("pro-preview") || m.includes("pro")) {
@@ -65,23 +60,30 @@ export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
         console.error("Could not parse error response as JSON", e);
       }
       
-      const errorMessage = typeof errorData?.error === 'string' ? errorData.error : (errorData?.error?.message || errorData?.message || responseText || `Server returned ${response.status}: ${response.statusText}`);
+      const errorMessage = typeof errorData?.error === 'string'
+        ? errorData.error
+        : (errorData?.error?.message || errorData?.message || responseText || `Server returned ${response.status}: ${response.statusText}`);
       
       // Handle Quota Exceeded (429)
       const isQuotaError = response.status === 429 || errorMessage.includes("429") || errorMessage.includes("RESOURCE_EXHAUSTED") || errorMessage.toLowerCase().includes("quota");
       if (isQuotaError) {
-        throw new Error("AI Quota Exceeded: You've reached the daily limit for the free version of Gemini. Please try again in a few hours or use a different API key with a paid project.");
+        const quotaErr: any = new Error("AI Quota Exceeded: You've reached the rate/daily limit for Gemini. Please try again in a few moments.");
+        quotaErr.status = 429;
+        quotaErr.nonRetryable = true;
+        throw quotaErr;
       }
 
       const isInvalidKeyError = (response.status === 401 && (errorMessage.includes("API_KEY") || errorMessage.includes("key"))) || 
                                errorMessage.includes("API_KEY_INVALID") || 
                                errorMessage.includes("api key not valid");
       if (isInvalidKeyError) {
-        throw new Error("AI service authentication error. Please try again or refresh the page.");
+        const keyErr: any = new Error("AI service authentication error. Please try again or refresh the page.");
+        keyErr.status = response.status;
+        keyErr.nonRetryable = true;
+        throw keyErr;
       }
 
-      const isNonRetryableClientError =
-        response.status >= 400 && response.status < 500;
+      const isNonRetryableClientError = response.status >= 400 && response.status < 500;
 
       const error: any = new Error(errorMessage);
       error.status = response.status;
@@ -96,27 +98,45 @@ export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
 
     const text = await response.text();
     if (!text) {
-      throw new Error("Empty response from server.");
+      const emptyErr: any = new Error("Empty response from AI server.");
+      emptyErr.status = response.status;
+      throw emptyErr;
     }
 
     let parsed;
     try {
       parsed = JSON.parse(text);
     } catch (e) {
-      throw new Error(`Server returned invalid JSON response: ${text.substring(0, 100)}`);
+      const parseErr: any = new Error(`Server returned invalid JSON response: ${text.substring(0, 120)}`);
+      parseErr.status = response.status;
+      throw parseErr;
     }
 
     return parsed;
   } catch (error: any) {
     clearTimeout(timeoutId);
 
-    if (error.name === 'AbortError') {
-      throw new Error("The AI took too long to respond (Timeout). Please try a simpler request or check your internet connection.");
+    if (error?.name === 'AbortError') {
+      const timeoutErr: any = new Error("The AI took too long to respond (Timeout). Please try again.");
+      timeoutErr.nonRetryable = true;
+      throw timeoutErr;
     }
 
-    if (retries > 0 && !error?.nonRetryable && error?.name !== 'AbortError') {
+    const isFetchNetworkFailure =
+      !error?.status &&
+      (error instanceof TypeError ||
+        /failed to fetch|networkerror|load failed|network request failed/i.test(error?.message || ''));
+
+    if (retries > 0 && !error?.nonRetryable && !error?.status && isFetchNetworkFailure) {
       return callAIBase(payload, retries - 1);
     }
+
+    const finalError: any = isFetchNetworkFailure
+      ? Object.assign(
+          new Error("Unable to reach the AI service right now. Please check your connection and try again."),
+          { isNetworkError: true, cause: error }
+        )
+      : error;
 
     const contentPreview =
       typeof payload?.contents === 'string'
@@ -126,12 +146,12 @@ export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
           : undefined;
 
     // Report failure to server telemetry (alerts admin via email & WhatsApp)
-    reportAIFailure(error, 'AI Core Service', {
+    reportAIFailure(finalError, 'AI Core Service', {
       model: payload?.model,
       promptSnippet: contentPreview
     }).catch(() => {});
 
-    throw error;
+    throw finalError;
   }
 };
 

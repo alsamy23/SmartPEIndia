@@ -85,7 +85,7 @@ export const generateCbsePracticalAwardSheetPdf = (
     rollNo: 26,
     name: 58,
     gender: 14,
-    fitness: 24, // 7M
+    fitness: 24, // 6M
     yoga: 24,    // 7M
     game: 26,    // 7M
     record: 22,  // 5M
@@ -120,7 +120,7 @@ export const generateCbsePracticalAwardSheetPdf = (
   drawColHeader('CBSE Roll No', '', colWidths.rollNo);
   drawColHeader('Candidate Name', '', colWidths.name);
   drawColHeader('Sex', '(M/F)', colWidths.gender);
-  drawColHeader('Fitness Test', '(Max 7)', colWidths.fitness);
+  drawColHeader('Fitness Test', '(Max 6)', colWidths.fitness);
   drawColHeader('Yogic Asana', '(Max 7)', colWidths.yoga);
   drawColHeader('Game / Sport', '(Max 7)', colWidths.game);
   drawColHeader('Record File', '(Max 5)', colWidths.record);
@@ -160,7 +160,7 @@ export const generateCbsePracticalAwardSheetPdf = (
       drawColHeader('CBSE Roll No', '', colWidths.rollNo);
       drawColHeader('Candidate Name', '', colWidths.name);
       drawColHeader('Sex', '(M/F)', colWidths.gender);
-      drawColHeader('Fitness Test', '(Max 7)', colWidths.fitness);
+      drawColHeader('Fitness Test', '(Max 6)', colWidths.fitness);
       drawColHeader('Yogic Asana', '(Max 7)', colWidths.yoga);
       drawColHeader('Game / Sport', '(Max 7)', colWidths.game);
       drawColHeader('Record File', '(Max 5)', colWidths.record);
