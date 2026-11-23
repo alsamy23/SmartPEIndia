@@ -187,8 +187,8 @@ const isGoogleApiKey = (key: string): boolean => {
   if (!key || typeof key !== "string") return false;
   const clean = key.trim().replace(/^["']|["']$/g, '');
   if (clean.length < 20) return false;
-  if (clean.startsWith("sk-") || clean.startsWith("sk_")) return false;
-  return true;
+  if (clean.startsWith("sk-") || clean.startsWith("sk_") || clean.startsWith("gsk_") || clean.startsWith("xkeysib-") || clean.startsWith("re_")) return false;
+  return clean.startsWith("AIza");
 };
 
 const getGeminiKeys = (): string[] => {
@@ -1036,11 +1036,12 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
     const resolvedModel = resolveModel(model);
     const geminiKeys = getGeminiKeys();
     const groqKey = getGroqKey();
+    const openRouterKeys = getOpenRouterKeys();
     
-    if (geminiKeys.length === 0 && !groqKey) {
-      return res.status(500).json({ 
-        error: "AI service configuration error.",
-        message: "Please configure GEMINI_API_KEY in the Environment Variables."
+    if (geminiKeys.length === 0 && !groqKey && openRouterKeys.length === 0) {
+      return res.status(503).json({ 
+        error: "AI service is temporarily unconfigured on this server.",
+        message: "Please configure GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY in the Environment Variables."
       });
     }
 
@@ -1052,7 +1053,9 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
       const modelsToTry = [
         resolvedModel,
         "gemini-3.1-flash-lite",
-        "gemini-3.8-flash"
+        "gemini-3.8-flash",
+        "gemini-2.5-flash",
+        "gemini-4-hydrogen"
       ];
       const uniqueModels = [...new Set(modelsToTry)];
 
@@ -1133,9 +1136,10 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
         }
 
         const groqModels = [
+          "llama-3.3-70b-versatile",
           "openai/gpt-oss-120b",
           "openai/gpt-oss-20b",
-          "qwen/qwen3.8-27b"
+          "llama-3.1-8b-instant"
         ];
 
         const isJson = config?.responseMimeType === "application/json";
@@ -1170,6 +1174,81 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
       }
     }
 
+    // 3. Fallback to OpenRouter if Gemini & Groq were exhausted
+    if (openRouterKeys.length > 0) {
+      let promptText = "";
+      if (typeof contents === 'string') {
+        promptText = contents;
+      } else if (Array.isArray(contents)) {
+        promptText = contents.map((c: any) => {
+          if (typeof c === 'string') return c;
+          if (c.parts) return c.parts.map((p: any) => p.text || '').join('\n');
+          return '';
+        }).join('\n\n');
+      } else if (contents?.parts) {
+        promptText = contents.parts.map((p: any) => p.text || '').join('\n');
+      }
+
+      const isJson = config?.responseMimeType === "application/json";
+      const systemPrompt = (config?.systemInstruction || "You are an expert AI physical education assistant.") + 
+        (isJson ? " You must respond with valid JSON only, without markdown fences." : "");
+      const openRouterModels = [
+        "google/gemini-2.5-flash",
+        "openai/gpt-4o-mini",
+        "meta-llama/llama-3.3-70b-instruct:free"
+      ];
+
+      for (const orKey of openRouterKeys) {
+        for (const orModel of openRouterModels) {
+          const orAbort = new AbortController();
+          const orTimer = setTimeout(() => orAbort.abort(), 18000);
+          try {
+            const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${orKey}`,
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://smartpeindia.app",
+                "X-Title": "SmartPE India"
+              },
+              body: JSON.stringify({
+                model: orModel,
+                messages: [
+                  { role: "system", content: systemPrompt },
+                  { role: "user", content: promptText }
+                ],
+                ...(isJson ? { response_format: { type: "json_object" } } : {})
+              }),
+              signal: orAbort.signal
+            });
+            clearTimeout(orTimer);
+
+            if (!orRes.ok) {
+              const errText = await orRes.text().catch(() => "");
+              lastError = new Error(`OpenRouter ${orRes.status}: ${errText.slice(0, 150)}`);
+              if (orRes.status === 401 || orRes.status === 403) break;
+              continue;
+            }
+
+            const orData: any = await orRes.json();
+            const textOut = orData?.choices?.[0]?.message?.content;
+            if (textOut) {
+              return res.json({
+                text: textOut,
+                provider: "openrouter",
+                model: orModel
+              });
+            }
+          } catch (orErr: any) {
+            clearTimeout(orTimer);
+            lastError = orErr;
+            console.warn(`OpenRouter model ${orModel} failed:`, orErr?.message);
+            continue;
+          }
+        }
+      }
+    }
+
     // Sanitize error outputs for production safety
     let statusCode = 500;
     let errorMessage = "AI generation could not be completed at this time.";
@@ -1181,6 +1260,14 @@ apiRouter.post("/ai/generate", optionalAuth, async (req: AuthenticatedRequest, r
     } else if (errorStr.includes("503") || errorStr.includes("high demand") || errorStr.includes("unavailable")) {
       statusCode = 503;
       errorMessage = "AI servers are experiencing temporary high demand. Please try again in a moment.";
+    } else if (
+      errorStr.includes("api_key_invalid") ||
+      errorStr.includes("api key not valid") ||
+      errorStr.includes("invalid_api_key") ||
+      errorStr.includes("invalid api key")
+    ) {
+      statusCode = 503;
+      errorMessage = "Upstream AI service credentials are temporarily unavailable. Please try again shortly.";
     } else if (lastError?.message) {
       if (lastError.message.includes("does not exist") || lastError.message.includes("model_not_found")) {
         errorMessage = "AI model is currently updating. Please try again in a moment.";

@@ -73,11 +73,13 @@ export const callAIBase = async (payload: any, retries = 2): Promise<any> => {
         throw quotaErr;
       }
 
-      const isInvalidKeyError = (response.status === 401 && (errorMessage.includes("API_KEY") || errorMessage.includes("key"))) || 
+      const lowerErr = errorMessage.toLowerCase();
+      const isInvalidKeyError = (response.status === 401 && (errorMessage.includes("API_KEY") || lowerErr.includes("key"))) || 
                                errorMessage.includes("API_KEY_INVALID") || 
-                               errorMessage.includes("api key not valid");
+                               lowerErr.includes("api key not valid") ||
+                               lowerErr.includes("upstream ai service credentials");
       if (isInvalidKeyError) {
-        const keyErr: any = new Error("AI service authentication error. Please try again or refresh the page.");
+        const keyErr: any = new Error("The AI service is temporarily unavailable on the server. Please try again shortly.");
         keyErr.status = response.status;
         keyErr.nonRetryable = true;
         throw keyErr;

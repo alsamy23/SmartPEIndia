@@ -293,13 +293,13 @@ const Dashboard: React.FC<{
     <div className="space-y-6 md:space-y-10 pb-20 overflow-x-hidden relative">
       {/* Persistent Compact Floating Action Toolbar */}
       <div className="sticky top-1 sm:top-2 z-30 w-full mb-2">
-        <div className="bg-[#0D2B52]/95 backdrop-blur-md text-white border-2 border-slate-900 rounded-2xl sm:rounded-full p-2 px-3 sm:px-4 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] flex items-center justify-between gap-2.5 overflow-x-auto custom-scrollbar">
-          <div className="flex items-center gap-2 shrink-0 pr-2 border-r border-slate-700/80">
+        <div className="bg-[#0D2B52]/95 backdrop-blur-md text-white border-2 border-slate-900 rounded-2xl p-2.5 px-3 sm:px-4 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2 shrink-0 lg:pr-3 lg:border-r lg:border-slate-700/80">
             <span className="w-2 h-2 rounded-full bg-[#D4A017] animate-pulse"></span>
             <span className="text-[10px] font-black uppercase tracking-widest text-[#D4A017] whitespace-nowrap">Quick Tools</span>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar py-0.5">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 py-0.5 flex-1">
             {[
               { id: 'coaching-academy', label: 'Coaching & Academy', icon: Trophy, color: 'bg-amber-400 text-slate-950 hover:bg-amber-300 font-black shadow-sm' },
               { id: 'planner', label: 'Generate Lesson', icon: Sparkles, color: 'bg-[#D4A017] text-slate-900 hover:bg-[#e0b028] shadow-xs' },
@@ -315,7 +315,7 @@ const Dashboard: React.FC<{
                 <button
                   key={tool.id}
                   onClick={() => onNavigate?.(tool.id)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl sm:rounded-full text-[10.5px] font-black uppercase tracking-wider transition-all whitespace-nowrap active:scale-95 cursor-pointer shrink-0 ${tool.color}`}
+                  className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl sm:rounded-full text-[10px] sm:text-[10.5px] font-black uppercase tracking-wider transition-all whitespace-nowrap active:scale-95 cursor-pointer shrink-0 ${tool.color}`}
                 >
                   <IconComp size={13} className="shrink-0" />
                   <span>{tool.label}</span>
@@ -867,22 +867,22 @@ const Dashboard: React.FC<{
             </div>
 
             {/* Simulated High Fidelity Document Container */}
-            <div className="bg-white text-slate-900 rounded-[2rem] p-4 sm:p-6 md:p-8 min-h-[350px] border-4 border-slate-900 relative overflow-hidden flex flex-col justify-between">
-              {/* Decorative Stamp */}
-              <div className="absolute top-10 right-10 border-4 border-emerald-500/30 text-emerald-500/30 font-black text-[10px] md:text-xs uppercase tracking-widest px-3 py-1.5 rounded-xl rotate-12 pointer-events-none select-none">
-                CBSE-Aligned
-              </div>
-
+            <div className="bg-white text-slate-900 rounded-[2rem] p-4 sm:p-6 md:p-8 min-h-[350px] border-4 border-slate-900 relative overflow-hidden flex flex-col justify-between gap-4">
               {sampleOutputTab === 'lesson' && (
                 <div className="space-y-6 animate-in fade-in duration-300">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b-2 border-slate-200 pb-4 gap-2">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b-2 border-slate-200 pb-4 gap-3">
                     <div>
                       <span className="text-[9px] font-black uppercase text-[#FF6B00] tracking-wider">SMARTPE DIGITAL DAILY DIARY</span>
                       <h5 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-900">DAILY PE LESSON PLAN & LOG</h5>
                     </div>
-                    <div className="text-left sm:text-right text-[10px] font-mono text-slate-500 font-semibold space-y-0.5">
-                      <p>DOC ID: SMP-LP-8427</p>
-                      <p>BOARD: CBSE HPE STRAND 1</p>
+                    <div className="flex flex-col sm:items-end gap-1.5">
+                      <span className="inline-block border-2 border-emerald-500/40 bg-emerald-50 text-emerald-700 font-black text-[9px] uppercase tracking-widest px-2.5 py-0.5 rounded-lg select-none">
+                        CBSE-Aligned
+                      </span>
+                      <div className="text-left sm:text-right text-[10px] font-mono text-slate-500 font-semibold space-y-0.5">
+                        <p>DOC ID: SMP-LP-8427</p>
+                        <p>BOARD: CBSE HPE STRAND 1</p>
+                      </div>
                     </div>
                   </div>
 
@@ -1090,10 +1090,10 @@ const Dashboard: React.FC<{
       </section>
 
       {/* 🛑 THE PROBLEM & THE SOLUTION */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-12 bg-slate-900 border-4 border-slate-900 rounded-[3.5rem] p-8 md:p-14 relative overflow-hidden text-white shadow-[12px_12px_0px_0px_rgba(255,107,0,1)]">
-        <div className="lg:col-span-5 space-y-6">
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 xl:gap-12 bg-slate-900 border-4 border-slate-900 rounded-[3rem] xl:rounded-[3.5rem] p-6 sm:p-8 lg:p-10 xl:p-12 relative overflow-hidden text-white shadow-[12px_12px_0px_0px_rgba(255,107,0,1)]">
+        <div className="lg:col-span-5 space-y-6 min-w-0">
           <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#FF6B00]">THE PROBLEM</p>
-          <h3 className="text-3xl md:text-5xl font-black uppercase tracking-tight leading-[1.0] text-white">
+          <h3 className="text-2xl sm:text-3xl lg:text-[2rem] xl:text-4xl 2xl:text-5xl font-black uppercase tracking-tight leading-[1.05] text-white break-words">
             PE Departments are drowning in <span className="text-slate-400">manual paperwork.</span>
           </h3>
           <p className="text-sm text-slate-300 font-medium leading-relaxed">
@@ -1113,7 +1113,7 @@ const Dashboard: React.FC<{
           </div>
         </div>
 
-        <div className="lg:col-span-7 bg-[#FFFDF9] border-4 border-slate-900 rounded-[2.5rem] p-6 md:p-10 text-slate-900 flex flex-col justify-between space-y-8 shadow-[4px_4px_0px_0px_rgba(255,107,0,1)]">
+        <div className="lg:col-span-7 min-w-0 bg-[#FFFDF9] border-4 border-slate-900 rounded-[2.5rem] p-6 md:p-10 text-slate-900 flex flex-col justify-between space-y-8 shadow-[4px_4px_0px_0px_rgba(255,107,0,1)]">
           <div className="space-y-4">
             <p className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-600">THE SOLUTION (SMARTPE INDIA)</p>
             <h3 className="text-2xl md:text-4xl font-black uppercase tracking-tight leading-[1.0] text-slate-900">
