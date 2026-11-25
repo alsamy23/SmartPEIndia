@@ -205,47 +205,59 @@
   }
 }
 
-/* Specific Page & Zoom Adjustments based on Printer Orientation */
+/* ============================================================
+   TOURNAMENT & FIXTURE MULTI-PAGE PRINT PAGINATION RULES
+   ============================================================ */
 @media print {
-  @page {
-    size: A4 portrait;
-    margin: 0mm !important;
-  }
-}
-
-@media print and (orientation: portrait) {
-  /* Scale down the entire bracket wrapper to fit perfectly onto A4 Portrait layout */
-  .print-bracket-canvas {
-    transform: scale(0.68) !important;
-    transform-origin: top center !important;
-    margin: 0.8cm auto !important;
-    /* Negative margin to pull upcoming documents upward because of scale container collapse */
-    margin-bottom: -15% !important;
-  }
-}
-
-@media print and (orientation: landscape) {
-  @page {
-    size: A4 landscape;
-    margin: 0.8cm !important;
+  .no-print-modal-backdrop {
+    position: static !important;
+    background: white !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    display: block !important;
   }
 
-  /* Landscape mode is wider, so we scale it down less, using full width gracefully */
-  .print-bracket-canvas {
-    transform: scale(0.88) !important;
-    transform-origin: top center !important;
-    margin: 0 auto !important;
-    /* Negative margin to handle scale collapse */
-    margin-bottom: -8% !important;
+  .no-print-modal-backdrop > div {
+    max-width: none !important;
+    max-height: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  #tournament-print-area {
+    display: block !important;
     width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
   }
 
-  /* Force tournament rounds to align in a pristine row for side-by-side progression */
-  .print-bracket-canvas [class*="md:flex-row"] {
-    display: flex !important;
-    flex-direction: row !important;
-    justify-content: space-between !important;
-    align-items: stretch !important;
-    gap: 1.5rem !important;
+  .tournament-print-page {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 4mm !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: white !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .tournament-print-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  .break-inside-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }

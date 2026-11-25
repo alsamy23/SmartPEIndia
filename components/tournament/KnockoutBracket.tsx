@@ -76,7 +76,17 @@ export const POPULAR_SPORTS = [
   'Throwball'
 ];
 
+import { EliminationType } from './tournamentDrawEngine.ts';
+
 interface KnockoutBracketProps {
+  sport?: string;
+  setSport?: (val: string) => void;
+  venue?: string;
+  setVenue?: (val: string) => void;
+  startTime?: string;
+  setStartTime?: (val: string) => void;
+  courtsCount?: number;
+  setCourtsCount?: (val: number) => void;
   tournamentName: string;
   setTournamentName: (val: string) => void;
   subTitle: string;
@@ -92,6 +102,14 @@ interface KnockoutBracketProps {
 }
 
 export const KnockoutBracket: React.FC<KnockoutBracketProps> = ({
+  sport: controlledSport,
+  setSport: setControlledSport,
+  venue: controlledVenue,
+  setVenue: setControlledVenue,
+  startTime: controlledStartTime,
+  setStartTime: setControlledStartTime,
+  courtsCount: controlledCourtsCount,
+  setCourtsCount: setControlledCourtsCount,
   tournamentName,
   setTournamentName,
   subTitle,
@@ -105,15 +123,29 @@ export const KnockoutBracket: React.FC<KnockoutBracketProps> = ({
   teamsList,
   setTeamsList
 }) => {
-  // Sport Selection
-  const [sport, setSport] = useState<string>('Football');
+  // Sport, Venue, Courts & Elimination Type
+  const [localSport, setLocalSport] = useState<string>('Football');
+  const sport = controlledSport ?? localSport;
+  const setSport = setControlledSport ?? setLocalSport;
+
+  const [localVenue, setLocalVenue] = useState<string>('School Main Sports Ground');
+  const venue = controlledVenue ?? localVenue;
+  const setVenue = setControlledVenue ?? setLocalVenue;
+
+  const [localCourtsCount, setLocalCourtsCount] = useState<number>(2);
+  const courtsCount = controlledCourtsCount ?? localCourtsCount;
+  const setCourtsCount = setControlledCourtsCount ?? setLocalCourtsCount;
+
+  const [eliminationType, setEliminationType] = useState<EliminationType>('single');
 
   // Timings & Durations
   const [firstHalf, setFirstHalf] = useState<number>(15);
   const [secondHalf, setSecondHalf] = useState<number>(15);
   const [halfTime, setHalfTime] = useState<number>(5);
   const [restGap, setRestGap] = useState<number>(10);
-  const [startTime, setStartTime] = useState('08:00');
+  const [localStartTime, setLocalStartTime] = useState('08:00');
+  const startTime = controlledStartTime ?? localStartTime;
+  const setStartTime = setControlledStartTime ?? setLocalStartTime;
 
   // Third Place Preference
   const [thirdPlaceMode, setThirdPlaceMode] = useState<'none' | 'same' | 'different'>('same');
@@ -711,6 +743,61 @@ Generated via SmartPE India Official Tournament Studio.`;
           </div>
         </div>
 
+        {/* Elimination Format, Venue & Courts/Pitches */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Elimination Format</label>
+            <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setEliminationType('single')}
+                className={`py-2.5 px-3 rounded-xl text-xs font-black uppercase transition-all ${
+                  eliminationType === 'single'
+                    ? 'bg-[#0D2B52] text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Single KO
+              </button>
+              <button
+                type="button"
+                onClick={() => setEliminationType('double')}
+                className={`py-2.5 px-3 rounded-xl text-xs font-black uppercase transition-all ${
+                  eliminationType === 'double'
+                    ? 'bg-[#0D2B52] text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Double Elim
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Venue / Ground</label>
+            <input
+              type="text"
+              value={venue}
+              onChange={(e) => setVenue(e.target.value)}
+              placeholder="e.g. Main Stadium / Indoor Hall"
+              className="w-full p-3.5 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Active Courts / Pitches</label>
+            <select
+              value={courtsCount}
+              onChange={(e) => setCourtsCount(parseInt(e.target.value, 10))}
+              className="w-full p-3.5 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
+            >
+              {[1, 2, 3, 4, 6, 8].map((n) => (
+                <option key={n} value={n}>{n} {n === 1 ? 'Court / Pitch' : 'Courts / Pitches'}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         {/* Timings breakdown */}
         <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
           <div className="flex items-center justify-between">
@@ -925,6 +1012,7 @@ Generated via SmartPE India Official Tournament Studio.`;
           tournamentName={tournamentName}
           subTitle={subTitle}
           category={category}
+          venue={venue}
           startDate={startDate}
           teamsList={teamsList}
           firstHalf={firstHalf}
@@ -932,6 +1020,9 @@ Generated via SmartPE India Official Tournament Studio.`;
           halfTime={halfTime}
           restGap={restGap}
           startTime={startTime}
+          courtsCount={courtsCount}
+          eliminationType={eliminationType}
+          thirdPlaceEnabled={thirdPlaceMode !== 'none'}
           showGridLines={true}
         />
       )}
@@ -1082,7 +1173,7 @@ Generated via SmartPE India Official Tournament Studio.`;
         </div>
       )}
 
-      {/* Interactive Print Preview Modal with A4/A3 sizing, Word export and WhatsApp share */}
+      {/* Interactive Vector Print & PDF Preview Modal */}
       <TournamentPrintPreviewModal
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
@@ -1090,8 +1181,14 @@ Generated via SmartPE India Official Tournament Studio.`;
         subTitle={subTitle}
         category={category}
         sport={sport}
+        venue={venue}
         startDate={startDate}
         startTime={startTime}
+        courtsCount={courtsCount}
+        eliminationType={eliminationType}
+        matchDurationMins={firstHalf + secondHalf + halfTime}
+        restGapMins={restGap}
+        thirdPlaceEnabled={thirdPlaceMode !== 'none'}
         format="knockout"
         teamsList={teamsList}
         rounds={generatedRounds}

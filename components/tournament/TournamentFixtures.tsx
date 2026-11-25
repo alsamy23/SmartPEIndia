@@ -21,10 +21,14 @@ export const TournamentFixtures: React.FC<TournamentFixturesProps> = ({ initialM
   const [fixtureMode, setFixtureMode] = useState<FixtureMode>(initialMode);
 
   // Shared Tournament State across formats
+  const [sport, setSport] = useState<string>('Football');
   const [tournamentName, setTournamentName] = useState('Football U-11 Championship');
   const [subTitle, setSubTitle] = useState('Official 16-Team Knockout Fixture');
   const [category, setCategory] = useState('U - 11');
+  const [venue, setVenue] = useState('School Main Sports Ground');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startTime, setStartTime] = useState('08:30');
+  const [courtsCount, setCourtsCount] = useState<number>(2);
   const [numTeams, setNumTeams] = useState<number>(16);
   const [teamsList, setTeamsList] = useState<string[]>(() => {
     return Array.from({ length: 16 }, (_, i) => `Team ${i + 1}`);
@@ -44,6 +48,7 @@ export const TournamentFixtures: React.FC<TournamentFixturesProps> = ({ initialM
     const text =
 `🏆 *OFFICIAL TOURNAMENT FIXTURES*
 📌 *Tournament:* ${tournamentName} (${category})
+⚽ *Sport:* ${sport} | 📍 *Venue:* ${venue}
 📅 *Date:* ${startDate} | 👥 *Teams:* ${teamsList.length} Teams
 🏅 *Format:* ${formatLabel}
 Official CBSE PE (Code 048) compliant draw.
@@ -75,7 +80,7 @@ https://smartpeindia.app/tournament-fixtures`;
                 <span>Tournament Fixtures</span>
               </span>
               <span className="px-3 py-1 bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 rounded-full text-[10px] font-black uppercase tracking-wider">
-                CBSE Class 12 Syllabus Ready
+                CBSE / BWF / FIFA Print Engine
               </span>
             </div>
 
@@ -93,10 +98,10 @@ https://smartpeindia.app/tournament-fixtures`;
               <button
                 onClick={() => setIsPrintModalOpen(true)}
                 className="px-3.5 py-1.5 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md transition-all active:scale-95"
-                title="Open interactive print preview with A4/A3 paper sizing and Word export"
+                title="Open Vector PDF & Multi-Page Print Studio (A4/A3)"
               >
                 <Printer size={13} />
-                <span>Print & Preview</span>
+                <span>Vector PDF & Print</span>
               </button>
             </div>
           </div>
@@ -158,7 +163,15 @@ https://smartpeindia.app/tournament-fixtures`;
 
       {/* RENDER ACTIVE MODE */}
       {fixtureMode === 'knockout' && (
-        <KnockoutBracket 
+        <KnockoutBracket
+          sport={sport}
+          setSport={setSport}
+          venue={venue}
+          setVenue={setVenue}
+          startTime={startTime}
+          setStartTime={setStartTime}
+          courtsCount={courtsCount}
+          setCourtsCount={setCourtsCount}
           tournamentName={tournamentName}
           setTournamentName={setTournamentName}
           subTitle={subTitle}
@@ -175,7 +188,7 @@ https://smartpeindia.app/tournament-fixtures`;
       )}
 
       {fixtureMode === 'roundrobin' && (
-        <RoundRobinLeague 
+        <RoundRobinLeague
           tournamentName={tournamentName}
           setTournamentName={setTournamentName}
           subTitle={subTitle}
@@ -188,11 +201,14 @@ https://smartpeindia.app/tournament-fixtures`;
           setNumTeams={setNumTeams}
           teamsList={teamsList}
           setTeamsList={setTeamsList}
+          sport={sport}
+          venue={venue}
+          courtsCount={courtsCount}
         />
       )}
 
       {fixtureMode === 'combination' && (
-        <CombinationTournament 
+        <CombinationTournament
           tournamentName={tournamentName}
           setTournamentName={setTournamentName}
           subTitle={subTitle}
@@ -205,19 +221,25 @@ https://smartpeindia.app/tournament-fixtures`;
           setNumTeams={setNumTeams}
           teamsList={teamsList}
           setTeamsList={setTeamsList}
+          sport={sport}
+          setSport={setSport}
+          venue={venue}
+          courtsCount={courtsCount}
         />
       )}
 
-      {/* Interactive Print Preview Modal */}
+      {/* Vector Print & PDF Preview Studio */}
       <TournamentPrintPreviewModal
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
         tournamentName={tournamentName}
         subTitle={subTitle}
         category={category}
-        sport="Football"
+        sport={sport}
+        venue={venue}
         startDate={startDate}
-        startTime="08:00"
+        startTime={startTime}
+        courtsCount={courtsCount}
         format={fixtureMode}
         teamsList={teamsList}
       />

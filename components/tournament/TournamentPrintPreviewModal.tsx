@@ -1,18 +1,32 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
-  X, Printer, Download, Share2, FileText, Check, Copy, 
-  Sparkles, AlertCircle, Info, ChevronRight, Layers, Trophy, 
-  Calendar, Clock, Shield, Maximize2, Minimize2, ZoomIn, ZoomOut,
-  ChevronDown
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  X, Printer, Download, Share2, FileText, Sparkles, Trophy,
+  Layers, Users, CalendarClock, MapPin, ShieldCheck, Building2
 } from 'lucide-react';
-import { toPng } from 'html-to-image';
-import { jsPDF } from 'jspdf';
 import { toast } from '../../services/toast.ts';
 import { trackEvent } from '../../services/analytics.ts';
 import { safeOpenExternal, downloadBlobFile } from '../../utils/safeBrowser.ts';
+import {
+  PaperSize,
+  ExportViewMode,
+  TournamentFormat,
+  EliminationType,
+  TournamentPdfConfig,
+  KnockoutDrawTree,
+  BracketPageSlice,
+  UnifiedMatch,
+  PoolData,
+  TeamScheduleGroup,
+  buildSeededKnockoutDraw,
+  buildPoolsAndStandings,
+  buildTeamSchedulesAndOrderOfPlay,
+  computeKnockoutPaginationPlan,
+  truncateText,
+  formatDisplayDate
+} from './tournamentDrawEngine.ts';
+import { buildTournamentVectorPdf } from './TournamentVectorPdf.ts';
 
-export type PaperSize = 'A4' | 'A3';
-export type Orientation = 'landscape' | 'portrait';
+export type { PaperSize, ExportViewMode };
 
 export interface TournamentPrintPreviewModalProps {
   isOpen: boolean;
@@ -21,12 +35,23 @@ export interface TournamentPrintPreviewModalProps {
   subTitle?: string;
   category: string;
   sport: string;
+  venue?: string;
   startDate: string;
   startTime: string;
-  format: 'knockout' | 'roundrobin' | 'combination';
+  format: TournamentFormat;
+  eliminationType?: EliminationType;
+  courtsCount?: number;
+  matchDurationMins?: number;
+  restGapMins?: number;
+  thirdPlaceEnabled?: boolean;
+  winPoints?: number;
+  drawPoints?: number;
+  lossPoints?: number;
+  leagueType?: 'single' | 'double';
   teamsList: string[];
   rounds?: any[];
   matches?: any[];
+  standings?: any[];
   byesCount?: number;
   setupFormula?: {
     totalTeams: number;
@@ -41,6 +66,28 @@ export interface TournamentPrintPreviewModalProps {
   };
 }
 
+interface PreviewPageDescriptor {
+  id: string;
+  orientation: 'landscape' | 'portrait';
+  paperSize: PaperSize;
+  sectionLabel: string;
+  isRoundRobin: boolean;
+  kind: 'knockout-slice' | 'losers-stage' | 'pool-page' | 'team-view-page' | 'master-schedule-page';
+  slice?: BracketPageSlice;
+  tree?: KnockoutDrawTree;
+  pools?: PoolData[];
+  teamGroups?: TeamScheduleGroup[];
+  scheduleRows?: UnifiedMatch[];
+}
+
+const getDefaultSchoolName = () => {
+  try {
+    return localStorage.getItem('smartpe_school_name') || "SHRADDHA CHILDREN'S ACADEMY";
+  } catch {
+    return "SHRADDHA CHILDREN'S ACADEMY";
+  }
+};
+
 export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalProps> = ({
   isOpen,
   onClose,
@@ -48,37 +95,44 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
   subTitle,
   category,
   sport,
+  venue: initialVenue = 'School Sports Complex',
   startDate,
   startTime,
   format,
+  eliminationType = 'single',
+  courtsCount: initialCourts,
+  matchDurationMins = 35,
+  restGapMins = 10,
+  thirdPlaceEnabled = true,
+  winPoints = 3,
+  drawPoints = 1,
+  lossPoints = 0,
+  leagueType = 'single',
   teamsList,
-  rounds = [],
   matches = [],
-  byesCount: initialByesCount,
-  setupFormula
+  standings = []
 }) => {
-  const printSheetRef = useRef<HTMLDivElement>(null);
-
-  // Print Layout Preferences
   const numTeams = teamsList.length || 16;
-  const recommendedPaper: PaperSize = numTeams > 16 ? 'A3' : 'A4';
-  const [paperSize, setPaperSize] = useState<PaperSize>(recommendedPaper);
-  const [orientation, setOrientation] = useState<Orientation>('landscape');
-  const [previewTab, setPreviewTab] = useState<'bracket' | 'table' | 'byes'>('bracket');
+  const defaultViewMode: ExportViewMode =
+    format === 'knockout' ? 'full-bracket' : 'round-robin-pools';
+
+  const [paperSize, setPaperSize] = useState<PaperSize>('A4');
+  const [viewMode, setViewMode] = useState<ExportViewMode>(defaultViewMode);
+  const [schoolName, setSchoolName] = useState<string>(getDefaultSchoolName);
+  const [venue, setVenue] = useState<string>(initialVenue);
+  const [courtsCount, setCourtsCount] = useState<number>(initialCourts || (numTeams > 16 ? 4 : 2));
+  const [directorName, setDirectorName] = useState<string>('');
+  const [chiefRefereeName, setChiefRefereeName] = useState<string>('');
   const [isExporting, setIsExporting] = useState(false);
-  const [schoolName, setSchoolName] = useState("SHRADDHA CHILDREN'S ACADEMY");
-  const [showWhatsAppDropdown, setShowWhatsAppDropdown] = useState(false);
 
-  // Keep paper recommendation updated if teams change
   useEffect(() => {
-    if (numTeams > 16) {
-      setPaperSize('A3');
-    } else {
-      setPaperSize('A4');
-    }
-  }, [numTeams]);
+    setViewMode(format === 'knockout' ? 'full-bracket' : 'round-robin-pools');
+  }, [format]);
 
-  // Handle ESC key to dismiss modal
+  useEffect(() => {
+    if (initialVenue) setVenue(initialVenue);
+  }, [initialVenue]);
+
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -88,105 +142,278 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  const pdfConfig: TournamentPdfConfig = useMemo(
+    () => ({
+      organizationName: schoolName,
+      tournamentName,
+      subTitle,
+      sport,
+      category,
+      venue,
+      startDate,
+      startTime,
+      format,
+      eliminationType,
+      paperSize,
+      viewMode,
+      teamsList,
+      courtsCount,
+      matchDurationMins,
+      restGapMins,
+      thirdPlaceEnabled,
+      winPoints,
+      drawPoints,
+      lossPoints,
+      leagueType,
+      directorName: directorName.trim() || undefined,
+      chiefRefereeName: chiefRefereeName.trim() || undefined,
+      existingMatches: matches,
+      existingStandings: standings
+    }),
+    [
+      schoolName,
+      tournamentName,
+      subTitle,
+      sport,
+      category,
+      venue,
+      startDate,
+      startTime,
+      format,
+      eliminationType,
+      paperSize,
+      viewMode,
+      teamsList,
+      courtsCount,
+      matchDurationMins,
+      restGapMins,
+      thirdPlaceEnabled,
+      winPoints,
+      drawPoints,
+      lossPoints,
+      leagueType,
+      directorName,
+      chiefRefereeName,
+      matches,
+      standings
+    ]
+  );
+
+  // Build exact paginated sheets list matching the Vector PDF Engine 1:1
+  const previewPages: PreviewPageDescriptor[] = useMemo(() => {
+    const pages: PreviewPageDescriptor[] = [];
+    const includePrimary =
+      viewMode === 'full-bracket' ||
+      viewMode === 'round-robin-pools' ||
+      viewMode === 'complete-pack';
+
+    if (includePrimary) {
+      if (format === 'knockout' && viewMode !== 'round-robin-pools') {
+        const tree = buildSeededKnockoutDraw(pdfConfig);
+        const plan = computeKnockoutPaginationPlan(
+          tree.N,
+          tree.P,
+          tree.totalRounds,
+          paperSize,
+          eliminationType
+        );
+        plan.forEach((slice, idx) => {
+          pages.push({
+            id: `ko-${idx}-${slice.mode}`,
+            orientation: 'landscape',
+            paperSize,
+            sectionLabel: slice.sectionLabel,
+            isRoundRobin: false,
+            kind: slice.mode === 'losers-stage' ? 'losers-stage' : 'knockout-slice',
+            slice,
+            tree
+          });
+        });
+      } else {
+        const { pools, playoffTree } = buildPoolsAndStandings(pdfConfig);
+        // Group pools cleanly (2 pools per page if teams <= 5 each, else 1 pool per page)
+        let bucket: PoolData[] = [];
+        pools.forEach((pool) => {
+          if (bucket.length > 0 && (bucket.length >= 2 || pool.teams.length > 5 || bucket[0].teams.length > 5)) {
+            pages.push({
+              id: `pool-${pages.length}`,
+              orientation: 'portrait',
+              paperSize: 'A4',
+              sectionLabel: bucket.map((b) => b.poolName).join(' & ').toUpperCase(),
+              isRoundRobin: true,
+              kind: 'pool-page',
+              pools: bucket
+            });
+            bucket = [];
+          }
+          bucket.push(pool);
+        });
+        if (bucket.length > 0) {
+          pages.push({
+            id: `pool-${pages.length}`,
+            orientation: 'portrait',
+            paperSize: 'A4',
+            sectionLabel: bucket.map((b) => b.poolName).join(' & ').toUpperCase(),
+            isRoundRobin: true,
+            kind: 'pool-page',
+            pools: bucket
+          });
+        }
+        if (playoffTree) {
+          pages.push({
+            id: `combo-playoffs-${pages.length}`,
+            orientation: 'landscape',
+            paperSize,
+            sectionLabel: 'STAGE 2: KNOCKOUT PLAYOFF BRACKET',
+            isRoundRobin: false,
+            kind: 'knockout-slice',
+            tree: playoffTree,
+            slice: {
+              pageNumber: pages.length + 1,
+              title: 'Stage 2 Knockout Playoffs',
+              sectionLabel: 'STAGE 2: KNOCKOUT PLAYOFF BRACKET',
+              mode: 'final-stage',
+              slotStart: 0,
+              slotEnd: playoffTree.P,
+              startRound: 0,
+              endRound: playoffTree.totalRounds,
+              includeThirdPlace: true
+            }
+          });
+        }
+      }
+    }
+
+    if (viewMode === 'team-view' || viewMode === 'complete-pack') {
+      const { teamSchedules } = buildTeamSchedulesAndOrderOfPlay(pdfConfig);
+      // Group 2–3 teams per A4 portrait page without splitting any team block
+      let chunk: TeamScheduleGroup[] = [];
+      let approxRows = 0;
+      teamSchedules.forEach((t) => {
+        const rows = Math.max(1, t.matches.length) + 2;
+        if (chunk.length > 0 && (chunk.length >= 3 || approxRows + rows > 28)) {
+          pages.push({
+            id: `teams-${pages.length}`,
+            orientation: 'portrait',
+            paperSize: 'A4',
+            sectionLabel: 'TEAM-WISE FIXTURE SHEETS',
+            isRoundRobin: false,
+            kind: 'team-view-page',
+            teamGroups: chunk
+          });
+          chunk = [];
+          approxRows = 0;
+        }
+        chunk.push(t);
+        approxRows += rows;
+      });
+      if (chunk.length > 0) {
+        pages.push({
+          id: `teams-${pages.length}`,
+          orientation: 'portrait',
+          paperSize: 'A4',
+          sectionLabel: 'TEAM-WISE FIXTURE SHEETS',
+          isRoundRobin: false,
+          kind: 'team-view-page',
+          teamGroups: chunk
+        });
+      }
+    }
+
+    if (viewMode === 'master-schedule' || viewMode === 'complete-pack') {
+      const { masterOrderOfPlay } = buildTeamSchedulesAndOrderOfPlay(pdfConfig);
+      const rowsPerPage = 28;
+      for (let i = 0; i < Math.max(1, masterOrderOfPlay.length); i += rowsPerPage) {
+        pages.push({
+          id: `master-${pages.length}`,
+          orientation: 'portrait',
+          paperSize: 'A4',
+          sectionLabel: 'MASTER ORDER OF PLAY (OFFICIAL DESK)',
+          isRoundRobin: false,
+          kind: 'master-schedule-page',
+          scheduleRows: masterOrderOfPlay.slice(i, i + rowsPerPage)
+        });
+      }
+    }
+
+    return pages;
+  }, [pdfConfig, format, viewMode, paperSize, eliminationType]);
+
   if (!isOpen) return null;
 
-  // Bracket Mathematics for Classic Lined Tree
-  const N = teamsList.length || 16;
-  const P = Math.max(4, Math.pow(2, Math.ceil(Math.log2(N || 4))));
-  const totalRounds = Math.log2(P);
-  const calcByesCount = initialByesCount ?? (P - N);
-  const Nu = N % 2 === 0 ? N / 2 : (N + 1) / 2;
+  const formattedDate = formatDisplayDate(startDate);
+  const primaryOrientation = previewPages[0]?.orientation || 'landscape';
+  const primaryPaper = previewPages[0]?.paperSize || paperSize;
 
-  // Compute CBSE Bye Allocation Slots
-  const byeSlots = new Set<number>();
-  let botLower = P - 1;
-  let topUpper = 0;
-  let topLower = P / 2;
-  let botUpper = P / 2 - 1;
-
-  for (let b = 0; b < calcByesCount; b++) {
-    const step = b % 4;
-    if (step === 0) {
-      byeSlots.add(botLower);
-      botLower -= 2;
-      if (botLower < P / 2) botLower = P - 2;
-    } else if (step === 1) {
-      byeSlots.add(topUpper);
-      topUpper += 2;
-      if (topUpper >= P / 2) topUpper = 1;
-    } else if (step === 2) {
-      byeSlots.add(topLower);
-      topLower += 2;
-      if (topLower >= P) topLower = P / 2 + 1;
-    } else if (step === 3) {
-      byeSlots.add(botUpper);
-      botUpper -= 2;
-      if (botUpper < 0) botUpper = P / 2 - 2;
+  // Direct Pure Vector PDF Download (Zero DOM screenshots!)
+  const handleDownloadPdf = async () => {
+    setIsExporting(true);
+    toast.loading('Building multi-page Vector PDF...', { id: 'vector-pdf-gen' });
+    try {
+      const { doc, fileName, pageCount } = buildTournamentVectorPdf(pdfConfig);
+      doc.save(fileName);
+      toast.dismiss('vector-pdf-gen');
+      toast.success(`Downloaded ${pageCount}-page Vector ${paperSize} PDF!`);
+      trackEvent('resource_downloaded', {
+        resource_name: 'Tournament Vector PDF',
+        format: 'pdf',
+        paperSize,
+        viewMode,
+        pageCount
+      });
+    } catch (err) {
+      console.error('Vector PDF export error:', err);
+      toast.dismiss('vector-pdf-gen');
+      toast.error('Could not generate Vector PDF. Please try Print / Save as PDF.');
+    } finally {
+      setIsExporting(false);
     }
-  }
-
-  // Populate slots (0 to P-1)
-  const slots: Array<{ slotIndex: number; teamName: string; isBye: boolean }> = [];
-  let teamCursor = 0;
-  for (let i = 0; i < P; i++) {
-    const isBye = byeSlots.has(i) && calcByesCount > 0;
-    const assignedTeam = teamsList[teamCursor] || `Team ${i + 1}`;
-    if (teamCursor < teamsList.length) {
-      teamCursor++;
-    }
-    slots.push({
-      slotIndex: i,
-      teamName: assignedTeam,
-      isBye
-    });
-  }
-
-  // Calculate standard match times
-  const addMinutes = (baseTime: string, mins: number) => {
-    const [hStr, mStr] = (baseTime || '08:00').split(':');
-    let h = parseInt(hStr, 10) || 8;
-    let m = parseInt(mStr, 10) || 0;
-    m += mins;
-    h += Math.floor(m / 60);
-    m = m % 60;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    let h12 = h % 12;
-    if (h12 === 0) h12 = 12;
-    return `${h12}.${String(m).padStart(2, '0')}${ampm}`;
   };
 
-  const matchDuration = 45;
-  const roundTimes: string[][] = [];
-  let globalMatchIndex = 0;
-
-  for (let r = 0; r < totalRounds; r++) {
-    const matchesInRound = Math.pow(2, totalRounds - r - 1);
-    const timesForThisRound: string[] = [];
-    for (let m = 0; m < matchesInRound; m++) {
-      timesForThisRound.push(addMinutes(startTime || '08:00', globalMatchIndex * matchDuration));
-      globalMatchIndex++;
-    }
-    roundTimes.push(timesForThisRound);
-  }
-
-  // Layout sizing geometry
-  const ROW_HEIGHT = P <= 8 ? 56 : P <= 16 ? 44 : 36;
-  const SLOT_WIDTH = 250;
-  const STEP_COL_WIDTH = 135;
-
-  // Format date helper
-  const formattedDate = (() => {
+  // Share Pure Vector PDF on WhatsApp
+  const handleWhatsAppSharePdf = async () => {
+    setIsExporting(true);
+    toast.loading('Preparing official Vector PDF for WhatsApp...', { id: 'wa-vector-pdf' });
     try {
-      if (!startDate) return new Date().toLocaleDateString('en-GB');
-      const parts = startDate.split('-');
-      if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
-      return startDate;
-    } catch {
-      return startDate;
-    }
-  })();
+      const { doc, fileName, pageCount } = buildTournamentVectorPdf(pdfConfig);
+      const pdfBlob = doc.output('blob');
+      const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
-  // Native Print with dynamic @page sizing injection
+      const caption = `🏆 *OFFICIAL TOURNAMENT FIXTURES (${pageCount} Pages)*
+📌 *Tournament:* ${tournamentName} (${category})
+⚽ *Sport:* ${sport} | 📍 *Venue:* ${venue}
+📅 *Date:* ${formattedDate} | 👥 *Teams:* ${numTeams}
+📄 *Sheet Format:* ${paperSize} Official Federation Draw`;
+
+      if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        toast.dismiss('wa-vector-pdf');
+        await navigator.share({
+          files: [pdfFile],
+          title: `${tournamentName} Official Fixtures`,
+          text: caption
+        });
+        toast.success('Shared Vector PDF via WhatsApp!');
+        return;
+      }
+
+      doc.save(fileName);
+      toast.dismiss('wa-vector-pdf');
+      toast.success('Vector PDF downloaded! Opening WhatsApp...');
+      safeOpenExternal(
+        `https://api.whatsapp.com/send?text=${encodeURIComponent(
+          caption + '\n\n📄 _(Attach the downloaded official PDF fixture sheet)_'
+        )}`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.dismiss('wa-vector-pdf');
+      toast.error('Failed to prepare PDF share.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Clean Paginated Browser Print
   const handlePrint = () => {
     const existingStyle = document.getElementById('dynamic-print-page-style');
     if (existingStyle) existingStyle.remove();
@@ -195,1116 +422,795 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
     styleEl.id = 'dynamic-print-page-style';
     styleEl.innerHTML = `
       @page {
-        size: ${paperSize} ${orientation};
-        margin: 8mm;
-      }
-      @media print {
-        body * {
-          visibility: hidden;
-        }
-        #tournament-print-area, #tournament-print-area * {
-          visibility: visible;
-        }
-        #tournament-print-area {
-          position: fixed;
-          left: 0;
-          top: 0;
-          width: 100vw;
-          height: 100vh;
-          margin: 0;
-          padding: 8mm;
-          background: white !important;
-          color: black !important;
-          box-shadow: none !important;
-          border: none !important;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
-        }
+        size: ${primaryPaper} ${primaryOrientation};
+        margin: 6mm;
       }
     `;
     document.head.appendChild(styleEl);
 
     trackEvent('resource_downloaded', {
-      resource_name: `Tournament Fixture Print (${sport})`,
-      format: 'pdf',
-      paperSize,
-      orientation
+      resource_name: `Tournament Print (${sport})`,
+      format: 'print',
+      paperSize: primaryPaper,
+      viewMode
     });
-
     window.print();
   };
 
-  // Direct PDF Download (.pdf) via jsPDF
-  const handleDownloadPdf = async () => {
-    if (!printSheetRef.current) return;
+  // Structured Word (.doc) export using pure HTML fixture tables (zero blurry raster screenshots)
+  const handleExportWord = () => {
     setIsExporting(true);
-    toast.loading("Generating high-resolution PDF document...", { id: 'pdf-gen' });
     try {
-      const dataUrl = await toPng(printSheetRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: '#ffffff'
-      });
+      const { masterOrderOfPlay } = buildTeamSchedulesAndOrderOfPlay(pdfConfig);
+      const rowsHtml = masterOrderOfPlay
+        .map(
+          (m, idx) => `
+          <tr style="background-color:${idx % 2 === 1 ? '#f8fafc' : '#ffffff'};">
+            <td style="padding:5px; text-align:center; font-weight:bold; color:#0D2B52;">${m.matchCode}</td>
+            <td style="padding:5px;">${m.stage}</td>
+            <td style="padding:5px; text-align:center;">${m.date} • ${m.time}</td>
+            <td style="padding:5px; text-align:center;">${m.court}</td>
+            <td style="padding:5px; font-weight:bold;">${m.team1}</td>
+            <td style="padding:5px; text-align:center;">[ &nbsp; ] - [ &nbsp; ]</td>
+            <td style="padding:5px; font-weight:bold;">${m.team2}</td>
+          </tr>`
+        )
+        .join('');
 
-      const pdf = new jsPDF({
-        orientation: orientation === 'portrait' ? 'portrait' : 'landscape',
-        unit: 'mm',
-        format: paperSize.toLowerCase()
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const margin = 8;
-      const imgWidth = pdfWidth - margin * 2;
-      const imgHeight = (printSheetRef.current.offsetHeight * imgWidth) / printSheetRef.current.offsetWidth;
-
-      pdf.addImage(dataUrl, 'PNG', margin, margin, imgWidth, Math.min(imgHeight, pdfHeight - margin * 2));
-      const cleanFileName = `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Official_Fixture_${paperSize}.pdf`;
-      pdf.save(cleanFileName);
-
-      toast.dismiss('pdf-gen');
-      toast.success(`Official ${paperSize} PDF file downloaded successfully!`);
-      trackEvent('resource_downloaded', { resource_name: 'Tournament Fixture PDF', format: 'pdf' });
-    } catch (err) {
-      console.error(err);
-      toast.dismiss('pdf-gen');
-      toast.error("Failed to generate PDF. You can also use Print / Save PDF.");
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  // Export to Microsoft Word (.doc) with VISUAL BRACKET IMAGE embedded + complete match schedule table
-  const handleExportWord = async () => {
-    setIsExporting(true);
-    toast.loading("Capturing bracket image & creating Word document...", { id: 'word-export' });
-    try {
-      const title = `${tournamentName || 'Tournament'} - ${category || ''} Fixtures`;
-      const dateStr = formattedDate;
-
-      // 1. Ensure bracket tab is active so bracket canvas is fully mounted
-      if (previewTab !== 'bracket') {
-        setPreviewTab('bracket');
-        await new Promise(resolve => setTimeout(resolve, 150));
-      }
-
-      // 2. Identify bracket tree canvas or fallback to print sheet
-      const bracketCanvas = document.getElementById('tournament-bracket-tree-canvas') || printSheetRef.current;
-      if (!bracketCanvas) throw new Error("Bracket canvas element not found");
-
-      const origW = bracketCanvas.offsetWidth || 1050;
-      const origH = bracketCanvas.offsetHeight || (P * ROW_HEIGHT + 60);
-
-      // 3. Determine paper size and landscape constraints
-      const isA3 = paperSize === 'A3';
-      const pageSizePtW = isA3 ? '1190.6pt' : '841.9pt';
-      const pageSizePtH = isA3 ? '841.9pt' : '595.3pt';
-
-      // Page 1 budget: Available printable height minus header (~45pt) and signatures (~28pt)
-      const maxTargetW = isA3 ? 1130 : 785;
-      const maxTargetH = isA3 ? 660 : 425;
-
-      // Scale proportionally so the entire bracket fits within Page 1
-      const scale = Math.min(maxTargetW / origW, maxTargetH / origH, 1);
-      const renderWidthPt = Math.max(220, Math.round(origW * scale));
-      const renderHeightPt = Math.max(160, Math.round(origH * scale));
-
-      // 4. Capture visual bracket drawing as high-res PNG
-      const imgDataUrl = await toPng(bracketCanvas, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: '#ffffff'
-      });
-
-      // 5. Build sequential matches table for Page 2
-      let tableRows = '';
-      if (matches && matches.length > 0) {
-        tableRows = matches.map((m: any, idx: number) => `
-          <tr style="text-align:center; background-color:${idx % 2 === 0 ? '#f8fafc' : '#ffffff'};">
-            <td style="font-weight:bold; color:#0D2B52; padding:5px;">${m.name || `Match ${idx + 1}`}</td>
-            <td style="padding:5px;">${m.roundName || 'Knockout Round'}</td>
-            <td style="font-weight:bold; text-align:left; padding:5px 8px;">${m.team1 || 'TBD'}</td>
-            <td style="font-weight:bold; color:#888888; padding:5px;">VS</td>
-            <td style="font-weight:bold; text-align:left; padding:5px 8px;">${m.team2 || 'TBD'}</td>
-            <td style="padding:5px;">${m.date || dateStr}</td>
-            <td style="font-weight:bold; color:#b91c1c; padding:5px;">${m.time || startTime || 'TBD'}</td>
-          </tr>
-        `).join('');
-      } else {
-        let mCount = 1;
-        for (let r = 0; r < totalRounds; r++) {
-          const count = Math.pow(2, totalRounds - r - 1);
-          const rName = r === totalRounds - 1 ? 'Championship Final' : r === totalRounds - 2 ? 'Semi-Final' : r === totalRounds - 3 ? 'Quarter-Final' : `Round ${r + 1}`;
-          for (let m = 0; m < count; m++) {
-            tableRows += `
-              <tr style="text-align:center; background-color:${mCount % 2 === 0 ? '#f8fafc' : '#ffffff'};">
-                <td style="font-weight:bold; color:#0D2B52; padding:5px;">Match ${mCount++}</td>
-                <td style="padding:5px;">${rName}</td>
-                <td style="font-weight:bold; text-align:left; padding:5px 8px;">${r === 0 ? (slots[m * 2]?.teamName || 'TBD') : 'Winner of Previous Round'}</td>
-                <td style="font-weight:bold; color:#888; padding:5px;">VS</td>
-                <td style="font-weight:bold; text-align:left; padding:5px 8px;">${r === 0 ? (slots[m * 2 + 1]?.teamName || 'TBD') : 'Winner of Previous Round'}</td>
-                <td style="padding:5px;">${dateStr}</td>
-                <td style="font-weight:bold; color:#b91c1c; padding:5px;">${roundTimes[r]?.[m] || startTime}</td>
-              </tr>
-            `;
-          }
-        }
-      }
-
-      // 6. Complete Word Document with MSO Landscape formatting
-      const fullDoc = `
-        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-        <head>
-          <meta charset="utf-8">
-          <title>${title}</title>
-          <!--[if gte mso 9]>
-          <xml>
-            <w:WordDocument>
-              <w:View>Print</w:View>
-              <w:Zoom>100</w:Zoom>
-              <w:DoNotOptimizeForBrowser/>
-            </w:WordDocument>
-          </xml>
-          <![endif]-->
-          <style>
-            @page Section1 {
-              size: ${pageSizePtW} ${pageSizePtH};
-              mso-page-orientation: landscape;
-              margin: 14pt 18pt 14pt 18pt;
-              mso-header-margin: 0pt;
-              mso-footer-margin: 0pt;
-            }
-            div.Section1 {
-              page: Section1;
-            }
-            body {
-              font-family: Arial, Helvetica, sans-serif;
-              margin: 0;
-              padding: 0;
-              color: #1e293b;
-            }
-            table {
-              border-collapse: collapse;
-            }
-          </style>
-        </head>
-        <body lang="EN-US">
-          <div class="Section1">
-            <!-- PAGE 1: 1-PAGE MASTER TOURNAMENT FIXTURE BRACKET -->
-            <div style="text-align:center; margin:0 0 3pt 0;">
-              <h1 style="color:#0D2B52; font-size:12.5pt; text-transform:uppercase; margin:0; line-height:1.2;">
-                ${schoolName || "DEPARTMENT OF PHYSICAL EDUCATION & SPORTS"}
-              </h1>
-              <div style="color:#64748b; font-size:7.5pt; font-weight:bold; text-transform:uppercase; margin:1pt 0;">
-                OFFICIAL TOURNAMENT FIXTURE BRACKET TREE
-              </div>
-              <div style="color:#D4A017; font-size:10pt; font-weight:bold; text-transform:uppercase; margin:1pt 0;">
-                ${title}
-              </div>
-              <div style="font-size:7.5pt; color:#475569; margin:1pt 0;">
-                <strong>Sport:</strong> ${sport} &nbsp;|&nbsp; 
-                <strong>Date:</strong> ${dateStr} &nbsp;|&nbsp; 
-                <strong>Reporting Time:</strong> ${startTime} &nbsp;|&nbsp; 
-                <strong>Total Teams:</strong> ${N} &nbsp;|&nbsp; 
-                <strong>Upper Half:</strong> ${Nu} &nbsp;|&nbsp; 
-                <strong>Lower Half:</strong> ${P - Nu} &nbsp;|&nbsp; 
-                <strong>Byes:</strong> ${calcByesCount} &nbsp;|&nbsp; 
-                <strong>Total Matches:</strong> ${N - 1} &nbsp;|&nbsp; 
-                <strong>Rounds:</strong> ${totalRounds}
-              </div>
-            </div>
-
-            <!-- Scaled Bracket Drawing (Strictly fits on Page 1 without clipping or spilling) -->
-            <div style="text-align:center; margin:2pt 0; padding:0;">
-              <img src="${imgDataUrl}" 
-                   width="${renderWidthPt}" 
-                   height="${renderHeightPt}" 
-                   style="width:${renderWidthPt}pt; height:${renderHeightPt}pt; max-width:100%; border:1px solid #cbd5e1; display:inline-block;" 
-                   alt="Tournament Bracket Drawing" />
-            </div>
-
-            <!-- Page 1 Signatures -->
-            <table style="width:100%; margin-top:4pt; font-size:7.5pt; text-align:center; border:none;">
-              <tr>
-                <td style="width:33%; border:none; padding:2pt;">____________________________<br/><strong>Physical Education Teacher</strong></td>
-                <td style="width:33%; border:none; padding:2pt;">____________________________<br/><strong>Sports Coordinator / HOD</strong></td>
-                <td style="width:33%; border:none; padding:2pt;">____________________________<br/><strong>Principal / Headmaster</strong></td>
-              </tr>
-            </table>
-
-            <!-- EXPLICIT SECTION BREAK TO PAGE 2 (MATCH SCHEDULE & TIMINGS) -->
-            <br clear=all style='page-break-before:always; mso-break-type:section-break'>
-
-            <!-- PAGE 2: OFFICIAL MATCH SCHEDULE & TIMINGS -->
-            <div style="margin-top:4pt;">
-              <div style="text-align:center; margin-bottom:6pt;">
-                <h2 style="color:#0D2B52; font-size:12.5pt; text-transform:uppercase; margin:0 0 2pt 0;">
-                  ${schoolName}
-                </h2>
-                <div style="color:#64748b; font-size:7.5pt; font-weight:bold; text-transform:uppercase; margin:1pt 0;">
-                  DEPARTMENT OF PHYSICAL EDUCATION & SPORTS
-                </div>
-                <div style="color:#D4A017; font-size:10.5pt; font-weight:bold; text-transform:uppercase; margin:1pt 0;">
-                  Official Match Schedule & Timings — ${title}
-                </div>
-                <div style="font-size:7.5pt; color:#475569;">
-                  <strong>Discipline:</strong> ${sport} &nbsp;|&nbsp; <strong>Date:</strong> ${dateStr} &nbsp;|&nbsp; <strong>Total Teams:</strong> ${N} &nbsp;|&nbsp; <strong>Total Matches:</strong> ${N - 1}
-                </div>
-              </div>
-
-              <!-- CBSE Unit 1 Mathematical Calculations -->
-              <div style="background-color:#f8fafc; padding:6pt 8pt; border:1px solid #cbd5e1; margin-bottom:8pt; font-size:7.5pt; line-height:1.4;">
-                <strong>CBSE Physical Education Code 048 - Mathematical Summary:</strong> 
-                Teams (N): <strong>${N}</strong> | Upper Half: <strong>${Nu}</strong> | Lower Half: <strong>${P - Nu}</strong> | Next Power of 2: <strong>${P}</strong> | Byes: <strong>${calcByesCount}</strong> (Upper: ${Math.floor(calcByesCount / 2)}, Lower: ${Math.ceil(calcByesCount / 2)}) | Matches: <strong>${N - 1}</strong> | Rounds: <strong>${totalRounds}</strong>
-              </div>
-
-              <!-- Match Schedule Table -->
-              <table border="1" cellpadding="5" cellspacing="0" style="border-collapse:collapse; width:100%; font-size:8pt; font-family:Arial, sans-serif;">
-                <tr style="background-color:#0D2B52; color:#ffffff; font-weight:bold; text-align:center;">
-                  <th style="padding:4px; color:#ffffff;">Match #</th>
-                  <th style="padding:4px; color:#ffffff;">Stage / Round</th>
-                  <th style="padding:4px; color:#ffffff;">Team 1</th>
-                  <th style="padding:4px; color:#ffffff;">VS</th>
-                  <th style="padding:4px; color:#ffffff;">Team 2</th>
-                  <th style="padding:4px; color:#ffffff;">Date</th>
-                  <th style="padding:4px; color:#ffffff;">Scheduled Time</th>
-                </tr>
-                ${tableRows}
-              </table>
-
-              <!-- Page 2 Signatures -->
-              <table style="width:100%; margin-top:20pt; font-size:7.5pt; text-align:center; border:none;">
-                <tr>
-                  <td style="width:33%; border:none; padding:4pt;">____________________________<br/><strong>Physical Education Teacher</strong></td>
-                  <td style="width:33%; border:none; padding:4pt;">____________________________<br/><strong>Sports Coordinator / HOD</strong></td>
-                  <td style="width:33%; border:none; padding:4pt;">____________________________<br/><strong>Principal / Headmaster</strong></td>
-                </tr>
-              </table>
-            </div>
+      const wordHtml = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>
+        <head><meta charset="utf-8"><title>${tournamentName}</title></head>
+        <body style="font-family:Arial,sans-serif; color:#0f172a;">
+          <div style="background:#0D2B52; color:#fff; padding:12px 16px; border-left:5px solid #D4A017;">
+            <div style="font-size:9pt; color:#D4A017; font-weight:bold;">${schoolName.toUpperCase()}</div>
+            <h1 style="margin:2px 0; font-size:15pt;">${tournamentName.toUpperCase()}</h1>
+            <div style="font-size:9pt;">${sport} • ${category} | Venue: ${venue} | Date: ${formattedDate}</div>
           </div>
-        </body>
-        </html>
-      `;
-
-      const blob = new Blob(['\ufeff', fullDoc], { type: 'application/msword' });
-      downloadBlobFile(blob, `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Official_Fixture_${paperSize}.doc`);
-
-      toast.dismiss('word-export');
-      toast.success(`Word document (.doc) exported successfully (${paperSize} 1-Page Bracket + Schedule)!`);
-      trackEvent('resource_downloaded', { resource_name: 'Tournament Fixtures Word', format: 'doc' });
-    } catch (err) {
-      console.error(err);
-      toast.dismiss('word-export');
-      toast.error("Failed to export Word document.");
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  // WhatsApp Share with ACTUAL PDF File attachment support
-  const handleWhatsAppSharePdf = async () => {
-    setShowWhatsAppDropdown(false);
-    if (!printSheetRef.current) return;
-    setIsExporting(true);
-    toast.loading("Generating PDF file for WhatsApp...", { id: 'wa-pdf' });
-    try {
-      const dataUrl = await toPng(printSheetRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: '#ffffff'
-      });
-
-      const pdf = new jsPDF({
-        orientation: orientation === 'portrait' ? 'portrait' : 'landscape',
-        unit: 'mm',
-        format: paperSize.toLowerCase()
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const margin = 8;
-      const imgWidth = pdfWidth - margin * 2;
-      const imgHeight = (printSheetRef.current.offsetHeight * imgWidth) / printSheetRef.current.offsetWidth;
-      pdf.addImage(dataUrl, 'PNG', margin, margin, imgWidth, Math.min(imgHeight, pdfHeight - margin * 2));
-
-      const pdfBlob = pdf.output('blob');
-      const filename = `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Official_Fixture.pdf`;
-      const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
-
-      const captionMessage = 
-`🏆 *OFFICIAL TOURNAMENT FIXTURES (PDF)*
-🏫 *${schoolName}*
-📌 *Event:* ${tournamentName} (${category})
-⚽ *Sport:* ${sport} | 📅 *Date:* ${formattedDate}
-⏰ *First Match:* ${startTime} | 👥 *Teams:* ${N}
-🎯 *Byes:* ${calcByesCount} Teams
-Official CBSE Physical Education Code 048 Tournament Sheet.`;
-
-      // 1. Mobile Web Share API: Shares the actual PDF document file directly into WhatsApp!
-      if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-        toast.dismiss('wa-pdf');
-        await navigator.share({
-          files: [pdfFile],
-          title: `Tournament Fixture - ${tournamentName}`,
-          text: captionMessage
-        });
-        toast.success("Shared PDF document via WhatsApp!");
-        trackEvent('tool_used', { tool_name: 'Tournament WhatsApp PDF Share', category: format, sport, teamsCount: N });
-        return;
-      }
-
-      // 2. Desktop Fallback: Downloads PDF to device and opens WhatsApp Web with the bulletin
-      pdf.save(filename);
-      toast.dismiss('wa-pdf');
-      toast.success("Official PDF downloaded! Opening WhatsApp to attach file...");
-
-      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(
-        captionMessage + '\n\n📄 _(Official Fixture PDF has been downloaded to your downloads folder. Please attach it now to send to this chat.)_'
-      )}`;
-      safeOpenExternal(waUrl);
-      trackEvent('tool_used', { tool_name: 'Tournament WhatsApp PDF Share', category: format, sport, teamsCount: N });
-    } catch (err) {
-      console.error(err);
-      toast.dismiss('wa-pdf');
-      toast.error("Could not share PDF directly. Opening WhatsApp with text summary.");
-      handleWhatsAppShareText();
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  // WhatsApp Share with ACTUAL PNG Image attachment
-  const handleWhatsAppShareImage = async () => {
-    setShowWhatsAppDropdown(false);
-    if (!printSheetRef.current) return;
-    setIsExporting(true);
-    toast.loading("Generating bracket image for WhatsApp...", { id: 'wa-img' });
-    try {
-      const dataUrl = await toPng(printSheetRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: '#ffffff'
-      });
-
-      const res = await fetch(dataUrl);
-      const blob = await res.blob();
-      const filename = `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Fixture.png`;
-      const imgFile = new File([blob], filename, { type: 'image/png' });
-
-      const captionMessage = 
-`🏆 *OFFICIAL TOURNAMENT FIXTURES BRACKET DRAW*
-🏫 *${schoolName}*
-📌 *Event:* ${tournamentName} (${category})
-⚽ *Sport:* ${sport} | 📅 *Date:* ${formattedDate}
-⏰ *First Match:* ${startTime} | 👥 *Teams:* ${N}
-🎯 *Byes:* ${calcByesCount} Teams
-Official CBSE Physical Education Code 048 Tournament Sheet.`;
-
-      if (navigator.canShare && navigator.canShare({ files: [imgFile] })) {
-        toast.dismiss('wa-img');
-        await navigator.share({
-          files: [imgFile],
-          title: `Tournament Fixture Bracket - ${tournamentName}`,
-          text: captionMessage
-        });
-        toast.success("Shared bracket image via WhatsApp!");
-        return;
-      }
-
-      // Desktop fallback: Download image and open WhatsApp
-      const link = document.createElement('a');
-      link.download = filename;
-      link.href = dataUrl;
-      link.click();
-      toast.dismiss('wa-img');
-      toast.success("Bracket image downloaded! Opening WhatsApp...");
-
-      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(
-        captionMessage + '\n\n🖼️ _(Bracket image downloaded to your device - attach it now to send)_'
-      )}`;
-      safeOpenExternal(waUrl);
-    } catch (err) {
-      console.error(err);
-      toast.dismiss('wa-img');
-      toast.error("Could not share image. Opening WhatsApp with text summary.");
-      handleWhatsAppShareText();
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  // WhatsApp Quick Text Bulletin
-  const handleWhatsAppShareText = () => {
-    setShowWhatsAppDropdown(false);
-    const title = `${tournamentName || 'Tournament'} (${category || 'General'})`;
-    const dateStr = formattedDate;
-
-    let schedulePreview = '';
-    if (matches && matches.length > 0) {
-      schedulePreview = matches.slice(0, 6).map((m: any, i: number) => 
-        `• *${m.name || `Match ${i + 1}`}* (${m.time || startTime}): ${m.team1 || 'TBD'} vs ${m.team2 || 'TBD'}`
-      ).join('\n');
-      if (matches.length > 6) {
-        schedulePreview += `\n• ... and ${matches.length - 6} more official matches.`;
-      }
-    }
-
-    const message = 
-`🏆 *OFFICIAL TOURNAMENT FIXTURES ANNOUNCEMENT*
-🏫 *${schoolName}*
-📌 *Event:* ${title}
-⚽ *Sport:* ${sport} | 📅 *Date:* ${dateStr}
-⏰ *First Match Time:* ${startTime}
-👥 *Total Teams:* ${numTeams} Teams | *Format:* ${format.toUpperCase()}
-🎯 *Byes:* ${calcByesCount} Teams
-
-📋 *MATCH FIXTURES SCHEDULE:*
-${schedulePreview}
-
-📄 _Official CBSE PE Code 048 Tournament Sheet generated via SmartPE India._`;
-
-    const encodedText = encodeURIComponent(message);
-    const waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
-    safeOpenExternal(waUrl, "Opening WhatsApp with tournament bulletin!");
-  };
-
-  // Download High-Resolution Image (.PNG)
-  const handleDownloadImage = async () => {
-    if (!printSheetRef.current) return;
-    setIsExporting(true);
-    try {
-      const dataUrl = await toPng(printSheetRef.current, {
-        cacheBust: true,
-        pixelRatio: 2.5,
-        backgroundColor: '#ffffff'
-      });
-      const link = document.createElement('a');
-      link.download = `${(tournamentName || 'tournament').toLowerCase()}_${paperSize.toLowerCase()}_fixture.png`;
-      link.href = dataUrl;
-      link.click();
-      toast.success(`Tournament Fixtures saved as ${paperSize} Image!`);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to generate image. Please try Print / Save PDF instead.");
+          <h3 style="color:#0D2B52; margin:14px 0 6px;">Official Match Schedule (${masterOrderOfPlay.length} Matches)</h3>
+          <table border="1" cellspacing="0" cellpadding="4" style="width:100%; border-collapse:collapse; font-size:9pt;">
+            <tr style="background:#0D2B52; color:#ffffff;">
+              <th>Match #</th><th>Stage</th><th>Date & Time</th><th>Court/Field</th><th>Team A</th><th>Score</th><th>Team B</th>
+            </tr>
+            ${rowsHtml}
+          </table>
+          <p style="margin-top:24px; font-size:8.5pt; color:#475569;">
+            Tournament Director: _______________________ &nbsp;&nbsp;&nbsp;
+            Chief Referee: _______________________ &nbsp;&nbsp;&nbsp;
+            Generated via SmartPE India (smartpeindia.app)
+          </p>
+        </body></html>`;
+      const blob = new Blob(['\ufeff', wordHtml], { type: 'application/msword' });
+      downloadBlobFile(blob, `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Schedule.doc`);
+      toast.success('Word (.doc) official schedule exported!');
     } finally {
       setIsExporting(false);
     }
   };
 
   return (
-    <div 
-      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="bg-slate-900 border-2 border-slate-800 rounded-[2.5rem] shadow-2xl w-full max-w-6xl max-h-[94vh] flex flex-col overflow-hidden text-white">
-        
-        {/* Top Modal Header */}
-        <div className="p-4 sm:p-6 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#08182D]">
-          <div className="flex items-center justify-between gap-3 w-full md:w-auto">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-[#D4A017]/20 border border-[#D4A017]/40 text-[#D4A017] flex items-center justify-center font-black shrink-0">
-                <Printer size={20} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base sm:text-lg font-black uppercase tracking-tight text-white">
-                    Official Tournament Print Preview & Export Studio
-                  </h3>
-                  <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase bg-[#D4A017]/20 text-[#D4A017] border border-[#D4A017]/40">
-                    CBSE Code 048 Ready
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 font-medium">
-                  {tournamentName} • {category} • {numTeams} Teams • {sport}
-                </p>
-              </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto no-print-modal-backdrop">
+      <div className="bg-[#0D2B52] text-white w-full max-w-[1440px] rounded-2xl sm:rounded-3xl border border-[#164077] shadow-2xl overflow-hidden flex flex-col max-h-[96vh]">
+        {/* Top Interactive Controls Header */}
+        <div className="p-4 sm:px-6 sm:py-4 bg-[#08182D] border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 no-print">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#D4A017]/20 border border-[#D4A017]/40 text-[#D4A017] flex items-center justify-center">
+              <Printer size={20} />
             </div>
-
-            {/* Quick close button on mobile */}
-            <button
-              onClick={onClose}
-              className="md:hidden w-8 h-8 rounded-xl bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center shrink-0"
-              title="Close modal"
-            >
-              <X size={16} />
-            </button>
+            <div>
+              <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white flex items-center gap-2">
+                <span>Vector Print & PDF Studio</span>
+                <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-black">
+                  {previewPages.length} {previewPages.length === 1 ? 'PAGE' : 'PAGES'}
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-400 font-medium">
+                Pure crisp vector PDF engine — automatic draw splitting with zero clipping.
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 self-end md:self-auto relative">
-            {/* WhatsApp Share with PDF Attachment Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowWhatsAppDropdown(!showWhatsAppDropdown)}
-                className="px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 transition-all active:scale-95"
-                title="Share official tournament PDF, Image or text to WhatsApp"
-              >
-                <Share2 size={14} />
-                <span>Share WhatsApp</span>
-                <ChevronDown size={13} />
-              </button>
-
-              {showWhatsAppDropdown && (
-                <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 z-50 text-left space-y-1">
-                  <button
-                    onClick={handleWhatsAppSharePdf}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold hover:bg-white/10 flex items-center gap-2 text-emerald-400 transition-all"
-                  >
-                    <FileText size={15} />
-                    <div>
-                      <div className="font-black text-white">Share PDF Document</div>
-                      <div className="text-[10px] text-slate-400">Sends actual .pdf file directly</div>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={handleWhatsAppShareImage}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold hover:bg-white/10 flex items-center gap-2 text-[#D4A017] transition-all"
-                  >
-                    <Download size={15} />
-                    <div>
-                      <div className="font-black text-white">Share Bracket Image</div>
-                      <div className="text-[10px] text-slate-400">Sends high-res tree PNG</div>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={handleWhatsAppShareText}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold hover:bg-white/10 flex items-center gap-2 text-slate-300 transition-all"
-                  >
-                    <Copy size={15} />
-                    <div>
-                      <div className="font-black text-white">Share Match Bulletin</div>
-                      <div className="text-[10px] text-slate-400">Quick text schedule message</div>
-                    </div>
-                  </button>
-                </div>
-              )}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Paper Size Selector */}
+            <div className="flex items-center bg-[#0D2B52] p-1 rounded-xl border border-white/10">
+              <span className="text-[10px] font-black text-slate-400 uppercase px-2">Paper</span>
+              {(['A4', 'A3'] as PaperSize[]).map((sz) => (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => setPaperSize(sz)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                    paperSize === sz
+                      ? 'bg-[#D4A017] text-[#0D2B52] shadow-sm'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  {sz}
+                </button>
+              ))}
             </div>
 
-            {/* Word Export Button (With Bracket Image Embedded!) */}
-            <button
-              onClick={handleExportWord}
-              disabled={isExporting}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-md disabled:opacity-50"
-              title="Download editable Microsoft Word document (.doc) with bracket image and match table"
-            >
-              <FileText size={14} />
-              <span>Export Word (.doc)</span>
-            </button>
+            {/* View Mode Selector */}
+            <div className="flex flex-wrap items-center bg-[#0D2B52] p-1 rounded-xl border border-white/10 gap-1">
+              {[
+                { id: 'full-bracket' as ExportViewMode, label: 'Full Bracket', icon: Trophy },
+                { id: 'round-robin-pools' as ExportViewMode, label: 'Round Robin Pools', icon: Layers },
+                { id: 'team-view' as ExportViewMode, label: 'Team View', icon: Users },
+                { id: 'master-schedule' as ExportViewMode, label: 'Order of Play', icon: CalendarClock },
+                { id: 'complete-pack' as ExportViewMode, label: 'Complete Pack', icon: ShieldCheck }
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const active = viewMode === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setViewMode(tab.id)}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-black flex items-center gap-1.5 transition-all ${
+                      active
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <Icon size={13} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-            {/* Direct PDF Download */}
             <button
-              onClick={handleDownloadPdf}
-              disabled={isExporting}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-md disabled:opacity-50"
-              title="Download direct PDF document (.pdf)"
-            >
-              <Download size={14} />
-              <span>Download PDF</span>
-            </button>
-
-            {/* Native Print Dialog */}
-            <button
-              onClick={handlePrint}
-              className="px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-md"
-            >
-              <Printer size={15} />
-              <span>Print</span>
-            </button>
-
-            {/* Close Button */}
-            <button
+              type="button"
               onClick={onClose}
-              className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-all"
+              className="p-2 bg-white/10 hover:bg-rose-500 text-slate-300 hover:text-white rounded-xl transition-all"
+              aria-label="Close Print Studio"
             >
               <X size={18} />
             </button>
           </div>
         </div>
 
-        {/* Configuration Toolbar */}
-        <div className="p-4 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs">
-          {/* Paper Size & Recommendations */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Paper Format:</span>
-            
-            <button
-              onClick={() => setPaperSize('A4')}
-              className={`px-3 py-1.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 border ${
-                paperSize === 'A4'
-                  ? 'bg-[#164077] border-[#D4A017] text-white shadow'
-                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              <span>A4 Sheet</span>
-              <span className="text-[9px] text-[#D4A017] font-bold">(&le; 16 Teams)</span>
-            </button>
-
-            <button
-              onClick={() => setPaperSize('A3')}
-              className={`px-3 py-1.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 border ${
-                paperSize === 'A3'
-                  ? 'bg-[#164077] border-[#D4A017] text-white shadow'
-                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              <span>A3 Sheet</span>
-              <span className="text-[9px] text-emerald-400 font-bold">(17-32 Teams)</span>
-            </button>
-
-            {/* Orientation */}
-            <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden sm:block"></div>
-            
-            <button
-              onClick={() => setOrientation('landscape')}
-              className={`px-3 py-1.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all ${
-                orientation === 'landscape'
-                  ? 'bg-slate-800 text-white border border-slate-700'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Landscape (Best for Bracket Tree)
-            </button>
-
-            <button
-              onClick={() => setOrientation('portrait')}
-              className={`px-3 py-1.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all ${
-                orientation === 'portrait'
-                  ? 'bg-slate-800 text-white border border-slate-700'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Portrait (Best for Table)
-            </button>
+        {/* Official Document Customization Strip */}
+        <div className="px-4 sm:px-6 py-2.5 bg-[#0a2140] border-b border-white/10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 text-xs no-print">
+          <div className="flex items-center gap-2 bg-[#08182D] border border-white/10 rounded-xl px-3 py-1.5">
+            <Building2 size={14} className="text-[#D4A017] shrink-0" />
+            <input
+              type="text"
+              value={schoolName}
+              onChange={(e) => setSchoolName(e.target.value)}
+              placeholder="Host School / Org"
+              className="bg-transparent text-white font-bold outline-none w-full text-[11px]"
+            />
           </div>
+          <div className="flex items-center gap-2 bg-[#08182D] border border-white/10 rounded-xl px-3 py-1.5">
+            <MapPin size={14} className="text-emerald-400 shrink-0" />
+            <input
+              type="text"
+              value={venue}
+              onChange={(e) => setVenue(e.target.value)}
+              placeholder="Tournament Venue"
+              className="bg-transparent text-white font-bold outline-none w-full text-[11px]"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2 bg-[#08182D] border border-white/10 rounded-xl px-3 py-1.5">
+            <span className="text-slate-400 font-bold text-[10px] uppercase">Courts / Pitches</span>
+            <select
+              value={courtsCount}
+              onChange={(e) => setCourtsCount(Number(e.target.value))}
+              className="bg-[#0D2B52] text-white font-black text-[11px] rounded px-2 py-0.5 outline-none"
+            >
+              {[1, 2, 3, 4, 6, 8].map((n) => (
+                <option key={n} value={n}>
+                  {n} {n === 1 ? 'Court' : 'Courts'}
+                </option>
+              ))}
+            </select>
+          </div>
+          <input
+            type="text"
+            value={directorName}
+            onChange={(e) => setDirectorName(e.target.value)}
+            placeholder="Tournament Director (Optional)"
+            className="bg-[#08182D] border border-white/10 rounded-xl px-3 py-1.5 text-white font-bold outline-none text-[11px]"
+          />
+          <input
+            type="text"
+            value={chiefRefereeName}
+            onChange={(e) => setChiefRefereeName(e.target.value)}
+            placeholder="Chief Referee (Optional)"
+            className="bg-[#08182D] border border-white/10 rounded-xl px-3 py-1.5 text-white font-bold outline-none text-[11px]"
+          />
+        </div>
 
-          {/* View Tab & Image Download */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPreviewTab('bracket')}
-              className={`px-3 py-1.5 rounded-xl font-bold text-xs uppercase transition-all ${
-                previewTab === 'bracket' ? 'bg-[#0D2B52] text-[#D4A017] border border-[#D4A017]/40' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Lined Bracket Tree
-            </button>
-            <button
-              onClick={() => setPreviewTab('table')}
-              className={`px-3 py-1.5 rounded-xl font-bold text-xs uppercase transition-all ${
-                previewTab === 'table' ? 'bg-[#0D2B52] text-[#D4A017] border border-[#D4A017]/40' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Match Schedule
-            </button>
-            <button
-              onClick={() => setPreviewTab('byes')}
-              className={`px-3 py-1.5 rounded-xl font-bold text-xs uppercase transition-all ${
-                previewTab === 'byes' ? 'bg-[#0D2B52] text-[#D4A017] border border-[#D4A017]/40' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              CBSE Formulas
-            </button>
+        {/* Multi-Page Paginated Preview Canvas */}
+        <div className="flex-1 overflow-auto p-4 sm:p-8 bg-slate-800/90 space-y-8">
+          <div id="tournament-print-area" className="space-y-8 flex flex-col items-center">
+            {previewPages.map((page, pageIdx) => {
+              const totalPages = previewPages.length;
+              const isPortrait = page.orientation === 'portrait';
+              const sheetWidthClass = isPortrait
+                ? 'w-full max-w-[794px]'
+                : page.paperSize === 'A3'
+                ? 'w-full max-w-[1380px]'
+                : 'w-full max-w-[1123px]';
 
-            <div className="h-4 w-[1px] bg-slate-800 mx-1"></div>
+              return (
+                <div
+                  key={page.id}
+                  className={`tournament-print-page bg-white text-slate-900 shadow-2xl rounded-sm border border-slate-300 p-5 sm:p-7 flex flex-col justify-between ${sheetWidthClass}`}
+                  style={{ minHeight: isPortrait ? '1040px' : page.paperSize === 'A3' ? '880px' : '740px' }}
+                >
+                  {/* Official Federation Page Header */}
+                  <div className="space-y-4">
+                    <div className="bg-[#0D2B52] text-white rounded-lg border-l-4 border-[#D4A017] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[#D4A017]">
+                          {schoolName || "SHRADDHA CHILDREN'S ACADEMY"}
+                        </div>
+                        <h2 className="text-base sm:text-lg font-black uppercase tracking-tight leading-tight mt-0.5">
+                          {tournamentName || 'OFFICIAL SCHOOL CHAMPIONSHIP'}
+                        </h2>
+                        <div className="text-[11px] text-blue-100 font-semibold mt-0.5">
+                          {sport.toUpperCase()} • {category} &nbsp;|&nbsp; VENUE: {venue.toUpperCase()} &nbsp;|&nbsp; DATE: {formattedDate}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs font-black text-[#D4A017] uppercase">
+                          Page {pageIdx + 1} of {totalPages}
+                        </div>
+                        <div className="text-[11px] font-bold text-white uppercase tracking-wide mt-0.5">
+                          {page.sectionLabel}
+                        </div>
+                        <div className="text-[10px] text-slate-300 font-semibold">
+                          {page.paperSize} {page.orientation.toUpperCase()} • {numTeams} Teams
+                        </div>
+                      </div>
+                    </div>
 
-            <button
-              onClick={handleDownloadImage}
-              disabled={isExporting}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-              title="Save current preview as high-resolution PNG image"
-            >
-              <Download size={13} />
-              <span>PNG Image</span>
-            </button>
+                    {/* PAGE BODY BY KIND */}
+                    {page.kind === 'knockout-slice' && page.tree && page.slice && (
+                      <PaginatedKnockoutPreview
+                        tree={page.tree}
+                        slice={page.slice}
+                        matchDurationMins={matchDurationMins}
+                        restGapMins={restGapMins}
+                        eliminationType={eliminationType}
+                      />
+                    )}
+
+                    {page.kind === 'losers-stage' && page.tree && (
+                      <LosersBracketPreview tree={page.tree} />
+                    )}
+
+                    {page.kind === 'pool-page' && page.pools && (
+                      <div className="space-y-6">
+                        {page.pools.map((pool) => (
+                          <PoolSheetPreview key={pool.poolName} pool={pool} />
+                        ))}
+                      </div>
+                    )}
+
+                    {page.kind === 'team-view-page' && page.teamGroups && (
+                      <div className="space-y-5">
+                        {page.teamGroups.map((tg) => (
+                          <div key={tg.teamName} className="border border-slate-300 rounded-lg overflow-hidden break-inside-avoid">
+                            <div className="bg-[#0D2B52] text-white px-3.5 py-2 flex items-center justify-between">
+                              <span className="font-black text-xs uppercase tracking-wide">
+                                {tg.teamName}
+                              </span>
+                              <span className="text-[10px] font-black text-[#D4A017] uppercase">
+                                {tg.seedOrPool} • {tg.matches.length} Matches
+                              </span>
+                            </div>
+                            <table className="w-full text-left border-collapse text-[11px]">
+                              <thead>
+                                <tr className="bg-slate-100 border-b border-slate-300 text-[10px] font-black uppercase text-[#0D2B52]">
+                                  <th className="p-2 w-16 text-center">Match #</th>
+                                  <th className="p-2">Stage / Pool</th>
+                                  <th className="p-2">Opponent</th>
+                                  <th className="p-2 text-center">Court / Field</th>
+                                  <th className="p-2 text-center">Reporting Time</th>
+                                  <th className="p-2 text-center w-24">Score</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200 font-semibold">
+                                {tg.matches.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={6} className="p-3 text-center text-slate-400 italic">
+                                      Awaiting bracket progression
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  tg.matches.map((m, idx) => (
+                                    <tr key={`${m.matchCode}-${idx}`} className={idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'}>
+                                      <td className="p-2 text-center font-black text-[#0D2B52]">{m.matchCode}</td>
+                                      <td className="p-2 text-slate-700">{m.stage}</td>
+                                      <td className="p-2 font-bold text-slate-900">{m.opponent}</td>
+                                      <td className="p-2 text-center text-slate-700">{m.court}</td>
+                                      <td className="p-2 text-center font-bold text-slate-800">{m.date} • {m.time}</td>
+                                      <td className="p-2 text-center font-mono text-slate-600">{m.scoreDisplay}</td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {page.kind === 'master-schedule-page' && page.scheduleRows && (
+                      <div className="border border-slate-300 rounded-lg overflow-hidden">
+                        <table className="w-full text-left border-collapse text-[11px]">
+                          <thead>
+                            <tr className="bg-[#0D2B52] text-white text-[10px] font-black uppercase">
+                              <th className="p-2 text-center">M#</th>
+                              <th className="p-2 text-center">Time</th>
+                              <th className="p-2 text-center">Court / Pitch</th>
+                              <th className="p-2">Stage / Round</th>
+                              <th className="p-2">Team A</th>
+                              <th className="p-2 text-center">Score</th>
+                              <th className="p-2">Team B</th>
+                              <th className="p-2 text-center">Ref Sign</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 font-semibold">
+                            {page.scheduleRows.map((m, idx) => (
+                              <tr key={`${m.matchCode}-${idx}`} className={idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'}>
+                                <td className="p-2 text-center font-black text-[#0D2B52]">{m.matchCode}</td>
+                                <td className="p-2 text-center font-bold text-slate-800">{m.time}</td>
+                                <td className="p-2 text-center text-slate-700">{m.court}</td>
+                                <td className="p-2 text-slate-600">{m.stage}</td>
+                                <td className="p-2 font-bold text-slate-900">{truncateText(m.team1, 24)}</td>
+                                <td className="p-2 text-center font-mono text-slate-500">[ &nbsp; ] - [ &nbsp; ]</td>
+                                <td className="p-2 font-bold text-slate-900">{truncateText(m.team2, 24)}</td>
+                                <td className="p-2 text-center text-slate-300">______</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Official Page Footer */}
+                  <div className="mt-6 pt-3 border-t border-slate-300 flex flex-wrap items-end justify-between gap-4 text-[10px] text-slate-600">
+                    <div className="flex items-center gap-8">
+                      <div>
+                        <div className="w-40 border-b border-slate-400 h-5 mb-1"></div>
+                        <div className="font-black text-slate-900 uppercase">
+                          {directorName ? `Tournament Director: ${directorName}` : 'Tournament Director (Sign)'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="w-40 border-b border-slate-400 h-5 mb-1"></div>
+                        <div className="font-black text-slate-900 uppercase">
+                          {chiefRefereeName ? `Chief Referee: ${chiefRefereeName}` : 'Chief Referee (Sign)'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {page.isRoundRobin && (
+                      <div className="text-[9px] italic text-slate-500 font-semibold">
+                        Tie-Breaker: 1. Points • 2. Head-to-Head • 3. Goal/Point Diff • 4. Goals Scored
+                      </div>
+                    )}
+
+                    <div className="text-[10px] font-bold text-slate-500 ml-auto">
+                      Generated via SmartPE India (smartpeindia.app)
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Paper Sizing Recommendation Banner */}
-        <div className="px-6 py-2.5 bg-[#0D2B52]/40 border-b border-slate-800 text-xs flex items-center justify-between text-slate-300">
-          <div className="flex items-center gap-2">
-            <Info size={14} className="text-[#D4A017] shrink-0" />
-            {numTeams > 16 ? (
-              <span>
-                <strong className="text-amber-300">{numTeams} Teams Detected:</strong> We recommend <strong className="text-white">A3 Landscape</strong> paper. A3 provides double the width so 5 rounds, match numbers, and timings print with zero crowding.
-              </span>
-            ) : (
-              <span>
-                <strong className="text-emerald-400">{numTeams} Teams Detected:</strong> Standard <strong className="text-white">A4 Landscape</strong> fits this fixture cleanly on a single page for sports notice boards.
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0">
-            <span className="text-[10px] font-black uppercase text-slate-400">Target Paper:</span>
-            <span className="px-2 py-0.5 rounded bg-slate-800 text-[#D4A017] font-black text-[10px]">
-              {paperSize} {orientation.toUpperCase()}
+        {/* Bottom Action Footer */}
+        <div className="p-4 bg-[#08182D] border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs no-print">
+          <div className="flex items-center gap-2 text-slate-300">
+            <Sparkles size={14} className="text-[#D4A017]" />
+            <span>
+              Vector PDF outputs crisp selectable text & exact {paperSize} federation layouts across{' '}
+              <strong className="text-white">{previewPages.length}</strong>{' '}
+              {previewPages.length === 1 ? 'page' : 'pages'}.
             </span>
           </div>
-        </div>
 
-        {/* Printable Preview Canvas (Scrollable viewport) */}
-        <div className="flex-1 overflow-auto p-4 sm:p-8 bg-slate-950 flex justify-center">
-          <div 
-            id="tournament-print-area"
-            ref={printSheetRef}
-            className={`bg-white text-slate-900 rounded-2xl shadow-2xl p-6 sm:p-10 transition-all ${
-              paperSize === 'A3' ? 'min-w-[1100px] max-w-[1300px]' : 'min-w-[850px] max-w-[1050px]'
-            } bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:32px_24px]`}
-            style={{
-              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-            }}
-          >
-            {/* Official School Header */}
-            <div className="text-center border-b-2 border-slate-900 pb-4 mb-6 bg-white/90 p-4 rounded-xl">
-              <input
-                type="text"
-                value={schoolName}
-                onChange={(e) => setSchoolName(e.target.value)}
-                className="w-full text-center text-xl sm:text-2xl font-black uppercase tracking-tight text-[#0D2B52] bg-transparent outline-none focus:bg-slate-50"
-                title="Click to edit school or academy name"
-              />
-              <div className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-500 mt-1">
-                DEPARTMENT OF PHYSICAL EDUCATION & SPORTS • OFFICIAL TOURNAMENT FIXTURE
-              </div>
-              <div className="text-base sm:text-lg font-black text-slate-900 uppercase mt-2 tracking-tight">
-                {tournamentName || 'Annual Sports Championship'}
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-3 text-xs font-bold text-slate-600 mt-1">
-                <span className="text-[#0D2B52] font-black uppercase">Category: {category || 'Open'}</span>
-                <span>•</span>
-                <span>Sport: {sport}</span>
-                <span>•</span>
-                <span>Date: {formattedDate}</span>
-                <span>•</span>
-                <span>Reporting Time: {startTime}</span>
-                <span>•</span>
-                <span className="text-emerald-700 font-black">Total Teams: {numTeams}</span>
-                <span>•</span>
-                <span className="text-rose-600 font-black">Byes: {calcByesCount}</span>
-              </div>
-            </div>
-
-            {/* PREVIEW CONTENT BASED ON TAB */}
-            {previewTab === 'bracket' && (
-              <div className="space-y-6">
-                {/* Visual Lined Bracket Tree Drawing (Connecting Teams & Red Times) */}
-                <div id="tournament-bracket-tree-canvas" className="bg-white p-6 rounded-2xl border-2 border-slate-300 shadow-sm relative overflow-x-auto">
-                  <div className="relative w-full" style={{ height: `${P * ROW_HEIGHT + 30}px`, minWidth: `${SLOT_WIDTH + totalRounds * STEP_COL_WIDTH + 80}px` }}>
-                    {/* 1. Team Slot Lines */}
-                    {slots.map((slot, sIdx) => {
-                      const isEvenPair = sIdx % 2 === 0;
-                      const matchIdxInR1 = Math.floor(sIdx / 2);
-                      const matchTime = roundTimes[0]?.[matchIdxInR1] || '';
-
-                      return (
-                        <div 
-                          key={`slot-${sIdx}`}
-                          className="absolute left-0 flex flex-col justify-end"
-                          style={{ 
-                            top: `${sIdx * ROW_HEIGHT}px`, 
-                            height: `${ROW_HEIGHT}px`,
-                            width: `${SLOT_WIDTH}px`
-                          }}
-                        >
-                          {/* Team Name Label and Match Time */}
-                          <div className="flex items-center justify-between pr-2 mb-0.5">
-                            <span className="text-xs font-black uppercase text-slate-900 tracking-tight truncate w-[170px]">
-                              {slot.teamName}
-                            </span>
-
-                            {/* Show Match Time on the second team of each pair in RED font */}
-                            {!isEvenPair && matchTime && !slot.isBye && (
-                              <span className="text-[11px] font-black text-red-600 tracking-tighter">
-                                {matchTime}
-                              </span>
-                            )}
-
-                            {slot.isBye && (
-                              <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest px-1">
-                                (BYE)
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Solid horizontal black line */}
-                          <div className="w-full h-[2px] bg-slate-900"></div>
-                        </div>
-                      );
-                    })}
-
-                    {/* 2. SVG Connecting Step Lines & Match Times for all Rounds */}
-                    <svg 
-                      className="absolute inset-0 w-full h-full pointer-events-none"
-                      style={{ overflow: 'visible' }}
-                    >
-                      {Array.from({ length: totalRounds }).map((_, rIdx) => {
-                        const matchesInThisRound = Math.pow(2, totalRounds - rIdx - 1);
-                        const stepX = SLOT_WIDTH + rIdx * STEP_COL_WIDTH;
-                        const colWidth = STEP_COL_WIDTH;
-
-                        return Array.from({ length: matchesInThisRound }).map((__, mIdx) => {
-                          const slotsSpan = Math.pow(2, rIdx + 1);
-                          const topSlotIdx = mIdx * slotsSpan;
-                          const bottomSlotIdx = topSlotIdx + slotsSpan - 1;
-
-                          const topBranchY = (topSlotIdx + (slotsSpan / 4 - 0.5)) * ROW_HEIGHT + ROW_HEIGHT / 2;
-                          const bottomBranchY = (bottomSlotIdx - (slotsSpan / 4 - 0.5)) * ROW_HEIGHT + ROW_HEIGHT / 2;
-                          const centerY = (topBranchY + bottomBranchY) / 2;
-
-                          const nextTime = roundTimes[rIdx + 1]?.[Math.floor(mIdx / 2)] || '';
-                          const isLastRound = rIdx === totalRounds - 1;
-
-                          return (
-                            <g key={`round-${rIdx}-match-${mIdx}`}>
-                              {/* Vertical bracket connector */}
-                              <line 
-                                x1={stepX} 
-                                y1={topBranchY} 
-                                x2={stepX} 
-                                y2={bottomBranchY} 
-                                stroke="#0f172a" 
-                                strokeWidth="2" 
-                              />
-
-                              {/* Right horizontal advance line */}
-                              <line 
-                                x1={stepX} 
-                                y1={centerY} 
-                                x2={stepX + colWidth} 
-                                y2={centerY} 
-                                stroke="#0f172a" 
-                                strokeWidth="2" 
-                              />
-
-                              {/* Match Time in RED on advance line */}
-                              {!isLastRound && (mIdx % 2 === 1 || matchesInThisRound === 1) && nextTime && (
-                                <text
-                                  x={stepX + 6}
-                                  y={centerY - 6}
-                                  fill="#dc2626"
-                                  fontSize="11"
-                                  fontWeight="900"
-                                  fontFamily="sans-serif"
-                                >
-                                  {nextTime}
-                                </text>
-                              )}
-
-                              {/* Final match time */}
-                              {isLastRound && nextTime && (
-                                <text
-                                  x={stepX + 6}
-                                  y={centerY - 6}
-                                  fill="#dc2626"
-                                  fontSize="11"
-                                  fontWeight="900"
-                                  fontFamily="sans-serif"
-                                >
-                                  {nextTime}
-                                </text>
-                              )}
-
-                              {/* Winner box on championship final */}
-                              {isLastRound && (
-                                <g transform={`translate(${stepX + colWidth + 8}, ${centerY - 14})`}>
-                                  <rect
-                                    width="100"
-                                    height="28"
-                                    rx="8"
-                                    fill="#fef3c7"
-                                    stroke="#f59e0b"
-                                    strokeWidth="2"
-                                  />
-                                  <text
-                                    x="50"
-                                    y="18"
-                                    fill="#78350f"
-                                    fontSize="10"
-                                    fontWeight="900"
-                                    textAnchor="middle"
-                                    fontFamily="sans-serif"
-                                  >
-                                    WINNER
-                                  </text>
-                                </g>
-                              )}
-                            </g>
-                          );
-                        });
-                      })}
-                    </svg>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {previewTab === 'table' && (
-              <div className="space-y-4 bg-white p-6 rounded-2xl border border-slate-200">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b-2 border-slate-900 bg-slate-100 text-[10px] font-black uppercase text-slate-600">
-                        <th className="p-2.5">Match #</th>
-                        <th className="p-2.5">Stage / Round</th>
-                        <th className="p-2.5">Team 1</th>
-                        <th className="p-2.5 text-center">VS</th>
-                        <th className="p-2.5">Team 2</th>
-                        <th className="p-2.5">Date</th>
-                        <th className="p-2.5">Match Time</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 font-semibold text-slate-800">
-                      {matches && matches.length > 0 ? (
-                        matches.map((m: any, idx: number) => (
-                          <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                            <td className="p-2.5 font-black text-[#0D2B52]">{m.name || `Match ${idx + 1}`}</td>
-                            <td className="p-2.5">{m.roundName || 'Knockout Round'}</td>
-                            <td className="p-2.5 font-bold uppercase text-slate-900">{m.team1 || 'TBD'}</td>
-                            <td className="p-2.5 text-center text-slate-400 font-black text-[10px]">VS</td>
-                            <td className="p-2.5 font-bold uppercase text-slate-900">{m.team2 || 'TBD'}</td>
-                            <td className="p-2.5 text-slate-600">{m.date || formattedDate}</td>
-                            <td className="p-2.5 font-black text-red-600">{m.time || startTime || 'TBD'}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        Array.from({ length: totalRounds }).flatMap((_, r) => {
-                          const count = Math.pow(2, totalRounds - r - 1);
-                          const rName = r === totalRounds - 1 ? 'Championship Final' : r === totalRounds - 2 ? 'Semi-Final' : r === totalRounds - 3 ? 'Quarter-Final' : `Round ${r + 1}`;
-                          return Array.from({ length: count }).map((__, m) => ({
-                            name: `Match`,
-                            roundName: rName,
-                            team1: r === 0 ? (slots[m * 2]?.teamName || 'TBD') : 'Winner of Previous Round',
-                            team2: r === 0 ? (slots[m * 2 + 1]?.teamName || 'TBD') : 'Winner of Previous Round',
-                            time: roundTimes[r]?.[m] || startTime
-                          }));
-                        }).map((m: any, idx: number) => (
-                          <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                            <td className="p-2.5 font-black text-[#0D2B52]">Match {idx + 1}</td>
-                            <td className="p-2.5">{m.roundName}</td>
-                            <td className="p-2.5 font-bold uppercase text-slate-900">{m.team1}</td>
-                            <td className="p-2.5 text-center text-slate-400 font-black text-[10px]">VS</td>
-                            <td className="p-2.5 font-bold uppercase text-slate-900">{m.team2}</td>
-                            <td className="p-2.5 text-slate-600">{formattedDate}</td>
-                            <td className="p-2.5 font-black text-red-600">{m.time}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {previewTab === 'byes' && (
-              <div className="space-y-6">
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
-                  <h4 className="font-black text-base uppercase text-[#0D2B52] tracking-tight">
-                    CBSE PE Code 048 - Mathematical Fixture Formulas
-                  </h4>
-
-                  <div className="space-y-3 text-xs text-slate-700">
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                      <strong>1. Division into Upper and Lower Halves:</strong><br />
-                      • For N = {N}: Upper Half Nu = <strong>{Nu} Teams</strong> | Lower Half Nl = <strong>{P - Nu} Teams</strong>.<br />
-                      • (If N is odd, Upper Half Nu = (N + 1) / 2 and Lower Half Nl = (N - 1) / 2).
-                    </div>
-
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                      <strong>2. Allocation of Byes (Nb = Power of 2 - N):</strong><br />
-                      • Next power of 2 &ge; {N} is <strong>{P}</strong>.<br />
-                      • Number of Byes: {P} - {N} = <strong>{calcByesCount} Byes</strong>.<br />
-                      • Upper Half Byes: <strong>{Math.floor(calcByesCount / 2)}</strong> | Lower Half Byes: <strong>{Math.ceil(calcByesCount / 2)}</strong>.<br />
-                      • <em>CBSE Rule:</em> 1st Bye &rarr; Bottom of Lower Half, 2nd Bye &rarr; Top of Upper Half, 3rd Bye &rarr; Top of Lower Half, 4th Bye &rarr; Bottom of Upper Half.
-                    </div>
-
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                      <strong>3. Matches & Rounds:</strong><br />
-                      • Total Matches = N - 1 = {N} - 1 = <strong>{N - 1} Matches</strong>.<br />
-                      • Total Rounds = log2({P}) = <strong>{totalRounds} Rounds</strong>.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Official Sign-Off Block */}
-            <div className="mt-12 pt-8 border-t-2 border-slate-900 grid grid-cols-3 gap-6 text-center text-xs bg-white/90 p-4 rounded-xl">
-              <div>
-                <div className="h-10 border-b border-dashed border-slate-300 mb-2"></div>
-                <div className="font-black text-slate-900 uppercase">PE Teacher / In-Charge</div>
-                <div className="text-[10px] text-slate-400">Department of PE</div>
-              </div>
-              <div>
-                <div className="h-10 border-b border-dashed border-slate-300 mb-2"></div>
-                <div className="font-black text-slate-900 uppercase">Sports Coordinator / HOD</div>
-                <div className="text-[10px] text-slate-400">Organizing Committee</div>
-              </div>
-              <div>
-                <div className="h-10 border-b border-dashed border-slate-300 mb-2"></div>
-                <div className="font-black text-slate-900 uppercase">Principal / Headmaster</div>
-                <div className="text-[10px] text-slate-400">Approval Seal</div>
-              </div>
-            </div>
-
-            {/* Bottom Footer Tag */}
-            <div className="mt-6 pt-3 border-t border-slate-200 flex justify-between items-center text-[9px] font-bold text-slate-400 uppercase tracking-widest bg-white/90 px-4 py-2 rounded-lg">
-              <span>SmartPE India Official Tournament Studio</span>
-              <span>CBSE Physical Education Class 11 & 12 (Subject Code 048)</span>
-              <span>Generated on {new Date().toLocaleDateString('en-GB')}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Modal Footer Controls */}
-        <div className="p-4 bg-[#08182D] border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-slate-400">
-            <Sparkles size={14} className="text-[#D4A017]" />
-            <span>Word export includes the visual bracket tree picture + complete schedule table.</span>
-          </div>
-
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
+              type="button"
               onClick={handleExportWord}
               disabled={isExporting}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
             >
               <FileText size={14} />
-              <span>Word (.doc + Image)</span>
+              <span>Word (.doc)</span>
             </button>
 
             <button
+              type="button"
               onClick={handleDownloadPdf}
               disabled={isExporting}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
             >
               <Download size={14} />
-              <span>Download PDF</span>
+              <span>Download Vector PDF ({paperSize})</span>
             </button>
 
             <button
+              type="button"
               onClick={handleWhatsAppSharePdf}
               disabled={isExporting}
-              className="px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md transition-all active:scale-95 disabled:opacity-50"
+              className="px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
             >
               <Share2 size={14} />
               <span>WhatsApp PDF</span>
             </button>
 
             <button
+              type="button"
               onClick={handlePrint}
-              className="px-5 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-amber-950/40"
+              className="px-5 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg active:scale-95"
             >
               <Printer size={15} />
-              <span>Print {paperSize} Fixture</span>
+              <span>Print {paperSize}</span>
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );
 };
+
+/* ---------- Subcomponents for Crisp Multi-Page Declarative Preview ---------- */
+
+const MatchCardSvgPreview: React.FC<{ match: UnifiedMatch; highlightGold?: boolean }> = ({
+  match,
+  highlightGold
+}) => (
+  <div
+    className={`rounded-md border text-[10px] overflow-hidden shadow-2xs ${
+      match.isBye
+        ? 'bg-rose-50/70 border-rose-200'
+        : highlightGold
+        ? 'bg-amber-50 border-[#D4A017]'
+        : 'bg-white border-slate-300'
+    }`}
+  >
+    <div
+      className={`px-1.5 py-0.5 flex items-center justify-between text-[8.5px] font-black border-b ${
+        match.isBye
+          ? 'bg-rose-100/70 border-rose-200 text-rose-700'
+          : highlightGold
+          ? 'bg-amber-200/70 border-amber-300 text-[#0D2B52]'
+          : 'bg-slate-100 border-slate-200 text-slate-600'
+      }`}
+    >
+      <span
+        className={`px-1.5 rounded text-white ${
+          match.isBye ? 'bg-rose-600' : 'bg-[#0D2B52]'
+        }`}
+      >
+        {match.matchCode}
+      </span>
+      <span className="truncate ml-1">
+        {match.isBye ? 'BYE • Auto Advance' : `${match.time} • ${match.court}`}
+      </span>
+    </div>
+
+    {[
+      { name: match.team1, seed: match.seed1, bye: match.isTeam1Bye || match.team1 === 'BYE', score: match.score1 },
+      { name: match.team2, seed: match.seed2, bye: match.isTeam2Bye || match.team2 === 'BYE', score: match.score2 }
+    ].map((row, rIdx) => (
+      <div
+        key={rIdx}
+        className={`px-1.5 py-1 flex items-center justify-between gap-1 ${
+          rIdx === 1 ? 'border-t border-slate-200/80' : ''
+        }`}
+      >
+        <div className="flex items-center gap-1 min-w-0">
+          {row.seed && !row.bye && (
+            <span className="text-[8.5px] font-black text-slate-500 shrink-0">[{row.seed}]</span>
+          )}
+          <span
+            className={`truncate font-bold ${
+              row.bye ? 'italic text-rose-600' : 'text-slate-900'
+            }`}
+          >
+            {row.bye ? 'BYE' : truncateText(row.name, 24)}
+          </span>
+        </div>
+        {!row.bye && !match.isBye && (
+          <div className="w-5 h-3.5 border border-slate-400 bg-white rounded-[2px] text-center text-[8px] font-bold shrink-0">
+            {row.score ?? ''}
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+);
+
+const PaginatedKnockoutPreview: React.FC<{
+  tree: KnockoutDrawTree;
+  slice: BracketPageSlice;
+  matchDurationMins: number;
+  restGapMins: number;
+  eliminationType: EliminationType;
+}> = ({ tree, slice, matchDurationMins, restGapMins, eliminationType }) => {
+  const roundCols: Array<{
+    roundName: string;
+    shortName: string;
+    matches: UnifiedMatch[];
+    isFinalRound: boolean;
+  }> = [];
+
+  const firstRoundMatchStart = Math.floor(slice.slotStart / Math.pow(2, slice.startRound + 1));
+  const firstRoundMatchEnd = Math.ceil(slice.slotEnd / Math.pow(2, slice.startRound + 1));
+  const firstRoundMatchesVisible = Math.max(1, firstRoundMatchEnd - firstRoundMatchStart);
+
+  for (let absR = slice.startRound; absR < slice.endRound; absR++) {
+    const rd = tree.rounds[absR];
+    if (!rd) continue;
+    const lr = absR - slice.startRound;
+    const scaleDiv = Math.pow(2, lr);
+    const startIdx = Math.floor(firstRoundMatchStart / scaleDiv);
+    const count = Math.max(1, Math.floor(firstRoundMatchesVisible / scaleDiv));
+    roundCols.push({
+      roundName: rd.roundName,
+      shortName: rd.shortName,
+      matches: rd.matches.slice(startIdx, startIdx + count),
+      isFinalRound: absR === tree.totalRounds - 1
+    });
+  }
+
+  return (
+    <div className={`grid gap-4 ${slice.mode === 'full-with-schedule' ? 'grid-cols-12' : 'grid-cols-1'}`}>
+      <div className={slice.mode === 'full-with-schedule' ? 'col-span-8' : 'col-span-1'}>
+        <div
+          className="grid gap-3 items-stretch"
+          style={{ gridTemplateColumns: `repeat(${roundCols.length}, minmax(0, 1fr))` }}
+        >
+          {roundCols.map((col, cIdx) => (
+            <div key={cIdx} className="flex flex-col">
+              <div className="bg-[#0D2B52] text-white text-[10px] font-black uppercase text-center py-1 rounded mb-2">
+                {col.roundName}
+              </div>
+              <div className="flex-1 flex flex-col justify-around gap-1.5">
+                {col.matches.map((m) => (
+                  <MatchCardSvgPreview key={m.id} match={m} highlightGold={col.isFinalRound} />
+                ))}
+              </div>
+              {col.isFinalRound && slice.includeThirdPlace && tree.thirdPlaceMatch && (
+                <div className="mt-3 pt-2 border-t border-dashed border-slate-300">
+                  <div className="text-[9px] font-black text-slate-500 uppercase mb-1">
+                    3rd Place Playoff
+                  </div>
+                  <MatchCardSvgPreview match={tree.thirdPlaceMatch} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {slice.isA3BottomWithFinals && (
+          <div className="mt-4 p-3 rounded-lg bg-amber-50/60 border border-[#D4A017]">
+            <div className="text-[10px] font-black uppercase text-[#0D2B52] mb-2">
+              Championship Stage (Semifinals → Grand Final & 3rd Place)
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {tree.rounds.slice(-2).map((rd) => (
+                <div key={rd.roundIndex} className="space-y-1.5">
+                  <div className="text-[9px] font-black text-slate-600 uppercase">{rd.roundName}</div>
+                  {rd.matches.map((m) => (
+                    <MatchCardSvgPreview key={m.id} match={m} highlightGold={rd.roundIndex === tree.totalRounds - 1} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {slice.mode === 'full-with-schedule' && (
+        <div className="col-span-4 bg-slate-50 border border-slate-300 rounded-lg p-3 flex flex-col justify-between">
+          <div>
+            <div className="bg-[#0D2B52] text-white text-[10px] font-black uppercase text-center py-1 rounded mb-2">
+              Match Schedule & Rules Summary
+            </div>
+            <table className="w-full text-left border-collapse text-[10px]">
+              <thead>
+                <tr className="bg-slate-200 text-[#0D2B52] font-black uppercase text-[9px]">
+                  <th className="p-1">#</th>
+                  <th className="p-1">Time / Ct</th>
+                  <th className="p-1">Fixture</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {tree.allPlayableMatches.slice(0, 10).map((m) => (
+                  <tr key={m.id}>
+                    <td className="p-1 font-black text-[#0D2B52]">{m.matchCode}</td>
+                    <td className="p-1 text-slate-600 whitespace-nowrap">
+                      {m.time}
+                      <div className="text-[8.5px]">{m.court}</div>
+                    </td>
+                    <td className="p-1 font-bold text-slate-900">
+                      {truncateText(m.team1, 14)} v {truncateText(m.team2, 14)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 pt-2 border-t border-slate-300 text-[9.5px] text-slate-600 space-y-0.5">
+            <div className="font-black text-[#0D2B52] uppercase">Tournament Regulations</div>
+            <div>• Draw: {tree.N} Teams in {tree.P}-Slot Tree ({tree.byesCount} Byes)</div>
+            <div>• Format: {eliminationType === 'double' ? 'Double Elimination' : 'Single Elimination'}</div>
+            <div>• Duration: {matchDurationMins} min + {restGapMins} min interval</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const LosersBracketPreview: React.FC<{ tree: KnockoutDrawTree }> = ({ tree }) => (
+  <div className="space-y-4">
+    <div
+      className="grid gap-3 items-stretch"
+      style={{
+        gridTemplateColumns: `repeat(${tree.losersRounds.length + (tree.grandFinalMatch ? 1 : 0)}, minmax(0, 1fr))`
+      }}
+    >
+      {tree.losersRounds.map((lr) => (
+        <div key={lr.roundIndex} className="flex flex-col">
+          <div className="bg-[#0D2B52] text-white text-[10px] font-black uppercase text-center py-1 rounded mb-2">
+            {lr.roundName}
+          </div>
+          <div className="flex-1 flex flex-col justify-around gap-1.5">
+            {lr.matches.map((m) => (
+              <MatchCardSvgPreview key={m.id} match={m} />
+            ))}
+          </div>
+        </div>
+      ))}
+      {tree.grandFinalMatch && (
+        <div className="flex flex-col justify-center">
+          <div className="bg-[#D4A017] text-[#0D2B52] text-[10px] font-black uppercase text-center py-1 rounded mb-2">
+            Grand Final
+          </div>
+          <MatchCardSvgPreview match={tree.grandFinalMatch} highlightGold />
+          <div className="text-[9px] italic text-slate-500 text-center mt-2">
+            Bracket Reset match applies if Losers Bracket finalist wins GF.
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+const PoolSheetPreview: React.FC<{ pool: PoolData }> = ({ pool }) => (
+  <div className="border border-slate-300 rounded-lg p-3 space-y-3 bg-white">
+    <div className="bg-[#0D2B52] text-white px-3 py-1.5 rounded flex items-center justify-between">
+      <span className="text-xs font-black uppercase text-[#D4A017]">
+        {pool.poolName} ({pool.teams.length} Teams)
+      </span>
+      <span className="text-[10px] font-bold">{pool.matches.length} Matches</span>
+    </div>
+
+    {/* Standings Table */}
+    <table className="w-full text-left border-collapse text-[10px] border border-slate-300">
+      <thead>
+        <tr className="bg-slate-200 text-[#0D2B52] font-black uppercase text-[9px]">
+          <th className="p-1.5 text-center border border-slate-300">Pos</th>
+          <th className="p-1.5 border border-slate-300">Team / School</th>
+          <th className="p-1.5 text-center border border-slate-300">P</th>
+          <th className="p-1.5 text-center border border-slate-300">W</th>
+          <th className="p-1.5 text-center border border-slate-300">D</th>
+          <th className="p-1.5 text-center border border-slate-300">L</th>
+          <th className="p-1.5 text-center border border-slate-300">GF</th>
+          <th className="p-1.5 text-center border border-slate-300">GA</th>
+          <th className="p-1.5 text-center border border-slate-300">GD</th>
+          <th className="p-1.5 text-center border border-slate-300">Pts</th>
+        </tr>
+      </thead>
+      <tbody>
+        {pool.standings.map((row, idx) => (
+          <tr key={row.team} className={idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'}>
+            <td className="p-1 text-center font-bold border border-slate-300">{row.pos}</td>
+            <td className="p-1 font-bold text-slate-900 border border-slate-300">{truncateText(row.team, 28)}</td>
+            <td className="p-1 text-center border border-slate-300">{row.played}</td>
+            <td className="p-1 text-center border border-slate-300">{row.won}</td>
+            <td className="p-1 text-center border border-slate-300">{row.drawn}</td>
+            <td className="p-1 text-center border border-slate-300">{row.lost}</td>
+            <td className="p-1 text-center border border-slate-300">{row.gf}</td>
+            <td className="p-1 text-center border border-slate-300">{row.ga}</td>
+            <td className="p-1 text-center border border-slate-300">{row.gd > 0 ? `+${row.gd}` : row.gd}</td>
+            <td className="p-1 text-center font-black text-[#0D2B52] border border-slate-300">{row.pts}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+
+    {/* Cross-Table Matrix */}
+    {pool.teams.length <= 10 && (
+      <div>
+        <div className="text-[9.5px] font-black text-[#0D2B52] uppercase mb-1">
+          Head-to-Head Cross-Table Matrix
+        </div>
+        <table className="w-full text-center border-collapse text-[9.5px] border border-slate-300">
+          <thead>
+            <tr className="bg-slate-100 text-[#0D2B52] font-black">
+              <th className="p-1 text-left border border-slate-300">Team</th>
+              {pool.teams.map((t, i) => (
+                <th key={t} className="p-1 border border-slate-300">
+                  {pool.teams.length <= 5 ? truncateText(t, 9) : `T${i + 1}`}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {pool.teams.map((rt, rIdx) => (
+              <tr key={rt}>
+                <td className="p-1 text-left font-bold border border-slate-300">
+                  {pool.teams.length > 5 ? `T${rIdx + 1}. ` : ''}
+                  {truncateText(rt, 18)}
+                </td>
+                {pool.teams.map((ct, cIdx) => (
+                  <td
+                    key={ct}
+                    className={`p-1 border border-slate-300 font-bold ${
+                      rIdx === cIdx ? 'bg-slate-300' : 'bg-white text-[#0D2B52]'
+                    }`}
+                  >
+                    {rIdx === cIdx ? '' : pool.crossTable[rt]?.[ct] || ''}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {/* Round-by-Round Match Order Table */}
+    <div>
+      <div className="text-[9.5px] font-black text-[#0D2B52] uppercase mb-1">
+        Round-by-Round Match Order
+      </div>
+      <table className="w-full text-left border-collapse text-[9.5px] border border-slate-300">
+        <thead>
+          <tr className="bg-[#0D2B52] text-white font-black uppercase text-[8.5px]">
+            <th className="p-1 text-center">M#</th>
+            <th className="p-1 text-center">Rnd</th>
+            <th className="p-1">Date & Time</th>
+            <th className="p-1 text-center">Court</th>
+            <th className="p-1">Team A</th>
+            <th className="p-1 text-center">Score</th>
+            <th className="p-1">Team B</th>
+            <th className="p-1 text-center">Ref Sign</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pool.matches.map((m, idx) => (
+            <tr key={m.id} className={idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'}>
+              <td className="p-1 text-center font-black text-[#0D2B52] border border-slate-200">{m.matchCode}</td>
+              <td className="p-1 text-center border border-slate-200">R{m.roundNumber || 1}</td>
+              <td className="p-1 border border-slate-200">{m.date} {m.time}</td>
+              <td className="p-1 text-center border border-slate-200">{m.court}</td>
+              <td className="p-1 font-bold border border-slate-200">{truncateText(m.team1, 18)}</td>
+              <td className="p-1 text-center font-mono border border-slate-200">
+                {m.completed && m.score1 !== null && m.score2 !== null
+                  ? `${m.score1} - ${m.score2}`
+                  : '[  ] - [  ]'}
+              </td>
+              <td className="p-1 font-bold border border-slate-200">{truncateText(m.team2, 18)}</td>
+              <td className="p-1 text-center text-slate-400 border border-slate-200">____</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
 
 export default TournamentPrintPreviewModal;

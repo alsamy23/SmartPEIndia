@@ -9,6 +9,10 @@ import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
 import { safeOpenExternal } from '../../utils/safeBrowser.ts';
 
 interface CombinationTournamentProps {
+  sport?: string;
+  setSport?: (val: string) => void;
+  venue?: string;
+  courtsCount?: number;
   tournamentName: string;
   setTournamentName: (val: string) => void;
   subTitle: string;
@@ -24,6 +28,10 @@ interface CombinationTournamentProps {
 }
 
 export const CombinationTournament: React.FC<CombinationTournamentProps> = ({
+  sport: controlledSport,
+  setSport: setControlledSport,
+  venue = 'School Main Sports Ground',
+  courtsCount = 2,
   tournamentName,
   setTournamentName,
   subTitle,
@@ -38,7 +46,9 @@ export const CombinationTournament: React.FC<CombinationTournamentProps> = ({
   setTeamsList
 }) => {
   const [combType, setCombType] = useState<'league-knockout' | 'knockout-league'>('league-knockout');
-  const [sport, setSport] = useState<string>('Football');
+  const [localSport, setLocalSport] = useState<string>('Football');
+  const sport = controlledSport ?? localSport;
+  const setSport = setControlledSport ?? setLocalSport;
   const [startTime, setStartTime] = useState('08:30');
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
@@ -431,7 +441,7 @@ Official CBSE PE Unit 1 format.`;
         </div>
       </div>
 
-      {/* Print Preview Modal */}
+      {/* Vector Print & PDF Preview Modal */}
       <TournamentPrintPreviewModal
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
@@ -439,13 +449,16 @@ Official CBSE PE Unit 1 format.`;
         subTitle={subTitle}
         category={category}
         sport={sport}
+        venue={venue}
         startDate={startDate}
         startTime={startTime}
+        courtsCount={courtsCount}
         format="combination"
         teamsList={teamsList}
-        matches={poolMatches.map((m, i) => ({
+        matches={poolMatches.map((m) => ({
           name: m.matchId,
           roundName: m.poolName,
+          poolName: m.poolName,
           team1: m.team1,
           team2: m.team2,
           date: startDate,

@@ -37,6 +37,9 @@ export interface TeamStanding {
 }
 
 interface RoundRobinLeagueProps {
+  sport?: string;
+  venue?: string;
+  courtsCount?: number;
   tournamentName: string;
   setTournamentName: (val: string) => void;
   subTitle: string;
@@ -52,6 +55,9 @@ interface RoundRobinLeagueProps {
 }
 
 export const RoundRobinLeague: React.FC<RoundRobinLeagueProps> = ({
+  sport = 'Football',
+  venue = 'School Main Sports Ground',
+  courtsCount = 2,
   tournamentName,
   setTournamentName,
   subTitle,
@@ -725,25 +731,38 @@ Generated via SmartPE India Official Tournament Studio.`;
         </div>
       )}
 
-      {/* Interactive Print Preview Modal with A4/A3 sizing, Word export and WhatsApp share */}
+      {/* Interactive Vector Print & PDF Preview Modal */}
       <TournamentPrintPreviewModal
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
         tournamentName={tournamentName}
         subTitle={subTitle}
         category={category}
-        sport="Football"
+        sport={sport}
+        venue={venue}
         startDate={startDate}
         startTime={startTime}
+        courtsCount={courtsCount}
+        matchDurationMins={matchDuration}
+        restGapMins={restGap}
+        winPoints={winPoints}
+        drawPoints={drawPoints}
+        lossPoints={lossPoints}
+        leagueType={leagueType}
         format="roundrobin"
         teamsList={teamsList}
+        standings={standings}
         matches={matches.map(m => ({
           name: `Match ${m.id}`,
           roundName: `Round ${m.roundNumber}`,
+          roundNumber: m.roundNumber,
           team1: m.team1,
           team2: m.team2,
           date: m.date || startDate,
-          time: m.time
+          time: m.time,
+          score1: m.score1,
+          score2: m.score2,
+          completed: m.completed
         }))}
       />
     </div>

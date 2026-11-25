@@ -6,13 +6,19 @@ import {
 } from 'lucide-react';
 import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
 import { toPng } from 'html-to-image';
-import { jsPDF } from 'jspdf';
 import { toast } from '../../services/toast.ts';
 import { trackEvent } from '../../services/analytics.ts';
 import { safeOpenExternal, downloadBlobFile } from '../../utils/safeBrowser.ts';
+import {
+  EliminationType,
+  generateCanonicalSeedOrder,
+  TournamentPdfConfig
+} from './tournamentDrawEngine.ts';
+import { buildTournamentVectorPdf } from './TournamentVectorPdf.ts';
 
 export interface ClassicSlot {
   slotIndex: number;
+  seed: number;
   teamName: string;
   isBye: boolean;
   byeLabel?: string;
@@ -23,6 +29,7 @@ interface ClassicSheetBracketProps {
   tournamentName: string;
   subTitle: string;
   category: string;
+  venue?: string;
   startDate: string;
   teamsList: string[];
   firstHalf: number;
@@ -30,6 +37,9 @@ interface ClassicSheetBracketProps {
   halfTime: number;
   restGap: number;
   startTime: string;
+  courtsCount?: number;
+  eliminationType?: EliminationType;
+  thirdPlaceEnabled?: boolean;
   showGridLines?: boolean;
 }
 
@@ -38,6 +48,7 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
   tournamentName,
   subTitle,
   category,
+  venue = 'School Main Sports Ground',
   startDate,
   teamsList,
   firstHalf,
@@ -45,6 +56,9 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
   halfTime,
   restGap,
   startTime,
+  courtsCount = 2,
+  eliminationType = 'single',
+  thirdPlaceEnabled = true,
   showGridLines: initialShowGrid = true
 }) => {
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -60,21 +74,22 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
     const text = 
 `🏆 *OFFICIAL TOURNAMENT FIXTURE DRAW*
 📌 *Tournament:* ${tournamentName} (${category})
-⚽ *Sport:* ${sport} | 📅 *Date:* ${startDate}
-👥 *Teams:* ${teamsList.length} | 🎯 *Byes:* ${byesCount}
+⚽ *Sport:* ${sport} | 📍 *Venue:* ${venue}
+📅 *Date:* ${startDate} | 👥 *Teams:* ${teamsList.length} | 🎯 *Byes:* ${byesCount}
 ⏰ *First Match:* ${startTime}
 
-Official CBSE Physical Education Subject Code 048 format.
-Generated via SmartPE India Official Tournament Studio.`;
+Official CBSE / Federation Standard Draw.
+Generated via SmartPE India (smartpeindia.app).`;
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     safeOpenExternal(url, "Opening WhatsApp with tournament bracket draw!");
   };
 
-  // Compute bracket power of 2
+  // Compute bracket power of 2 & canonical symmetrical seeding
   const N = teamsList.length;
-  const P = Math.max(4, Math.pow(2, Math.ceil(Math.log2(N || 4))));
-  const totalRounds = Math.log2(P); // e.g. 16 -> 4 rounds
-  const byesCount = P - N;
+  const P = Math.min(64, Math.max(4, Math.pow(2, Math.ceil(Math.log2(N || 4)))));
+  const totalRounds = Math.log2(P);
+  const byesCount = Math.max(0, P - N);
+  const Nu = N % 2 === 0 ? N / 2 : (N + 1) / 2;
 
   // Format date display for title e.g. [29.08.2026]
   const formattedDateTag = (() => {
@@ -95,51 +110,52 @@ Generated via SmartPE India Official Tournament Studio.`;
   const defaultHeader = `${(sport || 'FOOTBALL').toUpperCase()} ${category ? `${category.toUpperCase()} ` : ''}${formattedDateTag ? `[${formattedDateTag}]` : ''}`.trim();
   const displayTitle = customTitle || defaultHeader;
 
-  // Standard CBSE bye allocation logic
-  const byeSlots = new Set<number>();
-  const Nu = N % 2 === 0 ? N / 2 : (N + 1) / 2;
-  let botLower = P - 1;
-  let topUpper = 0;
-  let topLower = P / 2;
-  let botUpper = P / 2 - 1;
-
-  for (let b = 0; b < byesCount; b++) {
-    const step = b % 4;
-    if (step === 0) {
-      byeSlots.add(botLower);
-      botLower -= 2;
-      if (botLower < P / 2) botLower = P - 2;
-    } else if (step === 1) {
-      byeSlots.add(topUpper);
-      topUpper += 2;
-      if (topUpper >= P / 2) topUpper = 1;
-    } else if (step === 2) {
-      byeSlots.add(topLower);
-      topLower += 2;
-      if (topLower >= P) topLower = P / 2 + 1;
-    } else if (step === 3) {
-      byeSlots.add(botUpper);
-      botUpper -= 2;
-      if (botUpper < 0) botUpper = P / 2 - 2;
-    }
-  }
-
-  // Populate slots (0 to P-1)
-  const slots: ClassicSlot[] = [];
-  let teamCursor = 0;
-  for (let i = 0; i < P; i++) {
-    const isBye = byeSlots.has(i);
-    const assignedTeam = customTeamNames[i] || teamsList[teamCursor] || `Team ${i + 1}`;
-    if (teamCursor < teamsList.length) {
-      teamCursor++;
-    }
-    slots.push({
-      slotIndex: i,
-      teamName: assignedTeam,
-      isBye: isBye && byesCount > 0,
+  // Symmetrical seeded placement: seeds 1..N occupy seeded slots, slots > N are explicit BYEs (zero BYE-vs-BYE)
+  const seedOrder = generateCanonicalSeedOrder(P);
+  const slots: ClassicSlot[] = seedOrder.map((seed, slotIndex) => {
+    const isBye = seed > N;
+    const baseName = isBye ? 'BYE' : (teamsList[seed - 1] || `Team ${seed}`);
+    return {
+      slotIndex,
+      seed,
+      teamName: isBye ? 'BYE' : (customTeamNames[slotIndex] ?? baseName),
+      isBye,
       byeLabel: 'BYE'
-    });
-  }
+    };
+  });
+
+  // Merge inline edited team names into roster for Vector PDF engine
+  const effectiveTeamsList = Array.from({ length: N }, (_, idx) => {
+    const seedNum = idx + 1;
+    const slotMatch = slots.find((s) => s.seed === seedNum);
+    return (slotMatch && !slotMatch.isBye ? slotMatch.teamName : teamsList[idx]) || `Team ${seedNum}`;
+  });
+
+  const buildVectorPdfConfig = (): TournamentPdfConfig => ({
+    organizationName: (() => {
+      try {
+        return localStorage.getItem('smartpe_school_name') || "SHRADDHA CHILDREN'S ACADEMY";
+      } catch {
+        return "SHRADDHA CHILDREN'S ACADEMY";
+      }
+    })(),
+    tournamentName,
+    subTitle,
+    sport,
+    category,
+    venue,
+    startDate,
+    startTime,
+    format: 'knockout',
+    eliminationType,
+    paperSize: N > 16 ? 'A4' : 'A4',
+    viewMode: 'full-bracket',
+    teamsList: effectiveTeamsList,
+    courtsCount,
+    matchDurationMins: (firstHalf || 15) + (secondHalf || 15) + (halfTime || 5),
+    restGapMins: restGap || 10,
+    thirdPlaceEnabled
+  });
 
   // Time calculation helper
   const addMinutes = (baseTime: string, mins: number) => {
@@ -441,80 +457,42 @@ Generated via SmartPE India Official Tournament Studio.`;
     }
   };
 
-  // Direct PDF Download (.pdf) via jsPDF
+  // Pure Vector PDF Download (.pdf) via TournamentVectorPdf (Zero DOM screenshots!)
   const handleDownloadPdf = async () => {
-    if (!sheetRef.current) return;
     setIsExporting(true);
-    toast.loading("Generating official PDF file...", { id: 'classic-pdf' });
+    toast.loading("Generating pure vector multi-page PDF...", { id: 'classic-pdf' });
     try {
-      const imgData = await toPng(sheetRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: '#ffffff'
-      });
-
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: N > 16 ? 'a3' : 'a4'
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const margin = 8;
-      const imgWidth = pdfWidth - margin * 2;
-      const imgHeight = (sheetRef.current.offsetHeight * imgWidth) / sheetRef.current.offsetWidth;
-
-      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, Math.min(imgHeight, pdfHeight - margin * 2));
-      pdf.save(`${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Official_Fixture_${N}Teams.pdf`);
+      const { doc, fileName, pageCount } = buildTournamentVectorPdf(buildVectorPdfConfig());
+      doc.save(fileName);
       toast.dismiss('classic-pdf');
-      toast.success("Official PDF file downloaded successfully!");
+      toast.success(`Official ${pageCount}-page Vector PDF downloaded!`);
+      trackEvent('resource_downloaded', { resource_name: `Vector Bracket PDF (${sport})`, format: 'pdf', pageCount });
     } catch (err) {
       console.error(err);
       toast.dismiss('classic-pdf');
-      toast.error("Failed to generate PDF. You can also use Print / Save PDF.");
+      toast.error("Failed to generate Vector PDF. Try opening Print Preview.");
     } finally {
       setIsExporting(false);
     }
   };
 
-  // WhatsApp Share with ACTUAL PDF Document Attachment
+  // WhatsApp Share with ACTUAL Vector PDF Document Attachment
   const handleWhatsAppSharePdf = async () => {
-    if (!sheetRef.current) return;
     setIsExporting(true);
-    toast.loading("Preparing PDF for WhatsApp...", { id: 'classic-wa' });
+    toast.loading("Preparing official Vector PDF for WhatsApp...", { id: 'classic-wa' });
     try {
-      const imgData = await toPng(sheetRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: '#ffffff'
-      });
-
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: N > 16 ? 'a3' : 'a4'
-      });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const margin = 8;
-      const imgWidth = pdfWidth - margin * 2;
-      const imgHeight = (sheetRef.current.offsetHeight * imgWidth) / sheetRef.current.offsetWidth;
-      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, Math.min(imgHeight, pdfHeight - margin * 2));
-      
-      const pdfBlob = pdf.output('blob');
-      const filename = `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Fixture.pdf`;
-      const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
+      const { doc, fileName, pageCount } = buildTournamentVectorPdf(buildVectorPdfConfig());
+      const pdfBlob = doc.output('blob');
+      const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
       const captionText = 
-`🏆 *OFFICIAL TOURNAMENT FIXTURE BRACKET*
+`🏆 *OFFICIAL TOURNAMENT FIXTURE BRACKET (${pageCount} Pages)*
 📌 *Tournament:* ${tournamentName} (${category})
-⚽ *Sport:* ${sport} | 📅 *Date:* ${formattedDateTag || startDate}
-⏰ *First Match Time:* ${startTime}
+⚽ *Sport:* ${sport} | 📍 *Venue:* ${venue}
+📅 *Date:* ${formattedDateTag || startDate} | ⏰ *Start:* ${startTime}
 👥 *Teams:* ${N} Teams | 🎯 *Byes:* ${byesCount} Byes
-Official CBSE PE Subject Code 048 draw sheet.`;
+Official CBSE / Federation standard draw.`;
 
-      // Check if mobile browser can share file directly to WhatsApp
       if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
         toast.dismiss('classic-wa');
         await navigator.share({
@@ -522,17 +500,16 @@ Official CBSE PE Subject Code 048 draw sheet.`;
           title: `Tournament Fixture - ${tournamentName}`,
           text: captionText
         });
-        toast.success("Shared PDF via WhatsApp!");
+        toast.success("Shared Vector PDF via WhatsApp!");
         return;
       }
 
-      // Fallback: Download PDF & open WhatsApp
-      pdf.save(filename);
+      doc.save(fileName);
       toast.dismiss('classic-wa');
-      toast.success("PDF saved! Opening WhatsApp to attach file...");
+      toast.success("Vector PDF saved! Opening WhatsApp to attach file...");
 
       const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(
-        captionText + '\n\n📄 _(Official Fixture PDF has been downloaded to your device - please attach it now to send)_'
+        captionText + '\n\n📄 _(Official Fixture PDF has been downloaded - please attach it to send)_'
       )}`;
       safeOpenExternal(waUrl);
     } catch (err) {
@@ -546,7 +523,7 @@ Official CBSE PE Subject Code 048 draw sheet.`;
   };
 
   const handlePrint = () => {
-    window.print();
+    setIsPrintModalOpen(true);
   };
 
   // Geometry configuration
@@ -901,7 +878,7 @@ Official CBSE PE Subject Code 048 draw sheet.`;
       </div>
     </div>
 
-      {/* Interactive Print Preview Modal with A4/A3 page sizing and Word/WhatsApp exports */}
+      {/* Interactive Vector Print & PDF Preview Modal */}
       <TournamentPrintPreviewModal
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
@@ -909,10 +886,16 @@ Official CBSE PE Subject Code 048 draw sheet.`;
         subTitle={subTitle}
         category={category}
         sport={sport}
+        venue={venue}
         startDate={startDate}
         startTime={startTime}
+        courtsCount={courtsCount}
+        eliminationType={eliminationType}
+        matchDurationMins={(firstHalf || 15) + (secondHalf || 15) + (halfTime || 5)}
+        restGapMins={restGap || 10}
+        thirdPlaceEnabled={thirdPlaceEnabled}
         format="knockout"
-        teamsList={teamsList}
+        teamsList={effectiveTeamsList}
         byesCount={byesCount}
         setupFormula={{
           totalTeams: N,
@@ -922,7 +905,7 @@ Official CBSE PE Subject Code 048 draw sheet.`;
           lowerHalfTeams: P - Nu,
           upperHalfByes: Math.floor(byesCount / 2),
           lowerHalfByes: Math.ceil(byesCount / 2),
-          totalMatches: N - 1,
+          totalMatches: Math.max(0, N - 1),
           totalRounds: Math.round(totalRounds)
         }}
       />
