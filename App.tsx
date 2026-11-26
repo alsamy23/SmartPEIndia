@@ -36,7 +36,8 @@ import {
   Video, 
   Terminal,
   School,
-  MessageSquareHeart
+  MessageSquareHeart,
+  LifeBuoy
 } from 'lucide-react';
 import Dashboard from './components/Dashboard.tsx';
 import AIPlanner from './components/AIPlanner.tsx';
@@ -364,29 +365,43 @@ interface MobileHeaderProps {
 }
 const MobileHeader: React.FC<MobileHeaderProps> = React.memo(({ isSidebarOpen, setIsSidebarOpen, schoolName, schoolLogo, onOpenVoiceAgent }) => {
   return (
-    <header className="md:hidden sticky top-0 bg-white backdrop-blur-xl text-slate-900 px-4 py-3 flex items-center justify-between z-30 border-b border-slate-200 shadow-sm print:hidden">
-      <div className="flex-grow-0 flex-shrink-0">
-        <Logo variant="color" size="md" customLogoUrl={schoolLogo} customSchoolName={schoolName} />
+    <header className="lg:hidden sticky top-0 bg-white/95 backdrop-blur-xl text-slate-900 px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2 z-30 border-b border-slate-200 shadow-sm print:hidden">
+      <div className="flex items-center gap-2 min-w-0">
+        <button 
+          type="button"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+          className="min-w-[44px] min-h-[44px] p-2.5 bg-slate-100 border border-slate-200 rounded-2xl active:scale-90 transition-all flex items-center justify-center hover:bg-slate-200 text-slate-700 shrink-0"
+          aria-label="Toggle Navigation Menu"
+        >
+          {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+        <div className="flex-grow-0 flex-shrink-0 min-w-0">
+          <Logo variant="color" size="md" customLogoUrl={schoolLogo} customSchoolName={schoolName} />
+        </div>
       </div>
-      <div className="flex items-center gap-2 ml-auto">
+
+      <div className="flex items-center gap-1.5 shrink-0">
         {onOpenVoiceAgent && (
           <button
             type="button"
             onClick={onOpenVoiceAgent}
-            className="p-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-2xl active:scale-90 transition-all flex items-center justify-center gap-1 text-xs font-black"
+            className="min-h-[44px] px-2.5 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-2xl active:scale-90 transition-all flex items-center justify-center gap-1 text-xs font-black"
             aria-label="Open Voice AI Assistant"
             title="Voice Assistant"
           >
-            <Sparkles size={16} className="text-amber-500 animate-pulse" />
+            <Sparkles size={15} className="text-amber-500 animate-pulse shrink-0" />
             <span className="text-[10px]">Voice AI</span>
           </button>
         )}
-        <button 
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-          className="p-2.5 bg-slate-100 border border-slate-200 rounded-2xl active:scale-90 transition-all flex items-center justify-center hover:bg-slate-200 text-slate-700"
-          aria-label="Toggle Navigation Menu"
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('smartpe:open_support'))}
+          className="min-w-[44px] min-h-[44px] px-2.5 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl active:scale-90 transition-all flex items-center justify-center gap-1 text-xs font-black"
+          aria-label="Open WhatsApp Support and Help"
+          title="Support & Help"
         >
-          {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+          <LifeBuoy size={16} className="shrink-0" />
+          <span className="hidden sm:inline text-[10px] uppercase">Help</span>
         </button>
       </div>
     </header>
@@ -428,19 +443,20 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
 }) => {
   return (
     <aside className={`
-      fixed inset-y-0 left-0 z-50 w-80 bg-slate-950 text-white transform transition-transform duration-500 cubic-bezier(0.4, 0, 0.2, 1) md:relative md:translate-x-0
+      fixed inset-y-0 left-0 z-50 w-80 bg-slate-950 text-white transform transition-transform duration-500 cubic-bezier(0.4, 0, 0.2, 1) lg:relative lg:translate-x-0
       ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       border-r border-white/5
       print:hidden
     `}>
-      {/* Sidebar Header with Logo and Close Button (Mobile Only) */}
-      <div className="p-6 md:p-10 flex items-center border-b border-white/5 md:border-b-0">
+      {/* Sidebar Header with Logo and Close Button (Mobile & Tablet Only) */}
+      <div className="p-5 lg:p-10 flex items-center border-b border-white/5 lg:border-b-0">
         <div className="flex-grow-0 flex-shrink-0">
           <Logo variant="light" className="scale-95 origin-left" customLogoUrl={schoolLogo} customSchoolName={schoolName} />
         </div>
         <button 
+          type="button"
           onClick={() => setIsSidebarOpen(false)}
-          className="md:hidden ml-auto flex-shrink-0 p-2.5 bg-white/5 border border-white/10 rounded-2xl active:scale-90 transition-all flex items-center justify-center hover:bg-white/10 text-slate-400 hover:text-white"
+          className="lg:hidden ml-auto flex-shrink-0 min-w-[44px] min-h-[44px] p-2.5 bg-white/5 border border-white/10 rounded-2xl active:scale-90 transition-all flex items-center justify-center hover:bg-white/10 text-slate-400 hover:text-white"
           aria-label="Close Navigation Menu"
         >
           <X size={18} />
@@ -571,18 +587,32 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
       </nav>
 
       {/* Profile Footer */}
-      <div className="absolute bottom-0 left-0 right-0 p-5 bg-slate-950 border-t border-white/5 space-y-2.5">
-        <button
-          type="button"
-          onClick={() => {
-            onOpenFeedback();
-            setIsSidebarOpen(false);
-          }}
-          className="w-full py-2.5 px-4 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-colors"
-        >
-          <MessageSquareHeart size={15} className="text-amber-400" />
-          <span>Give Feedback</span>
-        </button>
+      <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 bg-slate-950 border-t border-white/5 space-y-2.5">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              onOpenFeedback();
+              setIsSidebarOpen(false);
+            }}
+            className="min-h-[44px] py-2 px-3 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <MessageSquareHeart size={15} className="text-amber-400 shrink-0" />
+            <span>Feedback</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsSidebarOpen(false);
+              window.dispatchEvent(new CustomEvent('smartpe:open_support'));
+            }}
+            className="min-h-[44px] py-2 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-200 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <LifeBuoy size={15} className="text-emerald-400 shrink-0" />
+            <span>Help</span>
+          </button>
+        </div>
 
         {user ? (
           <div className="w-full bg-white/5 rounded-[2rem] p-4 flex items-center space-x-4">
@@ -649,9 +679,9 @@ const StickyHeader: React.FC<StickyHeaderProps> = React.memo(({
   user
 }) => {
   return (
-    <div className="relative md:sticky md:top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 md:px-8 md:py-3.5 print:hidden shadow-sm flex items-center justify-between gap-4">
+    <div className="relative lg:sticky lg:top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 lg:px-8 lg:py-3.5 print:hidden shadow-sm flex items-center justify-between gap-4">
       {/* Primary Header dedicated to Smart PE / Custom School Logo */}
-      <div className="hidden md:flex items-center gap-4">
+      <div className="hidden lg:flex items-center gap-4">
         <div className="cursor-pointer" onClick={() => handleTabChange('dashboard')}>
           <Logo variant="color" size="lg" customLogoUrl={schoolLogo} customSchoolName={schoolName} />
         </div>
@@ -728,7 +758,7 @@ const StickyHeader: React.FC<StickyHeaderProps> = React.memo(({
         )}
       </div>
 
-      <div className="w-full md:max-w-xs lg:max-w-sm">
+      <div className="w-full lg:max-w-sm">
         <GlobalSearch 
           onOpenVoiceAgent={onOpenVoiceAgent}
           onNavigate={(tabId, data) => {
@@ -760,21 +790,22 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({ activeTab,
   ] as const, []);
 
   return (
-    <nav className="md:hidden fixed bottom-4 left-4 right-4 bg-white/90 backdrop-blur-xl border border-slate-150/60 p-2 rounded-[1.75rem] flex justify-around items-center z-40 shadow-[0_8px_30px_rgb(0,0,0,0.08)] print:hidden">
+    <nav className="lg:hidden fixed bottom-3 left-3 right-3 bg-white/95 backdrop-blur-xl border border-slate-200/80 p-1.5 rounded-[1.5rem] flex justify-around items-center z-40 shadow-[0_8px_30px_rgb(0,0,0,0.08)] print:hidden">
       {bottomItems.map((item) => {
         const isActive = activeTab === item.id;
         return (
           <button
             key={item.id}
+            type="button"
             onClick={() => handleTabChange(item.id as Tab)}
-            className={`flex flex-col items-center justify-center py-2 px-3.5 rounded-2xl transition-all duration-300 active:scale-90 relative ${
+            className={`min-h-[44px] flex flex-col items-center justify-center py-1.5 px-3 rounded-2xl transition-all duration-300 active:scale-90 relative ${
               isActive 
                 ? 'text-primary bg-primary/5 font-extrabold' 
                 : 'text-slate-400 hover:text-slate-600'
             }`}
           >
             <item.icon size={18} className={`transition-transform duration-300 ${isActive ? 'scale-110 stroke-[2.5px]' : 'stroke-[2px]'}`} />
-            <span className={`text-[8.5px] font-black uppercase tracking-widest mt-1 transition-all duration-300 ${isActive ? 'text-primary opacity-100' : 'text-slate-400 opacity-70'}`}>
+            <span className={`text-[9px] font-black uppercase tracking-widest mt-0.5 transition-all duration-300 ${isActive ? 'text-primary opacity-100' : 'text-slate-400 opacity-80'}`}>
               {item.label}
             </span>
           </button>
@@ -1304,7 +1335,7 @@ const App: React.FC = () => {
     <HelmetProvider>
       <SEOHead activeTab={activeTab} />
       <ErrorBoundary>
-        <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row overflow-hidden h-screen print:h-auto print:overflow-visible font-sans">
+        <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row overflow-hidden h-screen print:h-auto print:overflow-visible font-sans">
         {/* Toast Notification Container */}
         <div className="fixed top-20 right-4 sm:right-6 z-[200] space-y-3 max-w-sm w-[calc(100%-2rem)] sm:w-full pointer-events-none">
           {toasts.map(t => (
@@ -1372,10 +1403,10 @@ const App: React.FC = () => {
           onOpenVoiceAgent={() => setIsVoiceAgentOpen(true)}
         />
 
-        {/* Mobile Sidebar Backdrop */}
+        {/* Mobile & Tablet Sidebar Backdrop */}
         {isSidebarOpen && (
           <div 
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-40 md:hidden"
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-40 lg:hidden"
             onClick={() => setIsSidebarOpen(false)}
           />
         )}
@@ -1399,7 +1430,7 @@ const App: React.FC = () => {
         />
 
         {/* Content Area */}
-        <main ref={mainRef} className={`flex-1 overflow-y-auto bg-slate-50 relative print:overflow-visible print:h-auto print:bg-white pb-32 ${isSidebarOpen ? 'hidden md:block' : ''}`}>
+        <main ref={mainRef} className="flex-1 overflow-y-auto bg-slate-50 relative print:overflow-visible print:h-auto print:bg-white pb-28 lg:pb-16">
           {/* Outdoor Offline Status Banner (inline inside content pane) */}
           <OfflineBanner />
 

@@ -54,9 +54,16 @@ export const UserSupportModal: React.FC<UserSupportModalProps> = ({
       }
     };
 
+    const handleOpenSupportEvent = () => {
+      setIsOpen(true);
+      setHasNewAlert(false);
+    };
+
     window.addEventListener('smartpe:incident_reported', handleIncidentEvent);
+    window.addEventListener('smartpe:open_support', handleOpenSupportEvent);
     return () => {
       window.removeEventListener('smartpe:incident_reported', handleIncidentEvent);
+      window.removeEventListener('smartpe:open_support', handleOpenSupportEvent);
     };
   }, []);
 
@@ -105,8 +112,8 @@ export const UserSupportModal: React.FC<UserSupportModalProps> = ({
 
   return (
     <>
-      {/* Floating Support & Alert Trigger (Bottom Right) */}
-      <aside aria-label="Support and feedback" className="fixed bottom-24 md:bottom-5 right-4 sm:right-6 z-40 flex flex-col items-end print:hidden">
+      {/* Floating Support & Alert Trigger (Desktop >= 1024px only; mobile/tablet use MobileHeader & Sidebar trigger to prevent MobileBottomNav/action overlap) */}
+      <aside aria-label="Support and feedback" className="hidden lg:flex fixed bottom-4 right-4 z-40 flex-col items-end print:hidden">
         {/* Subtle Alert Bubble if a background error occurred */}
         <AnimatePresence>
           {hasNewAlert && recentIncident && !isOpen && (

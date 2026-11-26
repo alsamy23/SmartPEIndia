@@ -3,13 +3,21 @@ import { motion } from 'motion/react';
 import { 
   Trophy, Users, Calendar, Clock, Printer, Plus, RefreshCw, 
   ChevronRight, ArrowRight, Shield, Download, Sparkles, AlertCircle, 
-  CheckCircle2, Share2, FileText, Check, Copy, Table, ListFilter, Activity
+  CheckCircle2, Share2, FileText, Check, Copy, Table, ListFilter, Activity,
+  FileSpreadsheet, Image as ImageIcon
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
 import { toast } from '../../services/toast.ts';
 import { trackEvent } from '../../services/analytics.ts';
 import { PRESET_SCHOOLS } from './KnockoutBracket.tsx';
 import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
-import { safeOpenExternal } from '../../utils/safeBrowser.ts';
+import { safeOpenExternal, downloadBlobFile } from '../../utils/safeBrowser.ts';
+import {
+  TournamentPdfConfig,
+  exportTournamentToCsv,
+  formatDisplayDate
+} from './tournamentDrawEngine.ts';
+import { buildTournamentVectorPdf } from './TournamentVectorPdf.ts';
 
 export interface RoundRobinMatch {
   id: number;
@@ -92,11 +100,158 @@ export const RoundRobinLeague: React.FC<RoundRobinLeagueProps> = ({
   const [matches, setMatches] = useState<RoundRobinMatch[]>([]);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const printAreaRef = useRef<HTMLDivElement>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
+
+  const getSchoolName = () => {
+    try {
+      return localStorage.getItem('smartpe_school_name') || "SHRADDHA CHILDREN'S ACADEMY";
+    } catch {
+      return "SHRADDHA CHILDREN'S ACADEMY";
+    }
+  };
+
+  const buildPdfConfig = (): TournamentPdfConfig => ({
+    organizationName: getSchoolName(),
+    tournamentName,
+    subTitle,
+    sport,
+    category,
+    venue,
+    startDate,
+    startTime,
+    format: 'roundrobin',
+    paperSize: 'A4',
+    viewMode: 'round-robin-pools',
+    teamsList,
+    courtsCount,
+    matchDurationMins: matchDuration,
+    restGapMins: restGap,
+    winPoints,
+    drawPoints,
+    lossPoints,
+    leagueType,
+    existingStandings: standings,
+    existingMatches: matches.map((m) => ({
+      name: `Match ${m.id}`,
+      roundName: `Round ${m.roundNumber}`,
+      roundNumber: m.roundNumber,
+      team1: m.team1,
+      team2: m.team2,
+      date: m.date || startDate,
+      time: m.time,
+      score1: m.score1,
+      score2: m.score2,
+      completed: m.completed
+    }))
+  });
+
+  const handleDownloadPdf = async () => {
+    setIsExporting(true);
+    try {
+      const { doc, fileName } = buildTournamentVectorPdf(buildPdfConfig());
+      doc.save(fileName);
+      toast.success('Official Vector PDF downloaded!');
+      trackEvent('resource_downloaded', {
+        resource_name: `${tournamentName || 'League'} Schedule`,
+        resource_type: 'Round Robin League PDF',
+        format: 'PDF'
+      });
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      toast.error('Failed to generate PDF.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDownloadCsv = () => {
+    try {
+      const csv = exportTournamentToCsv(buildPdfConfig());
+      const safeName = (tournamentName || 'League').replace(/[^a-z0-9]+/gi, '_');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      downloadBlobFile(blob, `${safeName}_RoundRobin.csv`);
+      toast.success('League CSV exported!');
+      trackEvent('resource_downloaded', {
+        resource_name: `${tournamentName || 'League'} Schedule`,
+        resource_type: 'Round Robin League CSV',
+        format: 'CSV'
+      });
+    } catch (err) {
+      console.error('CSV export failed:', err);
+      toast.error('Failed to export CSV.');
+    }
+  };
+
+  const handleDownloadPng = async () => {
+    if (!captureRef.current) {
+      toast.error('League sheet is not ready for image export.');
+      return;
+    }
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(captureRef.current, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        logging: false,
+        windowWidth: 1200
+      });
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('PNG generation failed');
+      const safeName = (tournamentName || 'League').replace(/[^a-z0-9]+/gi, '_');
+      downloadBlobFile(blob, `${safeName}_RoundRobin.png`);
+      toast.success('High-res PNG downloaded!');
+      trackEvent('resource_downloaded', {
+        resource_name: `${tournamentName || 'League'} Sheet`,
+        resource_type: 'Round Robin League PNG',
+        format: 'PNG'
+      });
+    } catch (err) {
+      console.error('PNG export failed:', err);
+      toast.error('Failed to export PNG image.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportWord = () => {
+    try {
+      const safeTitle = (tournamentName || 'Round Robin League').replace(/</g, '&lt;');
+      const esc = (v: string | number | null | undefined) =>
+        String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const standingsRows = standings
+        .map(
+          (st, idx) =>
+            `<tr><td style="text-align:center;">${idx + 1}</td><td><b>${esc(st.team)}</b></td><td style="text-align:center;">${st.played}</td><td style="text-align:center;">${st.won}</td><td style="text-align:center;">${st.drawn}</td><td style="text-align:center;">${st.lost}</td><td style="text-align:center;">${st.gf}</td><td style="text-align:center;">${st.ga}</td><td style="text-align:center;">${st.gd > 0 ? `+${st.gd}` : st.gd}</td><td style="text-align:center;font-weight:bold;">${st.pts}</td></tr>`
+        )
+        .join('');
+      const matchRows = matches
+        .map(
+          (m) =>
+            `<tr><td>Match #${m.id}</td><td>Round ${m.roundNumber}</td><td>${esc(m.date)}</td><td>${esc(m.time)}</td><td><b>${esc(m.team1)}</b></td><td style="text-align:center;">${m.completed && m.score1 !== null && m.score2 !== null ? `${m.score1} - ${m.score2}` : 'vs'}</td><td><b>${esc(m.team2)}</b></td></tr>`
+        )
+        .join('');
+      const html = `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"/><title>${safeTitle}</title><style>body{font-family:Calibri,Arial,sans-serif;color:#0f172a;padding:18px;}h1{color:#0D2B52;margin-bottom:4px;font-size:20px;}p.meta{color:#475569;font-size:12px;margin-top:0;}table{width:100%;border-collapse:collapse;margin:12px 0;font-size:11px;}th{background:#0D2B52;color:#fff;padding:6px;border:1px solid #cbd5e1;text-align:left;}td{padding:6px;border:1px solid #cbd5e1;}</style></head><body><h1>${safeTitle} (${esc(category)})</h1><p class="meta">${esc(getSchoolName())} | ${esc(sport)} | ${esc(venue)} | Start: ${esc(formatDisplayDate(startDate))}</p><h3>League Standings Table</h3><table><thead><tr><th>Pos</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>PTS</th></tr></thead><tbody>${standingsRows}</tbody></table><h3>Round Robin Match Schedule</h3><table><thead><tr><th>Match</th><th>Round</th><th>Date</th><th>Time</th><th>Team 1</th><th>Score</th><th>Team 2</th></tr></thead><tbody>${matchRows}</tbody></table></body></html>`;
+      const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+      const safeName = (tournamentName || 'League').replace(/[^a-z0-9]+/gi, '_');
+      downloadBlobFile(blob, `${safeName}_RoundRobin.doc`);
+      toast.success('Word (.doc) document downloaded!');
+      trackEvent('resource_downloaded', {
+        resource_name: `${tournamentName || 'League'} Schedule`,
+        resource_type: 'Round Robin League Word',
+        format: 'DOC'
+      });
+    } catch (err) {
+      console.error('Word export failed:', err);
+      toast.error('Failed to export Word document.');
+    }
+  };
 
   const handleWhatsAppQuickShare = () => {
-    const sample = matches.slice(0, 5).map((m, i) => `• *Match ${m.id}* (${m.time}): ${m.team1} vs ${m.team2}`).join('\n');
+    const sample = matches.slice(0, 5).map((m) => `• *Match ${m.id}* (${m.time}): ${m.team1} vs ${m.team2}`).join('\n');
     const msg = 
 `🏆 *ROUND ROBIN LEAGUE FIXTURES*
 📌 *Tournament:* ${tournamentName} (${category})
@@ -317,7 +472,8 @@ Generated via SmartPE India Official Tournament Studio.`;
     return Object.values(tableMap).sort((a, b) => {
       if (b.pts !== a.pts) return b.pts - a.pts;
       if (b.gd !== a.gd) return b.gd - a.gd;
-      return b.gf - a.gf;
+      if (b.gf !== a.gf) return b.gf - a.gf;
+      return a.team.localeCompare(b.team, undefined, { numeric: true, sensitivity: 'base' });
     });
   };
 
@@ -336,18 +492,18 @@ Generated via SmartPE India Official Tournament Studio.`;
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* Configuration Card */}
-      <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-sm space-y-6">
+      <div className="bg-white p-4 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border-2 border-slate-900 shadow-sm space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-6">
           <div>
-            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
-              <RefreshCw size={24} className="text-indigo-600" />
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
+              <RefreshCw size={24} className="text-indigo-600 shrink-0" />
               <span>Round Robin League Configurator</span>
             </h3>
             <p className="text-xs font-bold text-slate-500 mt-1">
               Standard All-Play-All format using Cyclic & Tabular methods with live score entry & standings table.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="px-3 py-1 bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl text-[10px] font-black uppercase tracking-wider">
               {totalMatchesCount} Total Matches
             </span>
@@ -357,14 +513,14 @@ Generated via SmartPE India Official Tournament Studio.`;
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
           <div>
             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Tournament Name</label>
             <input 
               type="text" 
               value={tournamentName}
               onChange={(e) => setTournamentName(e.target.value)}
-              className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
+              className="w-full min-h-[44px] px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
             />
           </div>
 
@@ -374,7 +530,7 @@ Generated via SmartPE India Official Tournament Studio.`;
               type="text" 
               value={subTitle}
               onChange={(e) => setSubTitle(e.target.value)}
-              className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
+              className="w-full min-h-[44px] px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
             />
           </div>
 
@@ -384,18 +540,18 @@ Generated via SmartPE India Official Tournament Studio.`;
               type="text" 
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
+              className="w-full min-h-[44px] px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 pt-2">
           <div>
             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">League Format</label>
             <select
               value={leagueType}
               onChange={(e) => setLeagueType(e.target.value as any)}
-              className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
+              className="w-full min-h-[44px] px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
             >
               <option value="single">Single Round Robin (All Play Once)</option>
               <option value="double">Double Round Robin (Home & Away)</option>
@@ -410,7 +566,7 @@ Generated via SmartPE India Official Tournament Studio.`;
               max={20}
               value={numTeams}
               onChange={(e) => handleNumTeamsChange(parseInt(e.target.value) || 3)}
-              className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
+              className="w-full min-h-[44px] px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
             />
           </div>
 
@@ -420,7 +576,7 @@ Generated via SmartPE India Official Tournament Studio.`;
               type="date" 
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
+              className="w-full min-h-[44px] px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
             />
           </div>
 
@@ -430,7 +586,7 @@ Generated via SmartPE India Official Tournament Studio.`;
               type="time" 
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
-              className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
+              className="w-full min-h-[44px] px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-600 transition-all text-sm"
             />
           </div>
         </div>
@@ -534,21 +690,22 @@ Generated via SmartPE India Official Tournament Studio.`;
       {/* Fixture Schedule & Live Table */}
       {hasGenerated && matches.length > 0 && (
         <div className="space-y-6" ref={printAreaRef}>
-          {/* Sub Tab Switcher with Brand Palette and Actions */}
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-[#0D2B52] text-white p-4 md:p-6 rounded-3xl border border-[#164077] shadow-lg">
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-[#D4A017] block mb-1">
-                Round Robin League Workspace
-              </span>
-              <h3 className="text-xl font-black uppercase tracking-tight">{tournamentName}</h3>
-              <p className="text-xs text-slate-300 font-bold mt-0.5">{subTitle} • {category} Round Robin</p>
-            </div>
+          {/* Sub Tab Switcher with Brand Palette and Full Mobile/Desktop Export Actions */}
+          <div className="flex flex-col gap-4 bg-[#0D2B52] text-white p-4 sm:p-6 rounded-3xl border border-[#164077] shadow-lg">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+              <div className="min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#D4A017] block mb-1">
+                  Round Robin League Workspace
+                </span>
+                <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight break-words">{tournamentName}</h3>
+                <p className="text-xs text-slate-300 font-bold mt-0.5 break-words">{subTitle} • {category} Round Robin</p>
+              </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
-              <div className="bg-[#08182D]/90 p-1.5 rounded-2xl border border-white/10 grid grid-cols-2 gap-1 sm:flex sm:items-center">
+              <div className="bg-[#08182D]/90 p-1.5 rounded-2xl border border-white/10 grid grid-cols-2 gap-1.5 w-full lg:w-auto sm:flex sm:items-center">
                 <button 
+                  type="button"
                   onClick={() => setActiveSubTab('fixtures')}
-                  className={`px-3 py-2 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+                  className={`min-h-[44px] px-3 py-2 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
                     activeSubTab === 'fixtures' ? 'bg-[#059669] text-white shadow-md' : 'text-slate-300 hover:text-white hover:bg-white/5'
                   }`}
                 >
@@ -557,8 +714,9 @@ Generated via SmartPE India Official Tournament Studio.`;
                 </button>
 
                 <button 
+                  type="button"
                   onClick={() => setActiveSubTab('table')}
-                  className={`px-3 py-2 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+                  className={`min-h-[44px] px-3 py-2 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
                     activeSubTab === 'table' ? 'bg-[#059669] text-white shadow-md' : 'text-slate-300 hover:text-white hover:bg-white/5'
                   }`}
                 >
@@ -566,27 +724,67 @@ Generated via SmartPE India Official Tournament Studio.`;
                   <span>Standings Table</span>
                 </button>
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={handleWhatsAppQuickShare}
-                  className="flex-1 sm:flex-initial px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95"
-                  title="Share league fixtures to WhatsApp"
-                >
-                  <Share2 size={14} />
-                  <span>WhatsApp</span>
-                </button>
+            {/* Always-Visible Export Action Bar across Mobile, Tablet & Laptop */}
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={handleDownloadPng}
+                disabled={isExporting}
+                className="min-h-[44px] px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <ImageIcon size={14} />
+                <span>PNG</span>
+              </button>
 
-                <button 
-                  onClick={() => setIsPrintModalOpen(true)}
-                  className="flex-1 sm:flex-initial px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95"
-                  title="Open interactive print preview with A4/A3 page sizing and Word export"
-                >
-                  <Printer size={14} />
-                  <span>Print Preview</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={isExporting}
+                className="min-h-[44px] px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                <Download size={14} />
+                <span>PDF</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportWord}
+                className="min-h-[44px] px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <FileText size={14} />
+                <span>Word (.doc)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadCsv}
+                className="min-h-[44px] px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <FileSpreadsheet size={14} />
+                <span>CSV</span>
+              </button>
+
+              <button 
+                type="button"
+                onClick={handleWhatsAppQuickShare}
+                className="min-h-[44px] px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95"
+                title="Share league fixtures to WhatsApp"
+              >
+                <Share2 size={14} />
+                <span>WhatsApp</span>
+              </button>
+
+              <button 
+                type="button"
+                onClick={() => setIsPrintModalOpen(true)}
+                className="min-h-[44px] px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95"
+                title="Open interactive print preview with A4/A3 page sizing and Word export"
+              >
+                <Printer size={14} />
+                <span>Print Preview</span>
+              </button>
             </div>
           </div>
 
@@ -676,10 +874,10 @@ Generated via SmartPE India Official Tournament Studio.`;
 
               {/* Mobile swipe helper banner */}
               <div className="sm:hidden px-3 py-1.5 bg-amber-50 border border-amber-200/80 rounded-xl text-[10px] font-bold text-amber-900 flex items-center justify-between">
-                <span>👉 Swipe right to view full stats (GD, Points)</span>
+                <span>Swipe horizontally to view full table →</span>
               </div>
 
-              <div className="overflow-x-auto pb-2 -mx-1 px-1">
+              <div className="w-full overflow-x-auto touch-pan-x pb-2 -mx-1 px-1">
                 <table className="w-full min-w-[580px] text-left border-collapse">
                   <thead>
                     <tr className="border-b-2 border-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -730,6 +928,74 @@ Generated via SmartPE India Official Tournament Studio.`;
           )}
         </div>
       )}
+
+      {/* Off-screen Fixed 1200px Sheet for crisp PNG Export regardless of mobile viewport width */}
+      <div
+        ref={captureRef}
+        aria-hidden="true"
+        className="fixed left-[-9999px] top-0 w-[1200px] bg-white text-slate-900 p-10 pointer-events-none select-none z-[-1]"
+      >
+        <div className="border-b-4 border-[#0D2B52] pb-4 mb-6 flex justify-between items-end">
+          <div>
+            <div className="text-xs font-black uppercase tracking-widest text-[#D4A017]">{getSchoolName()}</div>
+            <h2 className="text-3xl font-black uppercase text-[#0D2B52]">{tournamentName}</h2>
+            <p className="text-sm font-bold text-slate-600 mt-1">
+              {subTitle} • {category} • {sport} • {venue} • {formatDisplayDate(startDate)}
+            </p>
+          </div>
+          <div className="text-right text-xs font-bold text-slate-600">
+            <div>Format: {leagueType === 'single' ? 'Single Round Robin' : 'Double Round Robin'}</div>
+            <div>{teamsList.length} Teams • {matches.length} Matches</div>
+          </div>
+        </div>
+
+        <h3 className="text-sm font-black uppercase tracking-wider text-[#0D2B52] mb-2">League Standings Table</h3>
+        <table className="w-full border-collapse text-xs mb-6">
+          <thead>
+            <tr className="bg-[#0D2B52] text-white">
+              <th className="p-2 border border-slate-300 text-center w-12">Pos</th>
+              <th className="p-2 border border-slate-300 text-left">Team</th>
+              <th className="p-2 border border-slate-300 text-center">P</th>
+              <th className="p-2 border border-slate-300 text-center">W</th>
+              <th className="p-2 border border-slate-300 text-center">D</th>
+              <th className="p-2 border border-slate-300 text-center">L</th>
+              <th className="p-2 border border-slate-300 text-center">GF</th>
+              <th className="p-2 border border-slate-300 text-center">GA</th>
+              <th className="p-2 border border-slate-300 text-center">GD</th>
+              <th className="p-2 border border-slate-300 text-center">PTS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {standings.map((st, idx) => (
+              <tr key={st.team} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                <td className="p-2 border border-slate-300 text-center font-bold">{idx + 1}</td>
+                <td className="p-2 border border-slate-300 font-bold">{st.team}</td>
+                <td className="p-2 border border-slate-300 text-center">{st.played}</td>
+                <td className="p-2 border border-slate-300 text-center">{st.won}</td>
+                <td className="p-2 border border-slate-300 text-center">{st.drawn}</td>
+                <td className="p-2 border border-slate-300 text-center">{st.lost}</td>
+                <td className="p-2 border border-slate-300 text-center">{st.gf}</td>
+                <td className="p-2 border border-slate-300 text-center">{st.ga}</td>
+                <td className="p-2 border border-slate-300 text-center">{st.gd > 0 ? `+${st.gd}` : st.gd}</td>
+                <td className="p-2 border border-slate-300 text-center font-black">{st.pts}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <h3 className="text-sm font-black uppercase tracking-wider text-[#0D2B52] mb-2">Match Schedule</h3>
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          {matches.slice(0, 24).map((m) => (
+            <div key={m.id} className="border border-slate-300 rounded-lg p-2.5 flex items-center justify-between bg-slate-50">
+              <span className="font-black text-[#0D2B52]">M{m.id} (R{m.roundNumber})</span>
+              <span className="font-bold flex-1 text-center px-2">
+                {m.team1} {m.completed && m.score1 !== null && m.score2 !== null ? `${m.score1}-${m.score2}` : 'vs'} {m.team2}
+              </span>
+              <span className="text-slate-600 font-semibold">{m.time}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Interactive Vector Print & PDF Preview Modal */}
       <TournamentPrintPreviewModal

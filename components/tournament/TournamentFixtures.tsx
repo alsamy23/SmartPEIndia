@@ -66,7 +66,7 @@ https://smartpeindia.app/tournament-fixtures`;
   return (
     <div className="space-y-8 pb-20 max-w-7xl mx-auto">
       {/* Top Banner & Tagline Header in SmartPE Brand Palette (Navy #0D2B52 & Gold #D4A017) */}
-      <div className="bg-[#0D2B52] text-white p-6 sm:p-8 md:p-10 rounded-[2.5rem] border-2 border-[#164077] shadow-xl relative overflow-hidden">
+      <div className="bg-[#0D2B52] text-white p-4 sm:p-8 md:p-10 rounded-[2rem] sm:rounded-[2.5rem] border-2 border-[#164077] shadow-xl relative overflow-hidden">
         {/* Subtle decorative brand shapes */}
         <div className="absolute -right-10 -bottom-10 w-72 h-72 bg-[#D4A017]/10 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute left-1/3 -top-10 w-56 h-56 bg-[#164077]/40 rounded-full blur-2xl pointer-events-none"></div>
@@ -85,22 +85,24 @@ https://smartpeindia.app/tournament-fixtures`;
             </div>
 
             {/* Quick Top Print & WhatsApp Buttons */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <button
+                type="button"
                 onClick={handleQuickWhatsApp}
-                className="px-3 py-1.5 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+                className="flex-1 sm:flex-initial min-h-[44px] px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95"
                 title="Share quick tournament summary to WhatsApp"
               >
-                <Share2 size={13} />
-                <span className="hidden sm:inline">Share on WhatsApp</span>
+                <Share2 size={14} />
+                <span>Share WhatsApp</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => setIsPrintModalOpen(true)}
-                className="px-3.5 py-1.5 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+                className="flex-1 sm:flex-initial min-h-[44px] px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95"
                 title="Open Vector PDF & Multi-Page Print Studio (A4/A3)"
               >
-                <Printer size={13} />
+                <Printer size={14} />
                 <span>Vector PDF & Print</span>
               </button>
             </div>
@@ -121,7 +123,7 @@ https://smartpeindia.app/tournament-fixtures`;
               <button
                 type="button"
                 onClick={() => setFixtureMode('knockout')}
-                className={`px-2.5 sm:px-4 py-2.5 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-w-0 ${
+                className={`min-h-[44px] px-2.5 sm:px-4 py-2.5 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-w-0 ${
                   fixtureMode === 'knockout'
                     ? 'bg-[#D4A017] text-[#0D2B52] shadow-md shadow-amber-950/40 ring-2 ring-[#D4A017]'
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -134,7 +136,7 @@ https://smartpeindia.app/tournament-fixtures`;
               <button
                 type="button"
                 onClick={() => setFixtureMode('roundrobin')}
-                className={`px-2.5 sm:px-4 py-2.5 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-w-0 ${
+                className={`min-h-[44px] px-2.5 sm:px-4 py-2.5 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-w-0 ${
                   fixtureMode === 'roundrobin'
                     ? 'bg-[#059669] text-white shadow-md shadow-emerald-950/40 ring-2 ring-emerald-400'
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -147,7 +149,7 @@ https://smartpeindia.app/tournament-fixtures`;
               <button
                 type="button"
                 onClick={() => setFixtureMode('combination')}
-                className={`px-2.5 sm:px-4 py-2.5 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-w-0 ${
+                className={`min-h-[44px] px-2.5 sm:px-4 py-2.5 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 min-w-0 ${
                   fixtureMode === 'combination'
                     ? 'bg-[#1D4ED8] text-white shadow-md shadow-blue-950/40 ring-2 ring-blue-400'
                     : 'text-slate-300 hover:text-white hover:bg-white/5'

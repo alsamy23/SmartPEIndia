@@ -155,6 +155,7 @@ export interface TournamentPdfConfig {
     pts: number;
   }>;
   leagueType?: 'single' | 'double';
+  matchTimeOverrides?: Record<string, { time?: string; date?: string; court?: string }>;
 }
 
 export const truncateText = (text: string, maxChars = 24): string => {
@@ -377,6 +378,8 @@ export const buildSeededKnockoutDraw = (config: TournamentPdfConfig): KnockoutDr
         const timeMins = baseStartMins + cumulativeWaveMins + wave * matchStep;
         roundPlayableCounter++;
 
+        const override = config.matchTimeOverrides?.[code];
+        const matchTimeStr = override?.time || formatMinutesToTime(timeMins);
         const match: UnifiedMatch = {
           id: mNum,
           matchCode: code,
@@ -388,10 +391,10 @@ export const buildSeededKnockoutDraw = (config: TournamentPdfConfig): KnockoutDr
           seed1: f1.seed,
           seed2: f2.seed,
           isBye: false,
-          date: displayDate,
-          time: formatMinutesToTime(timeMins),
-          timeMinutes: timeMins,
-          court
+          date: override?.date ? formatDisplayDate(override.date) : displayDate,
+          time: matchTimeStr,
+          timeMinutes: override?.time ? parseTimeToMinutes(override.time) : timeMins,
+          court: override?.court || court
         };
         roundMatches.push(match);
         allPlayableMatches.push(match);
@@ -837,7 +840,13 @@ export const buildPoolsAndStandings = (config: TournamentPdfConfig): {
     });
 
     const standings = Object.values(statsMap)
-      .sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || a.team.localeCompare(b.team))
+      .sort(
+        (a, b) =>
+          b.pts - a.pts ||
+          b.gd - a.gd ||
+          b.gf - a.gf ||
+          a.team.localeCompare(b.team, undefined, { numeric: true, sensitivity: 'base' })
+      )
       .map((row, idx) => ({ ...row, pos: idx + 1 }));
 
     pools.push({
@@ -1174,3 +1183,83 @@ export const computeKnockoutPaginationPlan = (
 
   return pages;
 };
+
+/**
+ * Formula-injection safe CSV cell escaper
+ */
+const escapeCsvCell = (raw: string | number | null | undefined): string => {
+  const str = String(raw ?? '');
+  const safe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  if (/[",\n\r]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
+  }
+  return safe;
+};
+
+/**
+ * Exports unified Tournament Matches (and Standings for League/Combination) as clean CSV
+ */
+export const exportTournamentToCsv = (config: TournamentPdfConfig): string => {
+  const lines: string[] = [];
+  lines.push(
+    [
+      'Tournament',
+      config.tournamentName || 'School Championship',
+      'Sport',
+      config.sport || '',
+      'Category',
+      config.category || '',
+      'Venue',
+      config.venue || '',
+      'Date',
+      formatDisplayDate(config.startDate)
+    ]
+      .map(escapeCsvCell)
+      .join(',')
+  );
+  lines.push('');
+
+  const { masterOrderOfPlay } = buildTeamSchedulesAndOrderOfPlay(config);
+  lines.push(
+    ['Match #', 'Stage / Round', 'Date', 'Time', 'Court / Field', 'Team 1', 'Score 1', 'Score 2', 'Team 2']
+      .map(escapeCsvCell)
+      .join(',')
+  );
+
+  masterOrderOfPlay.forEach((m) => {
+    lines.push(
+      [
+        m.matchCode,
+        m.stage,
+        m.date,
+        m.time,
+        m.court,
+        m.team1,
+        m.score1 ?? '',
+        m.score2 ?? '',
+        m.team2
+      ]
+        .map(escapeCsvCell)
+        .join(',')
+    );
+  });
+
+  if (config.format === 'roundrobin' || config.format === 'combination') {
+    const { pools } = buildPoolsAndStandings(config);
+    pools.forEach((pool) => {
+      lines.push('');
+      lines.push([`${pool.poolName} - Standings`].map(escapeCsvCell).join(','));
+      lines.push(['Pos', 'Team', 'P', 'W', 'D', 'L', 'GF', 'GA', 'GD', 'PTS'].map(escapeCsvCell).join(','));
+      pool.standings.forEach((row) => {
+        lines.push(
+          [row.pos, row.team, row.played, row.won, row.drawn, row.lost, row.gf, row.ga, row.gd, row.pts]
+            .map(escapeCsvCell)
+            .join(',')
+        );
+      });
+    });
+  }
+
+  return lines.join('\r\n');
+};
+

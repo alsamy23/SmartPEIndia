@@ -21,6 +21,7 @@ import {
   buildPoolsAndStandings,
   buildTeamSchedulesAndOrderOfPlay,
   computeKnockoutPaginationPlan,
+  exportTournamentToCsv,
   truncateText,
   formatDisplayDate
 } from './tournamentDrawEngine.ts';
@@ -52,6 +53,7 @@ export interface TournamentPrintPreviewModalProps {
   rounds?: any[];
   matches?: any[];
   standings?: any[];
+  matchTimeOverrides?: Record<string, { time?: string; date?: string; court?: string }>;
   byesCount?: number;
   setupFormula?: {
     totalTeams: number;
@@ -110,7 +112,8 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
   leagueType = 'single',
   teamsList,
   matches = [],
-  standings = []
+  standings = [],
+  matchTimeOverrides
 }) => {
   const numTeams = teamsList.length || 16;
   const defaultViewMode: ExportViewMode =
@@ -168,7 +171,8 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
       directorName: directorName.trim() || undefined,
       chiefRefereeName: chiefRefereeName.trim() || undefined,
       existingMatches: matches,
-      existingStandings: standings
+      existingStandings: standings,
+      matchTimeOverrides
     }),
     [
       schoolName,
@@ -195,7 +199,8 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
       directorName,
       chiefRefereeName,
       matches,
-      standings
+      standings,
+      matchTimeOverrides
     ]
   );
 
@@ -487,38 +492,67 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
     }
   };
 
+  // Clean RFC-4180 CSV export
+  const handleExportCsv = () => {
+    setIsExporting(true);
+    try {
+      const csvContent = exportTournamentToCsv(pdfConfig);
+      const blob = new Blob(['\ufeff', csvContent], { type: 'text/csv;charset=utf-8;' });
+      downloadBlobFile(blob, `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Fixtures.csv`);
+      toast.success('CSV fixture & standings sheet exported!');
+      trackEvent('resource_downloaded', {
+        resource_name: 'Tournament CSV',
+        format: 'csv',
+        viewMode
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto no-print-modal-backdrop">
-      <div className="bg-[#0D2B52] text-white w-full max-w-[1440px] rounded-2xl sm:rounded-3xl border border-[#164077] shadow-2xl overflow-hidden flex flex-col max-h-[96vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-xs p-2 sm:p-4 no-print-modal-backdrop">
+      <div className="bg-[#0D2B52] text-white w-[95vw] max-w-5xl max-h-[92dvh] rounded-2xl sm:rounded-3xl border border-[#164077] shadow-2xl overflow-hidden flex flex-col">
         {/* Top Interactive Controls Header */}
-        <div className="p-4 sm:px-6 sm:py-4 bg-[#08182D] border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 no-print">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#D4A017]/20 border border-[#D4A017]/40 text-[#D4A017] flex items-center justify-center">
-              <Printer size={20} />
+        <div className="shrink-0 p-3 sm:px-5 sm:py-3.5 bg-[#08182D] border-b border-slate-800 flex flex-col gap-2.5 no-print">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-[#D4A017]/20 border border-[#D4A017]/40 text-[#D4A017] flex items-center justify-center shrink-0">
+                <Printer size={18} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-xs sm:text-base font-black uppercase tracking-wider text-white flex flex-wrap items-center gap-1.5">
+                  <span className="truncate">Vector Print & PDF Studio</span>
+                  <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-black shrink-0">
+                    {previewPages.length} {previewPages.length === 1 ? 'PAGE' : 'PAGES'}
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400 font-medium hidden sm:block">
+                  Pure crisp vector PDF engine — automatic draw splitting with zero clipping.
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white flex items-center gap-2">
-                <span>Vector Print & PDF Studio</span>
-                <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-black">
-                  {previewPages.length} {previewPages.length === 1 ? 'PAGE' : 'PAGES'}
-                </span>
-              </h3>
-              <p className="text-[11px] text-slate-400 font-medium">
-                Pure crisp vector PDF engine — automatic draw splitting with zero clipping.
-              </p>
-            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-w-[44px] min-h-[44px] p-2 bg-white/10 hover:bg-rose-500 text-slate-300 hover:text-white rounded-xl transition-all flex items-center justify-center shrink-0"
+              aria-label="Close Print Studio"
+            >
+              <X size={18} />
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Paper Size Selector */}
-            <div className="flex items-center bg-[#0D2B52] p-1 rounded-xl border border-white/10">
+            <div className="flex items-center bg-[#0D2B52] p-1 rounded-xl border border-white/10 shrink-0">
               <span className="text-[10px] font-black text-slate-400 uppercase px-2">Paper</span>
               {(['A4', 'A3'] as PaperSize[]).map((sz) => (
                 <button
                   key={sz}
                   type="button"
                   onClick={() => setPaperSize(sz)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                  className={`min-h-[36px] px-3 py-1 rounded-lg text-xs font-black transition-all ${
                     paperSize === sz
                       ? 'bg-[#D4A017] text-[#0D2B52] shadow-sm'
                       : 'text-slate-300 hover:text-white'
@@ -530,7 +564,7 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
             </div>
 
             {/* View Mode Selector */}
-            <div className="flex flex-wrap items-center bg-[#0D2B52] p-1 rounded-xl border border-white/10 gap-1">
+            <div className="flex flex-wrap items-center bg-[#0D2B52] p-1 rounded-xl border border-white/10 gap-1 flex-1 min-w-0">
               {[
                 { id: 'full-bracket' as ExportViewMode, label: 'Full Bracket', icon: Trophy },
                 { id: 'round-robin-pools' as ExportViewMode, label: 'Round Robin Pools', icon: Layers },
@@ -545,32 +579,23 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
                     key={tab.id}
                     type="button"
                     onClick={() => setViewMode(tab.id)}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-black flex items-center gap-1.5 transition-all ${
+                    className={`min-h-[36px] px-2.5 py-1 rounded-lg text-[11px] font-black flex items-center gap-1.5 transition-all ${
                       active
                         ? 'bg-emerald-500 text-slate-950 shadow-sm'
                         : 'text-slate-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    <Icon size={13} />
-                    <span>{tab.label}</span>
+                    <Icon size={13} className="shrink-0" />
+                    <span className="whitespace-nowrap">{tab.label}</span>
                   </button>
                 );
               })}
             </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 bg-white/10 hover:bg-rose-500 text-slate-300 hover:text-white rounded-xl transition-all"
-              aria-label="Close Print Studio"
-            >
-              <X size={18} />
-            </button>
           </div>
         </div>
 
         {/* Official Document Customization Strip */}
-        <div className="px-4 sm:px-6 py-2.5 bg-[#0a2140] border-b border-white/10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 text-xs no-print">
+        <div className="shrink-0 px-3 sm:px-5 py-2 bg-[#0a2140] border-b border-white/10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-xs no-print">
           <div className="flex items-center gap-2 bg-[#08182D] border border-white/10 rounded-xl px-3 py-1.5">
             <Building2 size={14} className="text-[#D4A017] shrink-0" />
             <input
@@ -610,34 +635,38 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
             value={directorName}
             onChange={(e) => setDirectorName(e.target.value)}
             placeholder="Tournament Director (Optional)"
-            className="bg-[#08182D] border border-white/10 rounded-xl px-3 py-1.5 text-white font-bold outline-none text-[11px]"
+            className="hidden sm:block bg-[#08182D] border border-white/10 rounded-xl px-3 py-1.5 text-white font-bold outline-none text-[11px]"
           />
           <input
             type="text"
             value={chiefRefereeName}
             onChange={(e) => setChiefRefereeName(e.target.value)}
             placeholder="Chief Referee (Optional)"
-            className="bg-[#08182D] border border-white/10 rounded-xl px-3 py-1.5 text-white font-bold outline-none text-[11px]"
+            className="hidden sm:block bg-[#08182D] border border-white/10 rounded-xl px-3 py-1.5 text-white font-bold outline-none text-[11px]"
           />
         </div>
 
         {/* Multi-Page Paginated Preview Canvas */}
-        <div className="flex-1 overflow-auto p-4 sm:p-8 bg-slate-800/90 space-y-8">
-          <div id="tournament-print-area" className="space-y-8 flex flex-col items-center">
+        <div className="flex-1 overflow-auto p-3 sm:p-6 bg-slate-800/90 space-y-5">
+          <div className="sm:hidden bg-amber-500/15 border border-amber-400/30 text-amber-200 px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center justify-between no-print">
+            <span>Swipe horizontally to inspect full print sheet &rarr;</span>
+          </div>
+
+          <div id="tournament-print-area" className="space-y-6 flex flex-col items-start lg:items-center w-full overflow-x-auto touch-pan-x pb-2">
             {previewPages.map((page, pageIdx) => {
               const totalPages = previewPages.length;
               const isPortrait = page.orientation === 'portrait';
               const sheetWidthClass = isPortrait
-                ? 'w-full max-w-[794px]'
+                ? 'min-w-[680px] w-full max-w-[794px]'
                 : page.paperSize === 'A3'
-                ? 'w-full max-w-[1380px]'
-                : 'w-full max-w-[1123px]';
+                ? 'min-w-[920px] w-full max-w-[1380px]'
+                : 'min-w-[820px] w-full max-w-[1123px]';
 
               return (
                 <div
                   key={page.id}
-                  className={`tournament-print-page bg-white text-slate-900 shadow-2xl rounded-sm border border-slate-300 p-5 sm:p-7 flex flex-col justify-between ${sheetWidthClass}`}
-                  style={{ minHeight: isPortrait ? '1040px' : page.paperSize === 'A3' ? '880px' : '740px' }}
+                  className={`tournament-print-page bg-white text-slate-900 shadow-2xl rounded-sm border border-slate-300 p-4 sm:p-7 flex flex-col justify-between ${sheetWidthClass}`}
+                  style={{ minHeight: isPortrait ? '960px' : page.paperSize === 'A3' ? '820px' : '680px' }}
                 >
                   {/* Official Federation Page Header */}
                   <div className="space-y-4">
@@ -805,10 +834,10 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
           </div>
         </div>
 
-        {/* Bottom Action Footer */}
-        <div className="p-4 bg-[#08182D] border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs no-print">
-          <div className="flex items-center gap-2 text-slate-300">
-            <Sparkles size={14} className="text-[#D4A017]" />
+        {/* Sticky Bottom Action Footer */}
+        <div className="shrink-0 p-3 sm:p-4 bg-[#08182D] border-t border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 text-xs no-print">
+          <div className="hidden sm:flex items-center gap-2 text-slate-300">
+            <Sparkles size={14} className="text-[#D4A017] shrink-0" />
             <span>
               Vector PDF outputs crisp selectable text & exact {paperSize} federation layouts across{' '}
               <strong className="text-white">{previewPages.length}</strong>{' '}
@@ -816,24 +845,34 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full lg:w-auto">
             <button
               type="button"
               onClick={handleExportWord}
               disabled={isExporting}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+              className="min-h-[44px] px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
             >
-              <FileText size={14} />
+              <FileText size={14} className="shrink-0" />
               <span>Word (.doc)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={isExporting}
+              className="min-h-[44px] px-3 sm:px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+            >
+              <Download size={14} className="shrink-0" />
+              <span>CSV</span>
             </button>
 
             <button
               type="button"
               onClick={handleDownloadPdf}
               disabled={isExporting}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+              className="col-span-2 sm:col-span-1 min-h-[44px] px-3 sm:px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
             >
-              <Download size={14} />
+              <Download size={14} className="shrink-0" />
               <span>Download Vector PDF ({paperSize})</span>
             </button>
 
@@ -841,18 +880,18 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
               type="button"
               onClick={handleWhatsAppSharePdf}
               disabled={isExporting}
-              className="px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+              className="min-h-[44px] px-3 sm:px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
             >
-              <Share2 size={14} />
+              <Share2 size={14} className="shrink-0" />
               <span>WhatsApp PDF</span>
             </button>
 
             <button
               type="button"
               onClick={handlePrint}
-              className="px-5 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg active:scale-95"
+              className="min-h-[44px] px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg active:scale-95"
             >
-              <Printer size={15} />
+              <Printer size={15} className="shrink-0" />
               <span>Print {paperSize}</span>
             </button>
           </div>

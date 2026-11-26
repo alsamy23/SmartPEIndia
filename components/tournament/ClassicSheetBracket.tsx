@@ -1,8 +1,7 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { 
-  Download, Printer, Sparkles, Edit3, Check, RefreshCw, 
-  Copy, Image as ImageIcon, Eye, Grid, LayoutTemplate, Layers, CheckCircle2,
-  Calendar, Clock, Shield, Trophy, Share2, FileText
+import React, { useRef, useState, useMemo } from 'react';
+import {
+  Download, Printer, Sparkles, Edit3, Check, RefreshCw,
+  Image as ImageIcon, Grid, LayoutTemplate, Trophy, Share2, FileText
 } from 'lucide-react';
 import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
 import { toPng } from 'html-to-image';
@@ -11,8 +10,10 @@ import { trackEvent } from '../../services/analytics.ts';
 import { safeOpenExternal, downloadBlobFile } from '../../utils/safeBrowser.ts';
 import {
   EliminationType,
-  generateCanonicalSeedOrder,
-  TournamentPdfConfig
+  TournamentPdfConfig,
+  UnifiedMatch,
+  buildSeededKnockoutDraw,
+  exportTournamentToCsv
 } from './tournamentDrawEngine.ts';
 import { buildTournamentVectorPdf } from './TournamentVectorPdf.ts';
 
@@ -62,36 +63,21 @@ export const ClassicSheetBracket: React.FC<ClassicSheetBracketProps> = ({
   showGridLines: initialShowGrid = true
 }) => {
   const sheetRef = useRef<HTMLDivElement>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [showGrid, setShowGrid] = useState(initialShowGrid);
   const [customTitle, setCustomTitle] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [customTimes, setCustomTimes] = useState<Record<string, string>>({});
+  const [customTimes, setCustomTimes] = useState<Record<string, { time?: string }>>({});
   const [customTeamNames, setCustomTeamNames] = useState<Record<number, string>>({});
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-  const handleWhatsAppShare = () => {
-    const text = 
-`🏆 *OFFICIAL TOURNAMENT FIXTURE DRAW*
-📌 *Tournament:* ${tournamentName} (${category})
-⚽ *Sport:* ${sport} | 📍 *Venue:* ${venue}
-📅 *Date:* ${startDate} | 👥 *Teams:* ${teamsList.length} | 🎯 *Byes:* ${byesCount}
-⏰ *First Match:* ${startTime}
-
-Official CBSE / Federation Standard Draw.
-Generated via SmartPE India (smartpeindia.app).`;
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    safeOpenExternal(url, "Opening WhatsApp with tournament bracket draw!");
-  };
-
-  // Compute bracket power of 2 & canonical symmetrical seeding
   const N = teamsList.length;
   const P = Math.min(64, Math.max(4, Math.pow(2, Math.ceil(Math.log2(N || 4)))));
   const totalRounds = Math.log2(P);
   const byesCount = Math.max(0, P - N);
   const Nu = N % 2 === 0 ? N / 2 : (N + 1) / 2;
 
-  // Format date display for title e.g. [29.08.2026]
   const formattedDateTag = (() => {
     try {
       if (!startDate) return '';
@@ -110,197 +96,189 @@ Generated via SmartPE India (smartpeindia.app).`;
   const defaultHeader = `${(sport || 'FOOTBALL').toUpperCase()} ${category ? `${category.toUpperCase()} ` : ''}${formattedDateTag ? `[${formattedDateTag}]` : ''}`.trim();
   const displayTitle = customTitle || defaultHeader;
 
-  // Symmetrical seeded placement: seeds 1..N occupy seeded slots, slots > N are explicit BYEs (zero BYE-vs-BYE)
-  const seedOrder = generateCanonicalSeedOrder(P);
-  const slots: ClassicSlot[] = seedOrder.map((seed, slotIndex) => {
-    const isBye = seed > N;
-    const baseName = isBye ? 'BYE' : (teamsList[seed - 1] || `Team ${seed}`);
-    return {
-      slotIndex,
-      seed,
-      teamName: isBye ? 'BYE' : (customTeamNames[slotIndex] ?? baseName),
-      isBye,
-      byeLabel: 'BYE'
-    };
-  });
+  // Apply inline team name edits mapped cleanly back to seed order
+  const effectiveTeamsList = useMemo(() => {
+    return Array.from({ length: N }, (_, idx) => {
+      const seedNum = idx + 1;
+      return customTeamNames[seedNum] ?? teamsList[idx] ?? `Team ${seedNum}`;
+    });
+  }, [N, teamsList, customTeamNames]);
 
-  // Merge inline edited team names into roster for Vector PDF engine
-  const effectiveTeamsList = Array.from({ length: N }, (_, idx) => {
-    const seedNum = idx + 1;
-    const slotMatch = slots.find((s) => s.seed === seedNum);
-    return (slotMatch && !slotMatch.isBye ? slotMatch.teamName : teamsList[idx]) || `Team ${seedNum}`;
-  });
+  const pdfConfig: TournamentPdfConfig = useMemo(
+    () => ({
+      organizationName: (() => {
+        try {
+          return localStorage.getItem('smartpe_school_name') || "SHRADDHA CHILDREN'S ACADEMY";
+        } catch {
+          return "SHRADDHA CHILDREN'S ACADEMY";
+        }
+      })(),
+      tournamentName,
+      subTitle,
+      sport,
+      category,
+      venue,
+      startDate,
+      startTime,
+      format: 'knockout',
+      eliminationType,
+      paperSize: 'A4',
+      viewMode: 'full-bracket',
+      teamsList: effectiveTeamsList,
+      courtsCount,
+      matchDurationMins: (firstHalf || 15) + (secondHalf || 15) + (halfTime || 5),
+      restGapMins: restGap || 10,
+      thirdPlaceEnabled,
+      matchTimeOverrides: customTimes
+    }),
+    [
+      tournamentName,
+      subTitle,
+      sport,
+      category,
+      venue,
+      startDate,
+      startTime,
+      eliminationType,
+      effectiveTeamsList,
+      courtsCount,
+      firstHalf,
+      secondHalf,
+      halfTime,
+      restGap,
+      thirdPlaceEnabled,
+      customTimes
+    ]
+  );
 
-  const buildVectorPdfConfig = (): TournamentPdfConfig => ({
-    organizationName: (() => {
-      try {
-        return localStorage.getItem('smartpe_school_name') || "SHRADDHA CHILDREN'S ACADEMY";
-      } catch {
-        return "SHRADDHA CHILDREN'S ACADEMY";
-      }
-    })(),
-    tournamentName,
-    subTitle,
-    sport,
-    category,
-    venue,
-    startDate,
-    startTime,
-    format: 'knockout',
-    eliminationType,
-    paperSize: N > 16 ? 'A4' : 'A4',
-    viewMode: 'full-bracket',
-    teamsList: effectiveTeamsList,
-    courtsCount,
-    matchDurationMins: (firstHalf || 15) + (secondHalf || 15) + (halfTime || 5),
-    restGapMins: restGap || 10,
-    thirdPlaceEnabled
-  });
+  // Unified Draw Engine: Guarantees identical pairings & timings across Classic Sheet, Cards, Table & PDF!
+  const drawTree = useMemo(() => buildSeededKnockoutDraw(pdfConfig), [pdfConfig]);
 
-  // Time calculation helper
-  const addMinutes = (baseTime: string, mins: number) => {
-    const [hStr, mStr] = (baseTime || '08:00').split(':');
-    let h = parseInt(hStr, 10) || 8;
-    let m = parseInt(mStr, 10) || 0;
-    m += mins;
-    h += Math.floor(m / 60);
-    m = m % 60;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    let h12 = h % 12;
-    if (h12 === 0) h12 = 12;
-    return `${h12}.${String(m).padStart(2, '0')}${ampm}`;
+  const slots: ClassicSlot[] = useMemo(
+    () =>
+      drawTree.slots.map((s) => ({
+        slotIndex: s.slotIndex,
+        seed: s.seed,
+        teamName: s.teamName,
+        isBye: s.isBye,
+        byeLabel: 'BYE'
+      })),
+    [drawTree.slots]
+  );
+
+  const handleWhatsAppShare = () => {
+    const text =
+`🏆 *OFFICIAL TOURNAMENT FIXTURE DRAW*
+📌 *Tournament:* ${tournamentName} (${category})
+⚽ *Sport:* ${sport} | 📍 *Venue:* ${venue}
+📅 *Date:* ${startDate} | 👥 *Teams:* ${teamsList.length} | 🎯 *Byes:* ${byesCount}
+⏰ *First Match:* ${startTime}
+
+Official CBSE / Federation Standard Draw.
+Generated via SmartPE India (smartpeindia.app).`;
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    safeOpenExternal(url, "Opening WhatsApp with tournament bracket draw!");
   };
 
-  const matchDuration = (firstHalf || 15) + (secondHalf || 15) + (halfTime || 5) + (restGap || 10);
-
-  // Pre-calculate round match times
-  const roundTimes: string[][] = [];
-  let globalMatchIndex = 0;
-
-  for (let r = 0; r < totalRounds; r++) {
-    const matchesInRound = Math.pow(2, totalRounds - r - 1);
-    const timesForThisRound: string[] = [];
-    for (let m = 0; m < matchesInRound; m++) {
-      const timeKey = `r${r}_m${m}`;
-      if (customTimes[timeKey]) {
-        timesForThisRound.push(customTimes[timeKey]);
-      } else {
-        const calculated = addMinutes(startTime || '08:30', globalMatchIndex * matchDuration);
-        timesForThisRound.push(calculated);
-      }
-      globalMatchIndex++;
-    }
-    roundTimes.push(timesForThisRound);
-  }
-
-  const handleTimeChange = (r: number, m: number, value: string) => {
-    setCustomTimes(prev => ({
+  const handleTimeChange = (matchCode: string, value: string) => {
+    setCustomTimes((prev) => ({
       ...prev,
-      [`r${r}_m${m}`]: value
+      [matchCode]: { time: value }
     }));
   };
 
-  const handleTeamNameChange = (slotIdx: number, value: string) => {
-    setCustomTeamNames(prev => ({
+  const handleTeamNameChange = (seed: number, value: string) => {
+    setCustomTeamNames((prev) => ({
       ...prev,
-      [slotIdx]: value
+      [seed]: value
     }));
   };
 
-  // Load standard 16-team sample draw with Team 1 - 16 and realistic match timings
   const handleLoad16TeamSample = () => {
     const teams: Record<number, string> = {};
-    for (let i = 0; i < 16; i++) {
-      teams[i] = `Team ${i + 1}`;
+    for (let i = 1; i <= 16; i++) {
+      teams[i] = `Team ${i}`;
     }
     setCustomTeamNames(teams);
-    setCustomTimes({
-      // Round 1 (8 matches)
-      r0_m0: '9.00AM',
-      r0_m1: '9.45AM',
-      r0_m2: '10.30AM',
-      r0_m3: '11.15AM',
-      r0_m4: '12.00PM',
-      r0_m5: '12.45PM',
-      r0_m6: '1.30PM',
-      r0_m7: '2.15PM',
-      // Quarter Finals (Round 2, 4 matches)
-      r1_m0: '10.45AM',
-      r1_m1: '12.30PM',
-      r1_m2: '2.30PM',
-      r1_m3: '3.15PM',
-      // Semi Finals (Round 3, 2 matches)
-      r2_m0: '3.45PM',
-      r2_m1: '4.30PM',
-      // Final (Round 4, 1 match)
-      r3_m0: '5.15PM'
-    });
-    setCustomTitle('FOOTBALL U - 11 [29.08.2026]');
-    toast.success("Loaded 16-Team sample draw (Team 1 - 16 with match timings)!");
+    setCustomTimes({});
+    setCustomTitle(`FOOTBALL U - 11 [${formattedDateTag || '29.08.2026'}]`);
+    toast.success("Loaded 16-Team seeded sample draw with synchronized match timings!");
   };
 
-  // Download as Image (.PNG)
+  // Download as Image (.PNG) using dedicated off-screen 1200px capture container so mobile never clips
   const handleDownloadImage = async () => {
-    if (!sheetRef.current) return;
+    const targetNode = captureRef.current || sheetRef.current;
+    if (!targetNode) return;
     setIsExporting(true);
     try {
-      const dataUrl = await toPng(sheetRef.current, {
+      const dataUrl = await toPng(targetNode, {
         cacheBust: true,
-        pixelRatio: 2.5,
-        backgroundColor: '#ffffff'
+        pixelRatio: 2,
+        backgroundColor: '#ffffff',
+        width: 1200
       });
       const link = document.createElement('a');
       const cleanFileName = `${(sport || 'Tournament').toLowerCase()}_fixture_bracket_${formattedDateTag || 'sheet'}.png`.replace(/[^a-z0-9_.]/gi, '_');
       link.download = cleanFileName;
       link.href = dataUrl;
       link.click();
-      toast.success("Tournament Fixture image downloaded successfully!");
+      toast.success("Tournament Fixture PNG downloaded cleanly!");
       trackEvent('resource_downloaded', { resource_name: `Fixture Bracket (${sport})`, format: 'png', teamsCount: N });
     } catch (err) {
       console.error("Failed to export image:", err);
-      toast.error("Failed to export bracket image. Please try Print / Save PDF instead.");
+      toast.error("Failed to export bracket image. Please try Vector PDF instead.");
     } finally {
       setIsExporting(false);
     }
   };
 
-  // Export to Word (.doc) with VISUAL BRACKET IMAGE embedded
+  const handleExportCsv = () => {
+    setIsExporting(true);
+    try {
+      const csv = exportTournamentToCsv(pdfConfig);
+      const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' });
+      downloadBlobFile(blob, `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Knockout_Fixtures.csv`);
+      toast.success('CSV fixture sheet downloaded!');
+      trackEvent('resource_downloaded', { resource_name: `Knockout CSV (${sport})`, format: 'csv', teamsCount: N });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Export to Word (.doc) with VISUAL BRACKET IMAGE embedded from off-screen 1200px container
   const handleExportWordWithImage = async () => {
-    if (!sheetRef.current) return;
+    const targetNode = captureRef.current || sheetRef.current;
+    if (!targetNode) return;
     setIsExporting(true);
     toast.loading("Generating Word document with bracket image...", { id: 'classic-word' });
     try {
-      const dataUrl = await toPng(sheetRef.current, {
+      const dataUrl = await toPng(targetNode, {
         cacheBust: true,
         pixelRatio: 2,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        width: 1200
       });
 
-      // Construct matches table
-      let tableRows = '';
-      let matchNum = 1;
-      for (let r = 0; r < totalRounds; r++) {
-        const matchesInRound = Math.pow(2, totalRounds - r - 1);
-        const roundName = r === totalRounds - 1 ? 'Championship Final' : r === totalRounds - 2 ? 'Semi-Finals' : r === totalRounds - 3 ? 'Quarter-Finals' : `Round ${r + 1}`;
-        for (let m = 0; m < matchesInRound; m++) {
-          const time = roundTimes[r]?.[m] || 'TBD';
-          tableRows += `
-            <tr style="text-align:center; background-color:${matchNum % 2 === 0 ? '#f8fafc' : '#ffffff'};">
-              <td style="font-weight:bold; color:#0D2B52; padding:6px;">Match ${matchNum++}</td>
-              <td style="padding:6px;">${roundName}</td>
-              <td style="font-weight:bold; text-align:left; padding:6px 10px;">${r === 0 ? (slots[m * 2]?.teamName || 'TBD') : `Winner of Previous Round`}</td>
-              <td style="color:#888; font-weight:bold; padding:6px;">VS</td>
-              <td style="font-weight:bold; text-align:left; padding:6px 10px;">${r === 0 ? (slots[m * 2 + 1]?.teamName || 'TBD') : `Winner of Previous Round`}</td>
-              <td style="padding:6px;">${formattedDateTag || startDate}</td>
-              <td style="font-weight:bold; color:#b91c1c; padding:6px;">${time}</td>
-            </tr>
-          `;
-        }
-      }
+      // Construct matches table directly from unified drawTree so pairings & timings match 100%
+      const tableRows = drawTree.allPlayableMatches
+        .map(
+          (m: UnifiedMatch, idx: number) => `
+          <tr style="text-align:center; background-color:${idx % 2 === 1 ? '#f8fafc' : '#ffffff'};">
+            <td style="font-weight:bold; color:#0D2B52; padding:6px;">${m.matchCode}</td>
+            <td style="padding:6px;">${m.stage}</td>
+            <td style="font-weight:bold; text-align:left; padding:6px 10px;">${m.team1}</td>
+            <td style="color:#888; font-weight:bold; padding:6px;">VS</td>
+            <td style="font-weight:bold; text-align:left; padding:6px 10px;">${m.team2}</td>
+            <td style="padding:6px;">${m.date} • ${m.court}</td>
+            <td style="font-weight:bold; color:#b91c1c; padding:6px;">${m.time}</td>
+          </tr>
+        `
+        )
+        .join('');
 
       // 1. Calculate dynamic image scale to fit strictly on Page 1 (Landscape)
-      const origW = sheetRef.current.offsetWidth || 1100;
-      const origH = sheetRef.current.offsetHeight || (P * ROW_HEIGHT + 140);
+      const origW = 1200;
+      const origH = targetNode.offsetHeight || (P * ROW_HEIGHT + 160);
 
       // Determine dimensions: Standard A4 Landscape is 841.9pt x 595.3pt
       // For N > 16 (e.g. 20, 25 teams), we recommend A3 Landscape (1190.6pt x 841.9pt)
@@ -462,7 +440,7 @@ Generated via SmartPE India (smartpeindia.app).`;
     setIsExporting(true);
     toast.loading("Generating pure vector multi-page PDF...", { id: 'classic-pdf' });
     try {
-      const { doc, fileName, pageCount } = buildTournamentVectorPdf(buildVectorPdfConfig());
+      const { doc, fileName, pageCount } = buildTournamentVectorPdf(pdfConfig);
       doc.save(fileName);
       toast.dismiss('classic-pdf');
       toast.success(`Official ${pageCount}-page Vector PDF downloaded!`);
@@ -481,7 +459,7 @@ Generated via SmartPE India (smartpeindia.app).`;
     setIsExporting(true);
     toast.loading("Preparing official Vector PDF for WhatsApp...", { id: 'classic-wa' });
     try {
-      const { doc, fileName, pageCount } = buildTournamentVectorPdf(buildVectorPdfConfig());
+      const { doc, fileName, pageCount } = buildTournamentVectorPdf(pdfConfig);
       const pdfBlob = doc.output('blob');
       const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
@@ -532,105 +510,346 @@ Official CBSE / Federation standard draw.`;
   const SLOT_WIDTH = 260;
   const STEP_COL_WIDTH = 135;
 
+  const renderBracketContent = (isStaticCapture: boolean) => (
+    <>
+      {/* Header Title (Responsive wrap so right-edge badge never clips) */}
+      <div className="mb-6 border-b-2 border-slate-200 pb-4 flex flex-col sm:flex-row flex-wrap justify-between items-start gap-3">
+        <div className="min-w-0 flex-1">
+          {!isStaticCapture && isEditingTitle ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={customTitle || displayTitle}
+                onChange={(e) => setCustomTitle(e.target.value)}
+                placeholder="e.g. FOOTBALL U - 11 [29.08.2026]"
+                className="text-lg md:text-2xl font-black text-red-600 border-2 border-red-400 p-2 rounded-xl outline-none w-full max-w-md"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setIsEditingTitle(false)}
+                className="p-2 bg-emerald-600 text-white rounded-xl text-xs font-bold min-h-[40px] min-w-[40px] flex items-center justify-center"
+              >
+                <Check size={16} />
+              </button>
+            </div>
+          ) : (
+            <div className="group flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-lg sm:text-xl md:text-3xl font-black tracking-tight text-red-600 uppercase font-sans break-words">
+                {displayTitle}
+              </h1>
+              {!isStaticCapture && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingTitle(true)}
+                  className="opacity-70 sm:opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700 p-1.5 transition-all"
+                  title="Click to edit title directly"
+                >
+                  <Edit3 size={14} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {(tournamentName || subTitle) && (
+            <p className="text-xs font-black text-slate-600 uppercase tracking-widest mt-1 break-words">
+              {tournamentName} {subTitle ? `• ${subTitle}` : ''}
+            </p>
+          )}
+        </div>
+
+        <div className="sm:text-right text-[10px] font-black uppercase tracking-wider text-slate-500 shrink-0 max-w-full">
+          <span className="text-indigo-600 font-bold block">Knockout Tournament Draw</span>
+          <div className="text-slate-900 font-black whitespace-nowrap">
+            {N} Teams • {P} Bracket Lines ({byesCount} Byes)
+          </div>
+        </div>
+      </div>
+
+      {/* SVG Tree Bracket Engine */}
+      <div className="relative w-full" style={{ height: `${P * ROW_HEIGHT}px` }}>
+        {/* 1. First Round Team Slot Lines */}
+        {slots.map((slot, sIdx) => {
+          const isEvenPair = sIdx % 2 === 0;
+          const matchIdxInR1 = Math.floor(sIdx / 2);
+          const r1Match = drawTree.rounds[0]?.matches[matchIdxInR1];
+          const matchTime = r1Match && !r1Match.isBye ? r1Match.time : '';
+
+          return (
+            <div
+              key={`slot-${sIdx}`}
+              className="absolute left-0 flex flex-col justify-end"
+              style={{
+                top: `${sIdx * ROW_HEIGHT}px`,
+                height: `${ROW_HEIGHT}px`,
+                width: `${SLOT_WIDTH}px`
+              }}
+            >
+              {/* Team Name Label sitting directly on the horizontal black line */}
+              <div className="flex items-center justify-between pr-2 mb-0.5">
+                {isStaticCapture ? (
+                  <span className="text-xs font-black uppercase text-slate-900 tracking-tight px-1 truncate max-w-[175px]">
+                    {!slot.isBye ? `[${slot.seed}] ${slot.teamName}` : 'BYE'}
+                  </span>
+                ) : (
+                  <div className="flex items-center gap-1 min-w-0">
+                    {!slot.isBye && (
+                      <span className="text-[10px] font-black text-slate-400 shrink-0">[{slot.seed}]</span>
+                    )}
+                    <input
+                      type="text"
+                      value={slot.teamName}
+                      disabled={slot.isBye}
+                      onChange={(e) => handleTeamNameChange(slot.seed, e.target.value)}
+                      className="text-xs font-black uppercase text-slate-900 tracking-tight bg-transparent outline-none focus:bg-amber-50 rounded px-1 w-[155px] truncate disabled:text-rose-500 disabled:italic"
+                      title={slot.isBye ? 'Symmetrical Bye Slot' : 'Click to edit team name'}
+                    />
+                  </div>
+                )}
+
+                {/* Show R1 Match Code & Time on the second team of each playable pair */}
+                {!isEvenPair && r1Match && !r1Match.isBye && matchTime && (
+                  isStaticCapture ? (
+                    <span className="text-[10px] font-black text-red-600 tracking-tighter whitespace-nowrap">
+                      {r1Match.matchCode} • {matchTime}
+                    </span>
+                  ) : (
+                    <input
+                      type="text"
+                      value={customTimes[r1Match.matchCode]?.time ?? matchTime}
+                      onChange={(e) => handleTimeChange(r1Match.matchCode, e.target.value)}
+                      className="text-[10px] font-black text-red-600 tracking-tighter w-16 text-right bg-transparent outline-none focus:bg-red-50 rounded px-0.5"
+                      title={`${r1Match.matchCode} (${r1Match.court}) — Click to edit time`}
+                    />
+                  )
+                )}
+
+                {slot.isBye && (
+                  <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest px-1">
+                    (BYE)
+                  </span>
+                )}
+              </div>
+
+              {/* Horizontal solid black line */}
+              <div className="w-full h-[2px] bg-slate-900"></div>
+            </div>
+          );
+        })}
+
+        {/* 2. SVG Connecting Step Lines & Match Times for all Rounds */}
+        <svg
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          style={{ overflow: 'visible' }}
+        >
+          {Array.from({ length: totalRounds }).map((_, rIdx) => {
+            const matchesInThisRound = Math.pow(2, totalRounds - rIdx - 1);
+            const stepX = SLOT_WIDTH + rIdx * STEP_COL_WIDTH;
+            const colWidth = STEP_COL_WIDTH;
+
+            return Array.from({ length: matchesInThisRound }).map((__, mIdx) => {
+              const slotsSpan = Math.pow(2, rIdx + 1);
+              const topSlotIdx = mIdx * slotsSpan;
+              const bottomSlotIdx = topSlotIdx + slotsSpan - 1;
+
+              const topBranchY = (topSlotIdx + (slotsSpan / 4 - 0.5)) * ROW_HEIGHT + ROW_HEIGHT / 2;
+              const bottomBranchY = (bottomSlotIdx - (slotsSpan / 4 - 0.5)) * ROW_HEIGHT + ROW_HEIGHT / 2;
+              const centerY = (topBranchY + bottomBranchY) / 2;
+
+              const nextRoundMatch = drawTree.rounds[rIdx + 1]?.matches[Math.floor(mIdx / 2)];
+              const isLastRound = rIdx === totalRounds - 1;
+              const displayTime = nextRoundMatch && !nextRoundMatch.isBye ? nextRoundMatch.time : '';
+
+              return (
+                <g key={`round-${rIdx}-match-${mIdx}`}>
+                  {/* Vertical bracket connector */}
+                  <line
+                    x1={stepX}
+                    y1={topBranchY}
+                    x2={stepX}
+                    y2={bottomBranchY}
+                    stroke="#0f172a"
+                    strokeWidth="2"
+                  />
+
+                  {/* Right horizontal advance line */}
+                  <line
+                    x1={stepX}
+                    y1={centerY}
+                    x2={stepX + colWidth}
+                    y2={centerY}
+                    stroke="#0f172a"
+                    strokeWidth="2"
+                  />
+
+                  {/* Match Time on next round line in RED (from unified drawTree!) */}
+                  {!isLastRound && (mIdx % 2 === 1 || matchesInThisRound === 1) && nextRoundMatch && !nextRoundMatch.isBye && displayTime && (
+                    <foreignObject
+                      x={stepX + 6}
+                      y={centerY - 22}
+                      width={118}
+                      height={22}
+                      className="pointer-events-auto"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span className="text-[9px] font-black text-[#0D2B52]">{nextRoundMatch.matchCode}</span>
+                        {isStaticCapture ? (
+                          <span className="text-[10px] font-black text-red-600 tracking-tighter whitespace-nowrap">
+                            {displayTime}
+                          </span>
+                        ) : (
+                          <input
+                            type="text"
+                            value={customTimes[nextRoundMatch.matchCode]?.time ?? displayTime}
+                            onChange={(e) => handleTimeChange(nextRoundMatch.matchCode, e.target.value)}
+                            className="text-[10px] font-black text-red-600 tracking-tighter bg-transparent outline-none focus:bg-red-50 px-0.5 rounded w-16"
+                            title={`${nextRoundMatch.stage} (${nextRoundMatch.court})`}
+                          />
+                        )}
+                      </div>
+                    </foreignObject>
+                  )}
+
+                  {/* Grand Final Winner Marker */}
+                  {isLastRound && (
+                    <foreignObject
+                      x={stepX + colWidth + 8}
+                      y={centerY - 18}
+                      width={150}
+                      height={36}
+                      className="pointer-events-auto"
+                    >
+                      <div className="bg-amber-100 border-2 border-amber-500 text-amber-950 px-3 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                        <Trophy size={14} className="text-amber-600 shrink-0" />
+                        <span>WINNER</span>
+                      </div>
+                    </foreignObject>
+                  )}
+                </g>
+              );
+            });
+          })}
+        </svg>
+      </div>
+
+      {/* Footer Notes on Sheet */}
+      <div className="mt-12 pt-4 border-t border-slate-300 flex flex-col md:flex-row justify-between items-center text-[10px] font-black text-slate-500 uppercase tracking-widest gap-2">
+        <span>Official Fixture Draw • CBSE & SGFI Standard Bye Allocation</span>
+        <span>Generated via SmartPE Tournament Studio</span>
+      </div>
+    </>
+  );
+
   return (
     <div className="space-y-6">
       {/* Control Bar in Brand Navy & Gold */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-[#0D2B52] text-white p-4 md:p-6 rounded-3xl border border-[#164077] shadow-lg">
+      <div className="flex flex-col gap-4 bg-[#0D2B52] text-white p-4 md:p-6 rounded-3xl border border-[#164077] shadow-lg">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#D4A017]/20 border border-[#D4A017]/40 text-[#D4A017] flex items-center justify-center font-black">
+          <div className="w-10 h-10 rounded-xl bg-[#D4A017]/20 border border-[#D4A017]/40 text-[#D4A017] flex items-center justify-center font-black shrink-0">
             <LayoutTemplate size={20} />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <h4 className="text-sm font-black uppercase tracking-wider text-white">Classic Fixture Sheet</h4>
               <span className="px-2 py-0.5 bg-[#D4A017]/20 text-[#D4A017] border border-[#D4A017]/30 rounded text-[9px] font-black uppercase">
                 Official Draw Sheet
               </span>
             </div>
             <p className="text-xs text-slate-300 font-medium mt-0.5">
-              Classic lined tournament tree with spreadsheet background & red match times.
+              Classic lined tournament tree with spreadsheet background & unified match times.
             </p>
           </div>
         </div>
 
-        {/* Action Buttons Toolbar with smooth horizontal scroll on mobile */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full lg:w-auto pb-1 lg:pb-0">
-          {/* Quick Load 16 Team Sample */}
+        {/* Wrapped 2-column Grid on Mobile, Flex Row on Tablet/Desktop (Never hidden, min-h 44px) */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full">
           <button
+            type="button"
             onClick={handleLoad16TeamSample}
-            className="shrink-0 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border bg-white/10 hover:bg-white/20 border-white/20 text-[#D4A017]"
-            title="Load standard 16 teams (Team 1 - 16) with sample timings"
+            className="min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border bg-white/10 hover:bg-white/20 border-white/20 text-[#D4A017]"
+            title="Load standard 16 teams (Team 1 - 16) with unified timings"
           >
-            <Sparkles size={14} className="text-[#D4A017]" />
-            <span className="whitespace-nowrap">Sample 16 Draw</span>
+            <Sparkles size={14} className="text-[#D4A017] shrink-0" />
+            <span className="truncate">Sample 16 Draw</span>
           </button>
 
-          {/* Toggle Grid Lines */}
           <button
+            type="button"
             onClick={() => setShowGrid(!showGrid)}
-            className={`shrink-0 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
-              showGrid 
-                ? 'bg-[#164077] border-white/20 text-white' 
+            className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
+              showGrid
+                ? 'bg-[#164077] border-white/20 text-white'
                 : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
             }`}
             title="Toggle background spreadsheet grid lines"
           >
-            <Grid size={14} />
+            <Grid size={14} className="shrink-0" />
             <span className="whitespace-nowrap">{showGrid ? 'Grid: ON' : 'Grid: OFF'}</span>
           </button>
 
-          {/* Download Image (.PNG) */}
           <button
+            type="button"
             onClick={handleDownloadImage}
             disabled={isExporting}
-            className="shrink-0 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md disabled:opacity-50"
+            className="min-h-[44px] px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
             title="Download high-resolution PNG image"
           >
-            {isExporting ? <RefreshCw size={13} className="animate-spin" /> : <ImageIcon size={13} />}
-            <span className="whitespace-nowrap">PNG</span>
+            {isExporting ? <RefreshCw size={13} className="animate-spin shrink-0" /> : <ImageIcon size={13} className="shrink-0" />}
+            <span>PNG</span>
           </button>
 
-          {/* Export Word (.doc with Bracket Image) */}
           <button
-            onClick={handleExportWordWithImage}
-            disabled={isExporting}
-            className="shrink-0 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
-            title="Export Word document with bracket image and match schedule"
-          >
-            <FileText size={14} />
-            <span className="whitespace-nowrap">Word (.doc)</span>
-          </button>
-
-          {/* Download PDF (.pdf) */}
-          <button
+            type="button"
             onClick={handleDownloadPdf}
             disabled={isExporting}
-            className="shrink-0 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
-            title="Download direct PDF file"
+            className="min-h-[44px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+            title="Download pure Vector PDF file"
           >
-            <Download size={14} />
-            <span className="whitespace-nowrap">PDF</span>
+            <Download size={14} className="shrink-0" />
+            <span>PDF</span>
           </button>
 
-          {/* WhatsApp Share PDF */}
           <button
+            type="button"
+            onClick={handleExportWordWithImage}
+            disabled={isExporting}
+            className="min-h-[44px] px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+            title="Export Word document with bracket image and match schedule"
+          >
+            <FileText size={14} className="shrink-0" />
+            <span>Word (.doc)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={isExporting}
+            className="min-h-[44px] px-3.5 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+            title="Export match fixture sheet as CSV"
+          >
+            <Download size={14} className="shrink-0" />
+            <span>CSV</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleWhatsAppSharePdf}
             disabled={isExporting}
-            className="shrink-0 px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
+            className="min-h-[44px] px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95 disabled:opacity-50"
             title="Share tournament bracket PDF directly to WhatsApp"
           >
-            <Share2 size={13} />
-            <span className="whitespace-nowrap">WhatsApp</span>
+            <Share2 size={13} className="shrink-0" />
+            <span>WhatsApp</span>
           </button>
 
-          {/* Print Preview & Sizing Modal */}
           <button
+            type="button"
             onClick={() => setIsPrintModalOpen(true)}
-            className="shrink-0 px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md active:scale-95"
+            className="min-h-[44px] px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95"
             title="Open interactive print preview with A4/A3 paper sizing and Word export"
           >
-            <Printer size={14} />
-            <span className="whitespace-nowrap">Print Preview</span>
+            <Printer size={14} className="shrink-0" />
+            <span>Print Preview</span>
           </button>
         </div>
       </div>
@@ -639,244 +858,37 @@ Official CBSE / Federation standard draw.`;
       <div className="bg-slate-100 p-2 sm:p-4 md:p-8 rounded-2xl sm:rounded-[2.5rem] border-2 border-slate-900 shadow-inner">
         {/* Mobile Swipe Guide Banner */}
         <div className="lg:hidden flex items-center justify-between bg-amber-500/10 border border-amber-500/30 text-amber-900 px-3.5 py-2 rounded-xl text-xs font-bold mb-3 shadow-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="text-base animate-pulse">👉</span>
-            <span>Swipe right to view all rounds, timings & final winner</span>
-          </div>
-          <span className="text-[10px] uppercase font-black bg-amber-500/20 text-amber-900 px-2 py-0.5 rounded-full shrink-0">
-            Scroll &rarr;
-          </span>
+          <span>Swipe horizontally to view full bracket &rarr;</span>
         </div>
 
-        <div className="overflow-x-auto pb-3">
-          <div 
+        <div className="w-full overflow-x-auto touch-pan-x pb-3">
+          <div
             ref={sheetRef}
-            className={`mx-auto bg-white p-4 sm:p-6 md:p-12 rounded-2xl shadow-xl transition-all relative border border-slate-300 min-w-[900px] max-w-[1200px] ${
+            className={`mx-auto bg-white p-4 sm:p-6 md:p-10 rounded-2xl shadow-xl transition-all relative border border-slate-300 min-w-[1020px] max-w-[1200px] ${
               showGrid ? 'bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:32px_24px]' : ''
             }`}
             style={{ minHeight: `${TOTAL_HEIGHT}px` }}
           >
-          {/* Header Title (Red, Bold, Left-Aligned like user image) */}
-          <div className="mb-8 border-b-2 border-slate-200 pb-4 flex justify-between items-start">
-            <div>
-              {isEditingTitle ? (
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="text"
-                    value={customTitle || displayTitle}
-                    onChange={(e) => setCustomTitle(e.target.value)}
-                    placeholder="e.g. FOOTBALL U - 11 [29.08.2026]"
-                    className="text-xl md:text-2xl font-black text-red-600 border-2 border-red-400 p-2 rounded-xl outline-none"
-                    autoFocus
-                  />
-                  <button 
-                    onClick={() => setIsEditingTitle(false)}
-                    className="p-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"
-                  >
-                    <Check size={16} />
-                  </button>
-                </div>
-              ) : (
-                <div className="group flex items-center gap-3">
-                  <h1 className="text-xl md:text-3xl font-black tracking-tight text-red-600 uppercase font-sans">
-                    {displayTitle}
-                  </h1>
-                  <button 
-                    onClick={() => setIsEditingTitle(true)}
-                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700 p-1 transition-all"
-                    title="Click to edit title directly"
-                  >
-                    <Edit3 size={14} />
-                  </button>
-                </div>
-              )}
-
-              {(tournamentName || subTitle) && (
-                <p className="text-xs font-black text-slate-600 uppercase tracking-widest mt-1">
-                  {tournamentName} {subTitle ? `• ${subTitle}` : ''}
-                </p>
-              )}
-            </div>
-
-            <div className="text-right text-[10px] font-black uppercase tracking-wider text-slate-500">
-              <span className="text-indigo-600 font-bold">Knockout Tournament Draw</span>
-              <div className="text-slate-900 font-black">{N} Teams • {P} Bracket Lines ({byesCount} Byes)</div>
-            </div>
-          </div>
-
-          {/* SVG Tree Bracket Engine */}
-          <div className="relative w-full" style={{ height: `${P * ROW_HEIGHT}px` }}>
-            {/* 1. First Round Team Slot Lines */}
-            {slots.map((slot, sIdx) => {
-              const isEvenPair = sIdx % 2 === 0;
-              const matchIdxInR1 = Math.floor(sIdx / 2);
-              const matchTime = roundTimes[0]?.[matchIdxInR1] || '';
-
-              return (
-                <div 
-                  key={`slot-${sIdx}`}
-                  className="absolute left-0 flex flex-col justify-end"
-                  style={{ 
-                    top: `${sIdx * ROW_HEIGHT}px`, 
-                    height: `${ROW_HEIGHT}px`,
-                    width: `${SLOT_WIDTH}px`
-                  }}
-                >
-                  {/* Team Name Label sitting directly on the horizontal black line */}
-                  <div className="flex items-center justify-between pr-2 mb-0.5">
-                    <input
-                      type="text"
-                      value={slot.teamName}
-                      onChange={(e) => handleTeamNameChange(sIdx, e.target.value)}
-                      className="text-xs font-black uppercase text-slate-900 tracking-tight bg-transparent outline-none focus:bg-amber-50 rounded px-1 w-[180px] truncate"
-                      title="Click to edit team name"
-                    />
-
-                    {/* Show Match Time on the second team of each pair in RED font */}
-                    {!isEvenPair && matchTime && !slot.isBye && (
-                      <input
-                        type="text"
-                        value={customTimes[`r0_m${matchIdxInR1}`] ?? matchTime}
-                        onChange={(e) => handleTimeChange(0, matchIdxInR1, e.target.value)}
-                        className="text-[11px] font-black text-red-600 tracking-tighter w-16 text-right bg-transparent outline-none focus:bg-red-50 rounded px-0.5"
-                        title="Click to edit match time"
-                      />
-                    )}
-
-                    {slot.isBye && (
-                      <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest px-1">
-                        (BYE)
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Horizontal solid black line */}
-                  <div className="w-full h-[2px] bg-slate-900"></div>
-                </div>
-              );
-            })}
-
-            {/* 2. SVG Connecting Step Lines & Match Times for all Rounds */}
-            <svg 
-              className="absolute inset-0 w-full h-full pointer-events-none"
-              style={{ overflow: 'visible' }}
-            >
-              {Array.from({ length: totalRounds }).map((_, rIdx) => {
-                const matchesInThisRound = Math.pow(2, totalRounds - rIdx - 1);
-                const stepX = SLOT_WIDTH + rIdx * STEP_COL_WIDTH;
-                const colWidth = STEP_COL_WIDTH;
-
-                return Array.from({ length: matchesInThisRound }).map((__, mIdx) => {
-                  // Span of slots this match covers
-                  const slotsSpan = Math.pow(2, rIdx + 1);
-                  const topSlotIdx = mIdx * slotsSpan;
-                  const bottomSlotIdx = topSlotIdx + slotsSpan - 1;
-
-                  // Center Y positions of top feeder branch and bottom feeder branch
-                  const topBranchY = (topSlotIdx + (slotsSpan / 4 - 0.5)) * ROW_HEIGHT + ROW_HEIGHT / 2;
-                  const bottomBranchY = (bottomSlotIdx - (slotsSpan / 4 - 0.5)) * ROW_HEIGHT + ROW_HEIGHT / 2;
-                  const centerY = (topBranchY + bottomBranchY) / 2;
-
-                  const nextTime = roundTimes[rIdx + 1]?.[Math.floor(mIdx / 2)] || '';
-                  const timeKey = `r${rIdx + 1}_m${Math.floor(mIdx / 2)}`;
-                  const displayTime = customTimes[timeKey] ?? nextTime;
-
-                  const isLastRound = rIdx === totalRounds - 1;
-
-                  return (
-                    <g key={`round-${rIdx}-match-${mIdx}`}>
-                      {/* Vertical bracket connector */}
-                      <line 
-                        x1={stepX} 
-                        y1={topBranchY} 
-                        x2={stepX} 
-                        y2={bottomBranchY} 
-                        stroke="#0f172a" 
-                        strokeWidth="2" 
-                      />
-
-                      {/* Right horizontal advance line */}
-                      <line 
-                        x1={stepX} 
-                        y1={centerY} 
-                        x2={stepX + colWidth} 
-                        y2={centerY} 
-                        stroke="#0f172a" 
-                        strokeWidth="2" 
-                      />
-
-                      {/* Match Time on next round line in RED */}
-                      {!isLastRound && (mIdx % 2 === 1 || matchesInThisRound === 1) && displayTime && (
-                        <foreignObject 
-                          x={stepX + 6} 
-                          y={centerY - 22} 
-                          width={95} 
-                          height={22}
-                          className="pointer-events-auto"
-                        >
-                          <div className="flex items-center">
-                            <input
-                              type="text"
-                              value={displayTime}
-                              onChange={(e) => handleTimeChange(rIdx + 1, Math.floor(mIdx / 2), e.target.value)}
-                              className="text-[11px] font-black text-red-600 tracking-tighter bg-transparent outline-none focus:bg-red-50 px-1 rounded w-full"
-                              title="Click to edit round match time"
-                            />
-                          </div>
-                        </foreignObject>
-                      )}
-
-                      {/* Final match time right on the championship line */}
-                      {isLastRound && displayTime && (
-                        <foreignObject 
-                          x={stepX + 6} 
-                          y={centerY - 22} 
-                          width={95} 
-                          height={22}
-                          className="pointer-events-auto"
-                        >
-                          <div className="flex items-center">
-                            <input
-                              type="text"
-                              value={displayTime}
-                              onChange={(e) => handleTimeChange(rIdx + 1, 0, e.target.value)}
-                              className="text-[11px] font-black text-red-600 tracking-tighter bg-transparent outline-none focus:bg-red-50 px-1 rounded w-full"
-                              title="Click to edit final match time"
-                            />
-                          </div>
-                        </foreignObject>
-                      )}
-
-                      {/* Grand Final Winner Marker */}
-                      {isLastRound && (
-                        <foreignObject 
-                          x={stepX + colWidth + 8} 
-                          y={centerY - 18} 
-                          width={150} 
-                          height={36}
-                          className="pointer-events-auto"
-                        >
-                          <div className="bg-amber-100 border-2 border-amber-500 text-amber-950 px-3 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
-                            <Trophy size={14} className="text-amber-600" />
-                            <span>WINNER</span>
-                          </div>
-                        </foreignObject>
-                      )}
-                    </g>
-                  );
-                });
-              })}
-            </svg>
-          </div>
-
-          {/* Footer Notes on Sheet */}
-          <div className="mt-12 pt-4 border-t border-slate-300 flex flex-col md:flex-row justify-between items-center text-[10px] font-black text-slate-500 uppercase tracking-widest gap-2">
-            <span>Official Fixture Draw • CBSE & SGFI Standard Bye Allocation</span>
-            <span>Generated via SmartPE Tournament Studio</span>
+            {renderBracketContent(false)}
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Dedicated Off-Screen 1200px Fixed-Width Capture Container for crisp PNG exports on Mobile */}
+      <div
+        className="fixed left-[-9999px] top-0 w-[1200px] pointer-events-none bg-white"
+        aria-hidden="true"
+      >
+        <div
+          ref={captureRef}
+          className={`w-[1200px] bg-white p-10 relative border border-slate-300 ${
+            showGrid ? 'bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:32px_24px]' : ''
+          }`}
+          style={{ minHeight: `${TOTAL_HEIGHT}px` }}
+        >
+          {renderBracketContent(true)}
+        </div>
+      </div>
 
       {/* Interactive Vector Print & PDF Preview Modal */}
       <TournamentPrintPreviewModal
@@ -896,6 +908,7 @@ Official CBSE / Federation standard draw.`;
         thirdPlaceEnabled={thirdPlaceEnabled}
         format="knockout"
         teamsList={effectiveTeamsList}
+        matchTimeOverrides={customTimes}
         byesCount={byesCount}
         setupFormula={{
           totalTeams: N,

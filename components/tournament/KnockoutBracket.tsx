@@ -10,7 +10,18 @@ import { trackEvent } from '../../services/analytics.ts';
 import { reportTournamentFailure } from '../../services/telemetryService.ts';
 import ClassicSheetBracket from './ClassicSheetBracket.tsx';
 import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
-import { safeOpenExternal } from '../../utils/safeBrowser.ts';
+import { safeOpenExternal, downloadBlobFile } from '../../utils/safeBrowser.ts';
+import {
+  EliminationType,
+  TournamentPdfConfig,
+  UnifiedMatch,
+  buildSeededKnockoutDraw,
+  exportTournamentToCsv,
+  formatDisplayDate,
+  formatMinutesToTime,
+  parseTimeToMinutes
+} from './tournamentDrawEngine.ts';
+import { buildTournamentVectorPdf } from './TournamentVectorPdf.ts';
 
 export interface Match {
   id: number;
@@ -75,8 +86,6 @@ export const POPULAR_SPORTS = [
   'Athletics / Intramurals',
   'Throwball'
 ];
-
-import { EliminationType } from './tournamentDrawEngine.ts';
 
 interface KnockoutBracketProps {
   sport?: string;
@@ -216,20 +225,58 @@ export const KnockoutBracket: React.FC<KnockoutBracketProps> = ({
     return Math.min(days, Math.floor((roundIndex / totalRoundsCount) * days) + 1);
   };
 
-  // Generation status
-  const [hasConfirmed, setHasConfirmed] = useState(true); // Default active for immediate preview
-  
-  // Computed Schedule Bracket Data
-  const [generatedRounds, setGeneratedRounds] = useState<any[]>([]);
-  const [thirdPlaceMatch, setThirdPlaceMatch] = useState<Match | null>(null);
+  // Computed Schedule Bracket Data (Unified with ClassicSheetBracket & Vector PDF)
+  const [generatedRounds, setGeneratedRounds] = useState<Array<{ name: string; matches: Array<Match & { court?: string; seed1?: number | null; seed2?: number | null }> }>>([]);
+  const [thirdPlaceMatch, setThirdPlaceMatch] = useState<(Match & { court?: string }) | null>(null);
+  const [byeSeeds, setByeSeeds] = useState<Set<number>>(new Set());
+  const [matchTimeOverrides, setMatchTimeOverrides] = useState<Record<string, { time?: string; date?: string }>>({});
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const printAreaRef = useRef<HTMLDivElement>(null);
 
+  const setup = React.useMemo(() => {
+    const N = teamsList.length;
+    const P = Math.min(64, Math.max(4, Math.pow(2, Math.ceil(Math.log2(N || 2)))));
+    const byesCount = Math.max(0, P - N);
+    const Nu = N % 2 === 0 ? N / 2 : (N + 1) / 2;
+    const Nl = N % 2 === 0 ? N / 2 : (N - 1) / 2;
+    return { N, P, byesCount, Nu, Nl, byeSeeds };
+  }, [teamsList.length, byeSeeds]);
+
+  const buildUnifiedConfig = (overrides?: Record<string, { time?: string; date?: string }>): TournamentPdfConfig => ({
+    organizationName: (() => {
+      try {
+        return localStorage.getItem('smartpe_school_name') || "SHRADDHA CHILDREN'S ACADEMY";
+      } catch {
+        return "SHRADDHA CHILDREN'S ACADEMY";
+      }
+    })(),
+    tournamentName,
+    subTitle,
+    sport,
+    category,
+    venue,
+    startDate,
+    startTime,
+    format: 'knockout',
+    eliminationType,
+    paperSize: 'A4',
+    viewMode: 'full-bracket',
+    teamsList,
+    courtsCount,
+    matchDurationMins: firstHalf + secondHalf + halfTime,
+    restGapMins: restGap,
+    thirdPlaceEnabled: thirdPlaceMode !== 'none',
+    matchTimeOverrides: overrides ?? matchTimeOverrides
+  });
+
   const handleWhatsAppQuickShare = () => {
-    const allMatches = generatedRounds.flatMap((r: any) => r.matches);
-    const sample = allMatches.slice(0, 5).map((m: any, i: number) => `• *${m.name || `Match ${i + 1}`}* (${m.time || startTime}): ${m.team1} vs ${m.team2}`).join('\n');
-    const msg = 
+    const allMatches = generatedRounds.flatMap((r) => r.matches);
+    const sample = allMatches
+      .slice(0, 5)
+      .map((m, i) => `• *${m.name || `M${i + 1}`}* (${m.time || startTime}): ${m.team1} vs ${m.team2}`)
+      .join('\n');
+    const msg =
 `🏆 *KNOCKOUT TOURNAMENT FIXTURES*
 📌 *Tournament:* ${tournamentName} (${category})
 ⚽ *Sport:* ${sport} | 📅 *Date:* ${startDate}
@@ -256,13 +303,13 @@ Generated via SmartPE India Official Tournament Studio.`;
     setTournamentName('Football U-11 Championship');
     setSubTitle('Official 16-Team Knockout Fixture');
     setActiveViewMode('classic-sheet');
-    toast.success("Loaded 16-Team Sample Draw (Team 1 to Team 16 with match timings)!");
+    toast.success("Loaded 16-Team Sample Draw (Team 1 to Team 16 with unified timings)!");
   };
 
   // Update teams array length when numTeams changes
   const handleNumTeamsChange = (n: number) => {
     setNumTeams(n);
-    setTeamsList(prev => {
+    setTeamsList((prev) => {
       const currentList = [...prev];
       if (n > currentList.length) {
         for (let i = currentList.length; i < n; i++) {
@@ -276,7 +323,7 @@ Generated via SmartPE India Official Tournament Studio.`;
   };
 
   const handleTeamNameChange = (idx: number, value: string) => {
-    setTeamsList(prev => {
+    setTeamsList((prev) => {
       const update = [...prev];
       update[idx] = value;
       return update;
@@ -286,7 +333,7 @@ Generated via SmartPE India Official Tournament Studio.`;
   const handleBulkPaste = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const list = e.target.value
       .split('\n')
-      .map(x => x.trim())
+      .map((x) => x.trim())
       .filter(Boolean);
     if (list.length > 0) {
       setNumTeams(list.length);
@@ -294,287 +341,97 @@ Generated via SmartPE India Official Tournament Studio.`;
     }
   };
 
-  const calculateCBNKSetup = (teams: string[]) => {
-    const N = teams.length;
-    const P = Math.pow(2, Math.ceil(Math.log2(N || 2)));
-    const byesCount = P - N;
-    const Nu = N % 2 === 0 ? N / 2 : (N + 1) / 2;
-    const Nl = N % 2 === 0 ? N / 2 : (N - 1) / 2;
-
-    const byeIndices = new Set<number>();
-    let botLower = N - 1;
-    let topUpper = 0;
-    let topLower = Nu;
-    let botUpper = Nu - 1;
-
-    for (let b = 0; b < byesCount; b++) {
-      const step = b % 4;
-      if (step === 0) {
-        byeIndices.add(botLower);
-        botLower--;
-      } else if (step === 1) {
-        byeIndices.add(topUpper);
-        topUpper++;
-      } else if (step === 2) {
-        byeIndices.add(topLower);
-        topLower++;
-      } else if (step === 3) {
-        byeIndices.add(botUpper);
-        botUpper--;
-      }
-    }
-
-    return { N, P, byesCount, Nu, Nl, byeIndices };
-  };
-
-  const addMinutesToTime = (timeStr: string, minutes: number): string => {
-    const [h, m] = (timeStr || '08:00').split(':').map(Number);
-    const date = new Date();
-    date.setHours(h || 8);
-    date.setMinutes((m || 0) + minutes);
-    
-    let hours = date.getHours();
-    const mins = String(date.getMinutes()).padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    return `${String(hours).padStart(2, '0')}:${mins} ${ampm}`;
-  };
-
   const buildKnockoutBrackets = () => {
     const N = teamsList.length;
     if (N < 2) return;
 
-    const P = Math.pow(2, Math.ceil(Math.log2(N)));
-    const byesCount = P - N;
+    const baseTree = buildSeededKnockoutDraw(buildUnifiedConfig({}));
 
-    const Nu = N % 2 === 0 ? N / 2 : (N + 1) / 2;
-    const Nl = N % 2 === 0 ? N / 2 : (N - 1) / 2;
-
-    const byeIndices = new Set<number>();
-    let botLower = N - 1;
-    let topUpper = 0;
-    let topLower = Nu;
-    let botUpper = Nu - 1;
-
-    for (let b = 0; b < byesCount; b++) {
-      const step = b % 4;
-      if (step === 0) {
-        byeIndices.add(botLower);
-        botLower--;
-      } else if (step === 1) {
-        byeIndices.add(topUpper);
-        topUpper++;
-      } else if (step === 2) {
-        byeIndices.add(topLower);
-        topLower++;
-      } else if (step === 3) {
-        byeIndices.add(botUpper);
-        botUpper--;
-      }
-    }
-
-    const matchBlockDuration = firstHalf + secondHalf + halfTime + restGap;
-    let matchCounter = 1;
-
-    const formatDateObj = (dateStr: string) => {
-      const dateObj = new Date(dateStr);
-      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const dayName = days[dateObj.getDay()];
-      const day = String(dateObj.getDate()).padStart(2, '0');
-      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-      const year = dateObj.getFullYear();
-      return { 
-        formatted: `${day}-${month}-${year}`,
-        dayName: dayName
-      };
-    };
-
-    const round1Matches: Match[] = [];
-    const nonByeIndicesInOrder: number[] = [];
-    for (let i = 0; i < N; i++) {
-      if (!byeIndices.has(i)) {
-        nonByeIndicesInOrder.push(i);
-      }
-    }
-
-    for (let i = 0; i < nonByeIndicesInOrder.length; i += 2) {
-      if (i + 1 < nonByeIndicesInOrder.length) {
-        const idx1 = nonByeIndicesInOrder[i];
-        const idx2 = nonByeIndicesInOrder[i + 1];
-        const currentMatchId = matchCounter++;
-
-        round1Matches.push({
-          id: currentMatchId,
-          name: `Match - ${currentMatchId}`,
-          roundName: "I - Round",
-          team1: teamsList[idx1],
-          team2: teamsList[idx2],
-          time: "",
-          date: "",
-          isBye: false
-        });
-      }
-    }
-
-    const roundsSchedules: any[] = [];
-    if (round1Matches.length > 0) {
-      roundsSchedules.push({
-        name: "I - Round",
-        matches: round1Matches
-      });
-    }
-
-    const round2Entries: string[] = [];
-    const processedR1Matched = new Set<number>();
-
-    for (let i = 0; i < N; i++) {
-      if (byeIndices.has(i)) {
-        round2Entries.push(teamsList[i]);
-      } else {
-        const r1Match = round1Matches.find(m => m.team1 === teamsList[i] || m.team2 === teamsList[i]);
-        if (r1Match && !processedR1Matched.has(r1Match.id)) {
-          processedR1Matched.add(r1Match.id);
-          round2Entries.push(`Winner of Match ${r1Match.id}`);
-        }
-      }
-    }
-
-    let currentRoundEntries = [...round2Entries];
-    let roundLabelIndex = 2;
-
-    while (currentRoundEntries.length >= 2) {
-      const nextRoundEntries: string[] = [];
-      const currentRoundMatches: Match[] = [];
-      const numSlots = currentRoundEntries.length;
-
-      let roundNameStr = `${String(roundLabelIndex)} - Round`;
-      if (numSlots === 4) {
-        roundNameStr = "Semi Finals";
-      } else if (numSlots === 2) {
-        roundNameStr = "Finals";
-      }
-
-      for (let i = 0; i < numSlots; i += 2) {
-        const s1 = currentRoundEntries[i];
-        const s2 = currentRoundEntries[i + 1];
-        const currentMatchId = matchCounter++;
-
-        currentRoundMatches.push({
-          id: currentMatchId,
-          name: `Match - ${currentMatchId}`,
-          roundName: roundNameStr,
-          team1: s1,
-          team2: s2,
-          time: "",
-          date: "",
-          isBye: false
-        });
-
-        nextRoundEntries.push(`Winner of Match ${currentMatchId}`);
-      }
-
-      roundsSchedules.push({
-        name: roundNameStr,
-        matches: currentRoundMatches
-      });
-
-      currentRoundEntries = nextRoundEntries;
-      roundLabelIndex++;
-    }
-
-    const updatedAssignments = { ...roundDayAssignments };
-    let hasAnyChange = false;
-    roundsSchedules.forEach((round, rIdx) => {
-      if (updatedAssignments[round.name] === undefined || updatedAssignments[round.name] > numDays) {
-        updatedAssignments[round.name] = getDefaultRoundDay(round.name, roundsSchedules.length, rIdx, numDays);
-        hasAnyChange = true;
+    // Collect Round 1 Bye recipients cleanly for roster badges
+    const r1ByeSet = new Set<number>();
+    baseTree.rounds[0]?.matches.forEach((m) => {
+      if (m.isBye && m.advancesSeed) {
+        r1ByeSet.add(m.advancesSeed);
       }
     });
+    setByeSeeds(r1ByeSet);
 
-    const semiFinalRound = roundsSchedules.find(r => r.name === "Semi Finals");
-    let calculatedThirdPlace: Match | null = null;
+    // Optional multi-day overrides mapped cleanly onto unified matchCodes
+    const nextOverrides: Record<string, { time?: string; date?: string }> = {};
+    if (numDays > 1) {
+      const matchStep = Math.max(10, firstHalf + secondHalf + halfTime + restGap);
+      const dayCounters: Record<number, number> = {};
+      baseTree.rounds.forEach((rd, rIdx) => {
+        const assignedDay =
+          roundDayAssignments[rd.roundName] ||
+          getDefaultRoundDay(rd.roundName, baseTree.rounds.length, rIdx, numDays);
+        const dayCfg = dailyConfigs[assignedDay - 1] || dailyConfigs[0];
+        const dayBaseMins = parseTimeToMinutes(dayCfg?.startTime || startTime);
+        const dayDate = dayCfg?.date || startDate;
 
-    if (semiFinalRound && semiFinalRound.matches.length === 2 && thirdPlaceMode !== 'none') {
-      const sf1 = semiFinalRound.matches[0];
-      const sf2 = semiFinalRound.matches[1];
-      const currentMatchId = matchCounter++;
+        rd.matches
+          .filter((m) => !m.isBye)
+          .forEach((m) => {
+            const slot = dayCounters[assignedDay] || 0;
+            const wave = Math.floor(slot / Math.max(1, courtsCount));
+            const tMins = dayBaseMins + wave * matchStep;
+            dayCounters[assignedDay] = slot + 1;
+            nextOverrides[m.matchCode] = {
+              date: dayDate,
+              time: formatMinutesToTime(tMins)
+            };
+          });
+      });
+    }
 
-      if (updatedAssignments["Third Place Play-off"] === undefined || updatedAssignments["Third Place Play-off"] > numDays) {
-        updatedAssignments["Third Place Play-off"] = updatedAssignments["Finals"] || numDays;
-        hasAnyChange = true;
-      }
-
-      calculatedThirdPlace = {
-        id: currentMatchId,
-        name: `Match - ${currentMatchId}`,
-        roundName: "Third Place Play-off",
-        team1: `Loser of ${sf1.name}`,
-        team2: `Loser of ${sf2.name}`,
-        time: "",
-        date: ""
+    if (baseTree.thirdPlaceMatch && thirdPlaceMode === 'different') {
+      nextOverrides[baseTree.thirdPlaceMatch.matchCode] = {
+        date: thirdPlaceDate,
+        time: formatMinutesToTime(parseTimeToMinutes(thirdPlaceTime))
       };
     }
 
-    if (hasAnyChange) {
-      setRoundDayAssignments(updatedAssignments);
-    }
+    setMatchTimeOverrides(nextOverrides);
+    const finalTree = Object.keys(nextOverrides).length > 0
+      ? buildSeededKnockoutDraw(buildUnifiedConfig(nextOverrides))
+      : baseTree;
 
-    const currentAssignments = { ...updatedAssignments, ...roundDayAssignments };
+    const mappedRounds = finalTree.rounds
+      .map((rd) => ({
+        name: rd.roundName,
+        matches: rd.matches
+          .filter((m) => !m.isBye)
+          .map((m: UnifiedMatch) => ({
+            id: m.id,
+            name: m.matchCode,
+            roundName: m.stage,
+            team1: m.seed1 ? `[${m.seed1}] ${m.team1}` : m.team1,
+            team2: m.seed2 ? `[${m.seed2}] ${m.team2}` : m.team2,
+            seed1: m.seed1,
+            seed2: m.seed2,
+            time: m.time,
+            date: m.date,
+            court: m.court,
+            isBye: false
+          }))
+      }))
+      .filter((rd) => rd.matches.length > 0);
 
-    const matchesByDay: Record<number, Match[]> = {};
-    for (let d = 1; d <= numDays; d++) {
-      matchesByDay[d] = [];
-    }
-
-    roundsSchedules.forEach(round => {
-      const roundDay = currentAssignments[round.name] || 1;
-      round.matches.forEach((m: Match) => {
-        if (matchesByDay[roundDay]) {
-          matchesByDay[roundDay].push(m);
-        } else {
-          matchesByDay[1].push(m);
-        }
-      });
-    });
-
-    if (calculatedThirdPlace && thirdPlaceMode !== 'different') {
-      const tPlaceDay = currentAssignments["Third Place Play-off"] || numDays;
-      if (matchesByDay[tPlaceDay]) {
-        matchesByDay[tPlaceDay].push(calculatedThirdPlace);
-      } else {
-        matchesByDay[1].push(calculatedThirdPlace);
-      }
-    }
-
-    for (let d = 1; d <= numDays; d++) {
-      const dayConfig = dailyConfigs[d - 1];
-      const dayDateStr = dayConfig?.date || startDate;
-      const dayStartTime = dayConfig?.startTime || startTime;
-      const dayHostDate = formatDateObj(dayDateStr);
-
-      let physicalMatchCountOnThisDay = 0;
-      if (matchesByDay[d]) {
-        matchesByDay[d].forEach((m: Match) => {
-          m.date = dayHostDate.formatted;
-          if (firstHalf === 0 && secondHalf === 0) {
-            m.time = "";
-          } else {
-            m.time = addMinutesToTime(dayStartTime, physicalMatchCountOnThisDay * matchBlockDuration);
-            physicalMatchCountOnThisDay++;
+    setGeneratedRounds(mappedRounds);
+    setThirdPlaceMatch(
+      finalTree.thirdPlaceMatch
+        ? {
+            id: finalTree.thirdPlaceMatch.id,
+            name: finalTree.thirdPlaceMatch.matchCode,
+            roundName: finalTree.thirdPlaceMatch.stage,
+            team1: finalTree.thirdPlaceMatch.team1,
+            team2: finalTree.thirdPlaceMatch.team2,
+            time: finalTree.thirdPlaceMatch.time,
+            date: finalTree.thirdPlaceMatch.date,
+            court: finalTree.thirdPlaceMatch.court
           }
-        });
-      }
-    }
-
-    if (calculatedThirdPlace && thirdPlaceMode === 'different') {
-      const customTDateObj = formatDateObj(thirdPlaceDate);
-      calculatedThirdPlace.date = customTDateObj.formatted;
-      calculatedThirdPlace.time = addMinutesToTime(thirdPlaceTime, 0);
-    }
-
-    setGeneratedRounds(roundsSchedules);
-    setThirdPlaceMatch(calculatedThirdPlace);
+        : null
+    );
   };
 
   const handleGenerate = () => {
@@ -589,8 +446,7 @@ Generated via SmartPE India Official Tournament Studio.`;
         return;
       }
       buildKnockoutBrackets();
-      setHasConfirmed(true);
-      toast.success("Knockout fixture generated successfully!");
+      toast.success("Unified knockout fixture generated successfully!");
       trackEvent('tool_used', { tool_name: 'Knockout Bracket Generator' });
     } catch (err: any) {
       console.error("Fixture generation error:", err);
@@ -606,13 +462,69 @@ Generated via SmartPE India Official Tournament Studio.`;
 
   useEffect(() => {
     buildKnockoutBrackets();
-  }, [teamsList, startTime, startDate, firstHalf, secondHalf, halfTime, restGap, numDays]);
+  }, [
+    teamsList,
+    startTime,
+    startDate,
+    firstHalf,
+    secondHalf,
+    halfTime,
+    restGap,
+    courtsCount,
+    eliminationType,
+    thirdPlaceMode,
+    thirdPlaceDate,
+    thirdPlaceTime,
+    numDays
+  ]);
 
-  const handleTriggerPrint = () => {
-    window.print();
+  const handleDirectVectorPdf = () => {
+    try {
+      const { doc, fileName, pageCount } = buildTournamentVectorPdf(buildUnifiedConfig());
+      doc.save(fileName);
+      toast.success(`Downloaded ${pageCount}-page Vector PDF!`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Could not generate Vector PDF.');
+    }
   };
 
-  const setup = calculateCBNKSetup(teamsList);
+  const handleExportCsv = () => {
+    const csv = exportTournamentToCsv(buildUnifiedConfig());
+    const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' });
+    downloadBlobFile(blob, `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Fixtures.csv`);
+    toast.success('CSV fixture sheet downloaded!');
+  };
+
+  const handleExportWordTable = () => {
+    const config = buildUnifiedConfig();
+    const { rounds, thirdPlaceMatch: tp } = buildSeededKnockoutDraw(config);
+    const playable = [...rounds.flatMap((r) => r.matches.filter((m) => !m.isBye)), ...(tp ? [tp] : [])];
+    const rowsHtml = playable
+      .map(
+        (m, idx) => `
+        <tr style="background:${idx % 2 === 1 ? '#f8fafc' : '#fff'};">
+          <td style="padding:6px; font-weight:bold; text-align:center;">${m.matchCode}</td>
+          <td style="padding:6px;">${m.stage}</td>
+          <td style="padding:6px; font-weight:bold;">${m.team1}</td>
+          <td style="padding:6px; text-align:center;">VS</td>
+          <td style="padding:6px; font-weight:bold;">${m.team2}</td>
+          <td style="padding:6px; text-align:center;">${m.date} • ${m.time}</td>
+          <td style="padding:6px; text-align:center;">${m.court}</td>
+        </tr>`
+      )
+      .join('');
+    const html = `<html><head><meta charset="utf-8"></head><body style="font-family:Arial,sans-serif;">
+      <h2>${tournamentName} (${sport} • ${category})</h2>
+      <p>Venue: ${venue} | Date: ${formatDisplayDate(startDate)}</p>
+      <table border="1" cellspacing="0" cellpadding="4" style="width:100%; border-collapse:collapse; font-size:10pt;">
+        <tr style="background:#0D2B52; color:#fff;"><th>Match</th><th>Stage</th><th>Team 1</th><th>VS</th><th>Team 2</th><th>Date & Time</th><th>Court</th></tr>
+        ${rowsHtml}
+      </table>
+    </body></html>`;
+    downloadBlobFile(new Blob(['\ufeff', html], { type: 'application/msword' }), `${(tournamentName || 'Tournament').replace(/\s+/g, '_')}_Matches.doc`);
+    toast.success('Word (.doc) match schedule exported!');
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -649,7 +561,7 @@ Generated via SmartPE India Official Tournament Studio.`;
         </div>
 
         {/* Sport, Tournament Name, Category */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <div>
             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Sport Discipline</label>
             <select
@@ -696,7 +608,7 @@ Generated via SmartPE India Official Tournament Studio.`;
         </div>
 
         {/* Date, Teams Count, Duration */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 pt-2">
           <div>
             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Number of Teams</label>
             <input 
@@ -864,7 +776,7 @@ Generated via SmartPE India Official Tournament Studio.`;
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-200 custom-scrollbar">
             {teamsList.map((team, idx) => {
-              const isBye = setup.byeIndices.has(idx);
+              const isBye = setup.byeSeeds.has(idx + 1);
               return (
                 <div key={idx} className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-200">
                   <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 font-black text-[10px] flex items-center justify-center flex-shrink-0">
@@ -982,23 +894,45 @@ Generated via SmartPE India Official Tournament Studio.`;
             </button>
           </div>
 
-          {/* Quick Action Buttons */}
-          <div className="flex items-center gap-2">
+          {/* Quick Action Buttons (Always visible across mobile, tablet & laptop) */}
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
             <button
+              type="button"
+              onClick={handleDirectVectorPdf}
+              className="min-h-[44px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+              title="Download pure Vector PDF"
+            >
+              <Download size={14} className="shrink-0" />
+              <span>PDF</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="min-h-[44px] px-3.5 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+              title="Download CSV spreadsheet"
+            >
+              <Download size={14} className="shrink-0" />
+              <span>CSV</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleWhatsAppQuickShare}
-              className="flex-1 sm:flex-initial px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+              className="min-h-[44px] px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
               title="Share knockout fixtures to WhatsApp"
             >
-              <Share2 size={14} />
+              <Share2 size={14} className="shrink-0" />
               <span>WhatsApp</span>
             </button>
 
             <button
+              type="button"
               onClick={() => setIsPrintModalOpen(true)}
-              className="flex-1 sm:flex-initial px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
-              title="Open print preview with A4/A3 page sizing recommendations and Word export"
+              className="min-h-[44px] px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
+              title="Open print preview with A4/A3 page sizing and Word export"
             >
-              <Printer size={14} />
+              <Printer size={14} className="shrink-0" />
               <span>Print Preview</span>
             </button>
           </div>
@@ -1029,18 +963,45 @@ Generated via SmartPE India Official Tournament Studio.`;
 
       {activeViewMode === 'cards' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] border-2 border-slate-900 shadow-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-5 sm:p-6 rounded-[2rem] border-2 border-slate-900 shadow-sm">
             <div>
               <h4 className="text-lg font-black text-slate-900 uppercase">Versus Match Cards</h4>
-              <p className="text-xs text-slate-500 font-bold">Round-by-round match pairings with match durations and scheduled times.</p>
+              <p className="text-xs text-slate-500 font-bold">Round-by-round seeded match pairings with unified timings & courts.</p>
             </div>
-            <button 
-              onClick={handleTriggerPrint}
-              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2"
-            >
-              <Printer size={16} />
-              <span>Print / Save PDF</span>
-            </button>
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={handleDirectVectorPdf}
+                className="min-h-[44px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5"
+              >
+                <Download size={15} />
+                <span>PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportWordTable}
+                className="min-h-[44px] px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5"
+              >
+                <FileText size={15} />
+                <span>Word (.doc)</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                className="min-h-[44px] px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5"
+              >
+                <Download size={15} />
+                <span>CSV</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPrintModalOpen(true)}
+                className="min-h-[44px] px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5"
+              >
+                <Printer size={15} />
+                <span>Print Preview</span>
+              </button>
+            </div>
           </div>
 
           <div ref={printAreaRef} className="print-bracket-canvas space-y-8">
@@ -1127,23 +1088,54 @@ Generated via SmartPE India Official Tournament Studio.`;
       )}
 
       {activeViewMode === 'table' && (
-        <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-sm space-y-6">
-          <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+        <div className="bg-white p-4 sm:p-6 md:p-8 rounded-[2rem] sm:rounded-[2.5rem] border-2 border-slate-900 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
             <div>
               <h4 className="text-lg font-black text-slate-900 uppercase">Official Match Fixture Table</h4>
-              <p className="text-xs text-slate-500 font-bold">Sequential match list with round numbers, timings, and advancement pathways.</p>
+              <p className="text-xs text-slate-500 font-bold">Unified seeded match list matching Classic Sheet & Vector PDF.</p>
             </div>
-            <button 
-              onClick={handleTriggerPrint}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2"
-            >
-              <Printer size={14} />
-              <span>Print Table</span>
-            </button>
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={handleDirectVectorPdf}
+                className="min-h-[44px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5"
+              >
+                <Download size={14} />
+                <span>PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportWordTable}
+                className="min-h-[44px] px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5"
+              >
+                <FileText size={14} />
+                <span>Word (.doc)</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                className="min-h-[44px] px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5"
+              >
+                <Download size={14} />
+                <span>CSV</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPrintModalOpen(true)}
+                className="min-h-[44px] px-4 py-2 bg-[#D4A017] hover:bg-[#b88b14] text-[#0D2B52] rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5"
+              >
+                <Printer size={14} />
+                <span>Print Preview</span>
+              </button>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="sm:hidden px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] font-bold text-amber-900">
+            Swipe horizontally to view full schedule table &rarr;
+          </div>
+
+          <div className="w-full overflow-x-auto touch-pan-x pb-2">
+            <table className="w-full min-w-[680px] text-left border-collapse">
               <thead>
                 <tr className="border-b-2 border-slate-900 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
                   <th className="p-3">Match #</th>
@@ -1151,22 +1143,36 @@ Generated via SmartPE India Official Tournament Studio.`;
                   <th className="p-3">Team 1</th>
                   <th className="p-3 text-center">VS</th>
                   <th className="p-3">Team 2</th>
+                  <th className="p-3">Court</th>
                   <th className="p-3">Date</th>
                   <th className="p-3">Scheduled Time</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-800">
-                {generatedRounds.flatMap((round: any) => round.matches).map((m: Match) => (
+                {generatedRounds.flatMap((round) => round.matches).map((m) => (
                   <tr key={m.id} className="hover:bg-slate-50">
                     <td className="p-3 font-black text-indigo-600">{m.name}</td>
                     <td className="p-3">{m.roundName}</td>
                     <td className="p-3 uppercase text-slate-900">{m.team1}</td>
                     <td className="p-3 text-center text-slate-400 font-black text-[10px]">VS</td>
                     <td className="p-3 uppercase text-slate-900">{m.team2}</td>
-                    <td className="p-3 text-slate-600">{m.date || startDate}</td>
-                    <td className="p-3 font-black text-red-600">{m.time || 'TBD'}</td>
+                    <td className="p-3 text-slate-600">{m.court || 'Field 1'}</td>
+                    <td className="p-3 text-slate-600 whitespace-nowrap">{m.date || startDate}</td>
+                    <td className="p-3 font-black text-red-600 whitespace-nowrap">{m.time || 'TBD'}</td>
                   </tr>
                 ))}
+                {thirdPlaceMatch && (
+                  <tr className="bg-amber-50/40 hover:bg-amber-50">
+                    <td className="p-3 font-black text-amber-700">{thirdPlaceMatch.name}</td>
+                    <td className="p-3">{thirdPlaceMatch.roundName}</td>
+                    <td className="p-3 uppercase text-slate-900">{thirdPlaceMatch.team1}</td>
+                    <td className="p-3 text-center text-slate-400 font-black text-[10px]">VS</td>
+                    <td className="p-3 uppercase text-slate-900">{thirdPlaceMatch.team2}</td>
+                    <td className="p-3 text-slate-600">{thirdPlaceMatch.court || 'Field 2'}</td>
+                    <td className="p-3 text-slate-600 whitespace-nowrap">{thirdPlaceMatch.date || startDate}</td>
+                    <td className="p-3 font-black text-red-600 whitespace-nowrap">{thirdPlaceMatch.time || 'TBD'}</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1191,8 +1197,9 @@ Generated via SmartPE India Official Tournament Studio.`;
         thirdPlaceEnabled={thirdPlaceMode !== 'none'}
         format="knockout"
         teamsList={teamsList}
+        matchTimeOverrides={matchTimeOverrides}
         rounds={generatedRounds}
-        matches={generatedRounds.flatMap((round: any) => round.matches)}
+        matches={generatedRounds.flatMap((round) => round.matches)}
         byesCount={setup.byesCount}
         setupFormula={{
           totalTeams: setup.N,
