@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './firebase.ts';
 import { fitnessService, School, SchoolMember } from './fitnessService.ts';
+import { LoginActivityRecord } from './userActivityService.ts';
 import { isBrandSuperAdmin } from '../types.ts';
 
 export enum OperationType {
@@ -111,6 +112,7 @@ export interface SuperAdminOverviewData {
   totalAcademyCoaches: number;
   usageEvents: UsageEventRecord[];
   feedbackList: TeacherFeedbackRecord[];
+  loginActivity: LoginActivityRecord[];
 }
 
 function cleanStr(val: unknown, maxLen: number): string {
@@ -271,7 +273,8 @@ export async function fetchSuperAdminOverview(): Promise<SuperAdminOverviewData>
     workloadsSnap,
     usageSnap,
     feedbackSnap,
-    supportFeedbackSnap
+    supportFeedbackSnap,
+    loginActivitySnap
   ] = await Promise.all([
     fitnessService.getAllSchools(),
     fitnessService.getAllRegisteredUsers(),
@@ -280,7 +283,8 @@ export async function fetchSuperAdminOverview(): Promise<SuperAdminOverviewData>
     getDocs(collection(db, 'workloads')).catch(() => null),
     getDocs(query(collection(db, 'usage_events'), orderBy('timestamp', 'desc'), limit(500))).catch(() => null),
     getDocs(query(collection(db, 'teacher_feedback'), orderBy('createdAt', 'desc'), limit(200))).catch(() => null),
-    getDocs(query(collection(db, 'system_logs'), where('category', '==', 'USER_FEEDBACK'), limit(100))).catch(() => null)
+    getDocs(query(collection(db, 'system_logs'), where('category', '==', 'USER_FEEDBACK'), limit(100))).catch(() => null),
+    getDocs(query(collection(db, 'login_activity'), orderBy('timestamp', 'desc'), limit(500))).catch(() => null)
   ]);
 
   const allMembers: SchoolMember[] = membersSnap.docs.map(d => ({
@@ -376,6 +380,10 @@ export async function fetchSuperAdminOverview(): Promise<SuperAdminOverviewData>
     (b.createdAt || '').localeCompare(a.createdAt || '')
   );
 
+  const loginActivity: LoginActivityRecord[] = loginActivitySnap
+    ? loginActivitySnap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<LoginActivityRecord, 'id'>) }))
+    : [];
+
   return {
     schoolsWithTeachers,
     unassignedTeachers,
@@ -384,6 +392,7 @@ export async function fetchSuperAdminOverview(): Promise<SuperAdminOverviewData>
     academicPrograms,
     totalAcademyCoaches,
     usageEvents,
-    feedbackList
+    feedbackList,
+    loginActivity
   };
 }

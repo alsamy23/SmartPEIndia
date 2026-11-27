@@ -639,7 +639,7 @@ Generated via SmartPE India Official Tournament Studio.`;
           <label className="text-xs font-black uppercase tracking-widest text-slate-700 block">
             Teams List ({teamsList.length} Teams)
           </label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-56 overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-200 custom-scrollbar">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:max-h-56 lg:overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-200 custom-scrollbar">
             {teamsList.map((team, idx) => (
               <div key={idx} className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-200">
                 <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-700 font-black text-[10px] flex items-center justify-center flex-shrink-0">
@@ -877,7 +877,7 @@ Generated via SmartPE India Official Tournament Studio.`;
                 <span>Swipe horizontally to view full table →</span>
               </div>
 
-              <div className="w-full overflow-x-auto touch-pan-x pb-2 -mx-1 px-1">
+              <div className="w-full overflow-x-auto [touch-action:pan-x_pan-y] pb-2 -mx-1 px-1">
                 <table className="w-full min-w-[580px] text-left border-collapse">
                   <thead>
                     <tr className="border-b-2 border-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-400">

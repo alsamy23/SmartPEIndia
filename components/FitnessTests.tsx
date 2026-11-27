@@ -59,6 +59,7 @@ import { toast } from '../services/toast.ts';
 import { reportFitnessTestFailure } from '../services/telemetryService.ts';
 import GamesProficiencyGenerator from './GamesProficiencyGenerator.tsx';
 import { downloadCsvFile, parseCsvLine } from '../utils/safeBrowser.ts';
+import { trackEvent } from '../services/analytics.ts';
 import { TestGuideModal } from './fitness/TestGuideModal.tsx';
 import { TestVideoModal } from './fitness/TestVideoModal.tsx';
 import { BMISpectrumGauge } from './fitness/BMISpectrumGauge.tsx';
@@ -710,6 +711,11 @@ const FitnessTests: React.FC<FitnessTestsProps> = ({
       const fileName = `${name.replace(/\s+/g, '_')}_CBSE_Fitness_Report_Card.pdf`;
       doc.save(fileName);
       toast.success(`CBSE Fitness Report Card generated for ${name}!`);
+      trackEvent('resource_downloaded', {
+        resource_name: 'CBSE Fitness Report Card PDF',
+        resource_type: 'Fitness Assessment',
+        format: 'pdf'
+      });
     } catch (err: any) {
       console.error("PDF generation failed:", err);
       toast.error(`Failed to generate PDF: ${err.message || 'Error occurred'}`);

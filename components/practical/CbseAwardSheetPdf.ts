@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { PracticalAssessment, School } from '../../types.ts';
+import { trackEvent } from '../../services/analytics.ts';
 
 interface ExportPdfOptions {
   school?: School | null;
@@ -261,4 +262,9 @@ export const generateCbsePracticalAwardSheetPdf = (
   // Save / Download PDF
   const filename = `CBSE_Practical_Marks_Award_List_Grade_${options.grade}_${options.section}_${options.academicYear.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
   doc.save(filename);
+  trackEvent('resource_downloaded', {
+    resource_name: 'CBSE 30M Practical Award Sheet',
+    resource_type: 'CBSE Practical',
+    format: 'pdf'
+  });
 };

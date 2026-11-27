@@ -96,6 +96,18 @@ export interface AnalyticsEventParams {
     channel?: string;
     [key: string]: any;
   };
+  sign_up: {
+    method?: string;
+    user_role?: string;
+    workspace?: string;
+    [key: string]: any;
+  };
+  login: {
+    method?: string;
+    user_role?: string;
+    workspace?: string;
+    [key: string]: any;
+  };
   signup: {
     method?: string;
     user_role?: string;

@@ -8,6 +8,7 @@ import html2canvas from 'html2canvas';
 import { toast } from '../../services/toast.ts';
 import TournamentPrintPreviewModal from './TournamentPrintPreviewModal.tsx';
 import { safeOpenExternal, downloadBlobFile } from '../../utils/safeBrowser.ts';
+import { trackEvent } from '../../services/analytics.ts';
 import {
   TournamentPdfConfig,
   exportTournamentToCsv,
@@ -212,6 +213,11 @@ export const CombinationTournament: React.FC<CombinationTournamentProps> = ({
       const { doc, fileName } = buildTournamentVectorPdf(buildPdfConfig());
       doc.save(fileName);
       toast.success('Combination Vector PDF downloaded!');
+      trackEvent('resource_downloaded', {
+        resource_name: `Combination Tournament PDF (${sport})`,
+        resource_type: 'Tournament Fixtures',
+        format: 'pdf'
+      });
     } catch (err) {
       console.error('Combination PDF error:', err);
       toast.error('Failed to generate PDF.');
@@ -441,7 +447,7 @@ Official CBSE PE Unit 1 format.`;
             </span>
           </div>
 
-          <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 overflow-x-auto touch-pan-x no-scrollbar pb-2 sm:pb-0">
+          <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 overflow-x-auto [touch-action:pan-x_pan-y] no-scrollbar pb-2 sm:pb-0">
             {pools.map((pool, pIdx) => (
               <div key={pIdx} className="min-w-[240px] sm:min-w-0 flex-1 shrink-0 sm:shrink bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -468,7 +474,7 @@ Official CBSE PE Unit 1 format.`;
             </h4>
 
             {/* Quick pool filter chips on mobile/desktop */}
-            <div className="flex items-center overflow-x-auto touch-pan-x no-scrollbar gap-1.5 pb-1">
+            <div className="flex items-center overflow-x-auto [touch-action:pan-x_pan-y] no-scrollbar gap-1.5 pb-1">
               {[
                 { id: 'all', label: 'All Pools' },
                 { id: 'Pool A', label: 'Pool A' },
@@ -530,7 +536,7 @@ Official CBSE PE Unit 1 format.`;
           </div>
 
           {/* Sequential Playoff Columns with smooth horizontal overflow */}
-          <div className="w-full overflow-x-auto touch-pan-x pb-3 -mx-1 px-1">
+          <div className="w-full overflow-x-auto [touch-action:pan-x_pan-y] pb-3 -mx-1 px-1">
             <div className="min-w-[700px] grid grid-cols-3 gap-4 items-start">
               {/* Column 1: Quarter-Finals */}
               <div className="space-y-3 bg-slate-50/70 p-3 rounded-2xl border border-slate-200">

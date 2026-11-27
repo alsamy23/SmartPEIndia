@@ -1055,9 +1055,58 @@ export const fitnessService = {
         });
       } catch (e) {}
 
+      // 4. Reconcile login_activity so any authenticated UID whose users/{uid} doc was incomplete/missing still appears
+      // and loginCount accurately reflects recorded sessions
+      try {
+        const loginSnap = await getDocs(query(collection(db, 'login_activity'), orderBy('timestamp', 'desc'), limit(500)));
+        const activityStatsByUid = new Map<string, { count: number; latest?: string; email?: string; displayName?: string; schoolName?: string; workspaceType?: string }>();
+
+        loginSnap.docs.forEach(d => {
+          const log = d.data();
+          const uid = log.uid;
+          if (!uid) return;
+          const prev = activityStatsByUid.get(uid) || { count: 0 };
+          prev.count += 1;
+          if (!prev.latest || (log.timestamp && log.timestamp > prev.latest)) {
+            prev.latest = log.timestamp;
+            prev.email = log.email || prev.email;
+            prev.displayName = log.displayName || prev.displayName;
+            prev.schoolName = log.schoolName || prev.schoolName;
+            prev.workspaceType = log.workspaceType || prev.workspaceType;
+          }
+          activityStatsByUid.set(uid, prev);
+        });
+
+        for (const [uid, stat] of activityStatsByUid.entries()) {
+          const existing = userMap.get(uid);
+          if (existing) {
+            existing.loginCount = Math.max(Number(existing.loginCount || 0), stat.count, 1);
+            if (!existing.lastLoginAt && stat.latest) existing.lastLoginAt = stat.latest;
+            if (!existing.lastActiveAt && stat.latest) existing.lastActiveAt = stat.latest;
+            if (!existing.email && stat.email) existing.email = stat.email;
+            if (!existing.displayName && stat.displayName) existing.displayName = stat.displayName;
+            if (!existing.schoolName && stat.schoolName) existing.schoolName = stat.schoolName;
+          } else {
+            userMap.set(uid, {
+              uid,
+              displayName: stat.displayName || (stat.email ? stat.email.split('@')[0] : 'Educator'),
+              email: stat.email || '',
+              schoolName: stat.schoolName || 'School',
+              role: 'teacher',
+              workspaceType: stat.workspaceType === 'academy' ? 'academy' : 'school',
+              loginCount: stat.count,
+              lastLoginAt: stat.latest,
+              lastActiveAt: stat.latest,
+              createdAt: stat.latest || new Date().toISOString()
+            });
+          }
+        }
+      } catch (e) {}
+
       // Clean up display names: if displayName is missing, infer from email
       const result = Array.from(userMap.values()).map(u => ({
         ...u,
+        loginCount: Math.max(Number(u.loginCount || 0), 1),
         displayName: u.displayName || (u.email ? u.email.split('@')[0] : 'Registered User')
       }));
 

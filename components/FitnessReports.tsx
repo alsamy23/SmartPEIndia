@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import { toJpeg } from 'html-to-image';
+import { trackEvent } from '../services/analytics.ts';
 import { 
   FileText, 
   Download, 
@@ -1467,6 +1468,11 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
       const name = reportData ? reportData.title.replace(/\s+/g, '_').toLowerCase() : 'fitness_report';
       pdf.save(`${name}.pdf`);
       toast.success("PDF Report downloaded successfully!");
+      trackEvent('resource_downloaded', {
+        resource_name: 'Student Fitness Report PDF',
+        resource_type: 'Fitness Reports',
+        format: 'pdf'
+      });
     } catch (error) {
       console.warn("PDF high-fidelity generation encountered an issue, attempting skipFonts mode:", error);
       
@@ -1517,6 +1523,11 @@ const FitnessReports: React.FC<FitnessReportsProps> = ({ initialStudentId }) => 
         const name = reportData ? reportData.title.replace(/\s+/g, '_').toLowerCase() : 'fitness_report';
         pdf.save(`${name}.pdf`);
         toast.success("PDF downloaded successfully!");
+        trackEvent('resource_downloaded', {
+          resource_name: 'Student Fitness Report PDF',
+          resource_type: 'Fitness Reports',
+          format: 'pdf'
+        });
       } catch (fbErr) {
         console.error("PDF generation fallback failed:", fbErr);
         toast.error("Direct PDF compilation failed. Opening standard print window...");

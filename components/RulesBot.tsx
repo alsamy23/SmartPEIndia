@@ -187,7 +187,7 @@ const RulesBot: React.FC = () => {
 
       {/* Quick Category Bar */}
       <div className="bg-slate-100 px-3 sm:px-4 py-2 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-1.5 overflow-x-auto touch-pan-x no-scrollbar">
+        <div className="flex items-center gap-1.5 overflow-x-auto [touch-action:pan-x_pan-y] no-scrollbar">
           <span className="text-[11px] font-black text-slate-500 uppercase mr-1 shrink-0">Filter:</span>
           {(['all', 'board', 'court', 'field'] as const).map(cat => (
             <button
@@ -206,7 +206,7 @@ const RulesBot: React.FC = () => {
         </div>
 
         {relevantDoubts.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto touch-pan-x no-scrollbar">
+          <div className="flex items-center gap-1.5 overflow-x-auto [touch-action:pan-x_pan-y] no-scrollbar">
             <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-1 rounded-md shrink-0">
               Quick Doubts:
             </span>
@@ -278,7 +278,7 @@ const RulesBot: React.FC = () => {
                         </code>
                       ),
                       table: ({ children }) => (
-                        <div className="w-full overflow-x-auto touch-pan-x my-2">
+                        <div className="w-full overflow-x-auto [touch-action:pan-x_pan-y] my-2">
                           <table className="w-full border-collapse text-xs">{children}</table>
                         </div>
                       ),

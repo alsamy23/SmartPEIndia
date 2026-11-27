@@ -950,7 +950,7 @@ const App: React.FC = () => {
       setIsAuthReady(true);
       if (currentUser) {
         setIsAuthView(false); // Reset auth view when user logs in
-        userActivityService.recordUserPresence(currentUser).catch(() => {});
+        userActivityService.ensureUserProfileAndSession(currentUser).catch(() => {});
 
         let landedOnSuperAdmin = false;
         if (isBrandSuperAdmin(currentUser.email)) {
@@ -1335,7 +1335,7 @@ const App: React.FC = () => {
     <HelmetProvider>
       <SEOHead activeTab={activeTab} />
       <ErrorBoundary>
-        <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row overflow-hidden h-screen print:h-auto print:overflow-visible font-sans">
+        <div className="min-h-[100dvh] lg:h-dvh lg:overflow-hidden bg-slate-50 flex flex-col lg:flex-row print:h-auto print:overflow-visible font-sans">
         {/* Toast Notification Container */}
         <div className="fixed top-20 right-4 sm:right-6 z-[200] space-y-3 max-w-sm w-[calc(100%-2rem)] sm:w-full pointer-events-none">
           {toasts.map(t => (
@@ -1430,7 +1430,7 @@ const App: React.FC = () => {
         />
 
         {/* Content Area */}
-        <main ref={mainRef} className="flex-1 overflow-y-auto bg-slate-50 relative print:overflow-visible print:h-auto print:bg-white pb-28 lg:pb-16">
+        <main ref={mainRef} className="flex-1 min-w-0 min-h-0 lg:overflow-y-auto bg-slate-50 relative print:overflow-visible print:h-auto print:bg-white pb-28 lg:pb-16">
           {/* Outdoor Offline Status Banner (inline inside content pane) */}
           <OfflineBanner />
 

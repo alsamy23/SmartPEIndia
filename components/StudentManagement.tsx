@@ -38,6 +38,7 @@ import { auth } from '../services/firebase.ts';
 import { toast } from '../services/toast.ts';
 import { calculateExactBMI } from '../utils/bmiUtils.ts';
 import { IndividualStudentProfileModal } from './fitness/IndividualStudentProfileModal.tsx';
+import { trackEvent } from '../services/analytics.ts';
 import { downloadBlobFile, parseCsvLine } from '../utils/safeBrowser.ts';
 
 interface StudentManagementProps {
@@ -910,6 +911,11 @@ Kabir Dutt,1203,12,B,Male,18`;
       const gradeSuffix = selectedGrade !== 'all' ? `_Grade${selectedGrade}` : '';
       const fileName = `CBSE_Bulk_Fitness_Reports${gradeSuffix}_${selectedList.length}_Students.pdf`;
       doc.save(fileName);
+      trackEvent('resource_downloaded', {
+        resource_name: 'Bulk Fitness Report Cards PDF',
+        resource_type: 'Student Directory',
+        format: 'pdf'
+      });
 
       toast.success(`Bulk PDF generated successfully! ${selectedList.length} student report cards compiled.`);
     } catch (error: any) {

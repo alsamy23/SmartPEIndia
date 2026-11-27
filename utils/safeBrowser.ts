@@ -1,4 +1,5 @@
 import { toast } from '../services/toast';
+import { trackEvent } from '../services/analytics';
 
 /**
  * Safely copies text to the clipboard with textarea fallback for restricted iframe contexts.
@@ -104,6 +105,11 @@ export function downloadCsvFile(
     type: 'text/csv;charset=utf-8;'
   });
   downloadBlobFile(blob, filename);
+  trackEvent('resource_downloaded', {
+    resource_name: 'CSV Spreadsheet Export',
+    resource_type: 'spreadsheet',
+    format: 'csv'
+  });
 }
 
 /**

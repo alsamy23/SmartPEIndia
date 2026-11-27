@@ -82,10 +82,12 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
 
     setLoading(true);
     setError(null);
+    userActivityService.markInteractiveAuthInProgress();
     try {
       const provider = new GoogleAuthProvider();
       const userCredential = await signInWithPopup(auth, provider);
       const user = userCredential.user;
+      userActivityService.markLoginRecordedForSession(user.uid);
 
       // Check if user already has a profile
       const userDocRef = doc(db, 'users', user.uid);
@@ -96,6 +98,7 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
         const cleanEmail = (user.email || '').trim().toLowerCase();
         const cleanName = user.displayName?.trim() || cleanEmail.split('@')[0] || 'Coach';
         let resolvedOrgName = '';
+        let resolvedRole = 'admin';
 
         if (workspaceType === 'academy') {
           // Check if coach was invited to an existing academy
@@ -154,10 +157,12 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           localStorage.setItem('smartpe_active_workspace', 'academy');
         } else {
           // Initialize School Workspace
-          // Check for pending invited memberships
+          // Check for pending invited memberships (normalized lowercase first, raw email fallback)
           const membersRef = collection(db, 'schoolMembers');
-          const q = query(membersRef, where('email', '==', user.email));
-          const querySnapshot = await getDocs(q);
+          let querySnapshot = await getDocs(query(membersRef, where('email', '==', cleanEmail)));
+          if (querySnapshot.empty && user.email && user.email !== cleanEmail) {
+            querySnapshot = await getDocs(query(membersRef, where('email', '==', user.email)));
+          }
           
           let schoolId = '';
           let role = 'admin';
@@ -191,6 +196,7 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
 
           const finalSchoolName = customSchoolName || schoolName.trim() || `${cleanName}'s Partner School`;
           resolvedOrgName = finalSchoolName;
+          resolvedRole = role;
           
           await setDoc(userDocRef, {
             uid: user.uid,
@@ -231,16 +237,14 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           localStorage.setItem('smartpe_active_workspace', 'school');
         }
 
-        userActivityService.recordUserLogin(user, {
+        await userActivityService.recordUserLogin(user, {
           workspaceType: workspaceType,
           orgName: resolvedOrgName || (workspaceType === 'academy' ? academyName : schoolName),
-          role: 'admin'
-        }).catch(() => {});
+          role: resolvedRole
+        });
 
         sessionStorage.setItem('smartpe_show_onboarding', 'true');
-        trackEvent('signup', { method: 'google', workspace: workspaceType });
-        trackEvent('signup_complete', { method: 'google', workspace: workspaceType });
-        trackEvent('profile_created', { workspace: workspaceType });
+        trackEvent('sign_up', { method: 'google', workspace: workspaceType });
 
         if (cleanEmail) {
           sendAutomatedWelcomeEmail(cleanEmail, cleanName, resolvedOrgName || (workspaceType === 'academy' ? academyName : schoolName))
@@ -256,13 +260,14 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
         }
 
         // Record existing user login event for Super Admin tracking and record latest Terms acceptance
-        userActivityService.recordUserLogin(user, {
+        await userActivityService.recordUserLogin(user, {
           workspaceType: activeWs,
           orgName: uData.schoolName || uData.academyName,
           role: uData.role,
           privacyAcceptedAt: new Date().toISOString(),
           privacyVersion: '2026-11'
-        }).catch(() => {});
+        });
+        trackEvent('login', { method: 'google', workspace: activeWs });
       }
     } catch (err: any) {
       if (
@@ -278,6 +283,7 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
       console.error('Google Auth Error:', err);
       setError(err.message || 'Google Sign-In failed. Please try again.');
     } finally {
+      userActivityService.clearInteractiveAuthInProgress();
       setLoading(false);
     }
   };
@@ -296,17 +302,20 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
 
     setLoading(true);
     setError(null);
+    userActivityService.markInteractiveAuthInProgress();
+    const cleanInputEmail = email.trim().toLowerCase();
 
     try {
       if (isLogin) {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await signInWithEmailAndPassword(auth, cleanInputEmail, password);
         const user = userCredential.user;
+        userActivityService.markLoginRecordedForSession(user.uid);
         // Determine active workspace from user document
         const userDocRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userDocRef);
         let activeWs: WorkspaceType = 'school';
         let orgName = '';
-        let userRole = 'teacher';
+        let userRole = 'admin';
 
         if (userSnap.exists()) {
           const uData = userSnap.data();
@@ -316,17 +325,19 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           localStorage.setItem('smartpe_active_workspace', activeWs);
         }
 
-        // Record user login event and latest Terms/Privacy acceptance
-        userActivityService.recordUserLogin(user, {
+        // Record user login event and latest Terms/Privacy acceptance (also backfills missing profile)
+        await userActivityService.recordUserLogin(user, {
           workspaceType: activeWs,
           orgName,
           role: userRole,
           privacyAcceptedAt: new Date().toISOString(),
           privacyVersion: '2026-11'
-        }).catch(() => {});
+        });
+        trackEvent('login', { method: 'email', workspace: activeWs });
       } else {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await createUserWithEmailAndPassword(auth, cleanInputEmail, password);
         const user = userCredential.user;
+        userActivityService.markLoginRecordedForSession(user.uid);
 
         await updateProfile(user, { displayName });
         const nowIso = new Date().toISOString();
@@ -340,14 +351,14 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             programType: 'after_school_academy',
             sport: academySport,
             coachName: displayName || 'Head Coach',
-            adminEmail: user.email || ''
+            adminEmail: cleanInputEmail
           });
 
           // Save user record
           await setDoc(doc(db, 'users', user.uid), {
             uid: user.uid,
-            email: user.email,
-            displayName,
+            email: cleanInputEmail,
+            displayName: displayName.trim() || cleanInputEmail.split('@')[0],
             workspaceType: 'academy',
             activeWorkspace: 'academy',
             academyId: program.id,
@@ -359,33 +370,32 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             privacyVersion: '2026-11',
             lastLoginAt: nowIso,
             lastActiveAt: nowIso,
-            loginCount: 1,
             nurtureStep1SentAt: nowIso
           });
 
           localStorage.setItem('smartpe_active_workspace', 'academy');
 
           // Record new registration login activity
-          userActivityService.recordUserLogin(user, {
+          await userActivityService.recordUserLogin(user, {
             workspaceType: 'academy',
             orgName: finalAcademyName,
             role: 'admin'
-          }).catch(() => {});
+          });
 
           sessionStorage.setItem('smartpe_show_onboarding', 'true');
-          trackEvent('signup', { method: 'email', workspace: 'academy' });
-          trackEvent('signup_complete', { method: 'email', workspace: 'academy' });
-          trackEvent('profile_created', { workspace: 'academy' });
+          trackEvent('sign_up', { method: 'email', workspace: 'academy' });
 
-          if (user.email) {
-            sendAutomatedWelcomeEmail(user.email, displayName || 'Head Coach', finalAcademyName)
+          if (cleanInputEmail) {
+            sendAutomatedWelcomeEmail(cleanInputEmail, displayName || 'Head Coach', finalAcademyName)
               .catch(e => console.warn('Academy welcome email trigger note:', e));
           }
         } else {
           // --- SCHOOL WORKSPACE REGISTRATION ---
           const membersRef = collection(db, 'schoolMembers');
-          const q = query(membersRef, where('email', '==', email));
-          const querySnapshot = await getDocs(q);
+          let querySnapshot = await getDocs(query(membersRef, where('email', '==', cleanInputEmail)));
+          if (querySnapshot.empty && email.trim() !== cleanInputEmail) {
+            querySnapshot = await getDocs(query(membersRef, where('email', '==', email.trim())));
+          }
           
           let schoolId = '';
           let role = 'admin';
@@ -426,8 +436,8 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           // Create user document in Firestore
           await setDoc(doc(db, 'users', user.uid), {
             uid: user.uid,
-            email: user.email,
-            displayName,
+            email: cleanInputEmail,
+            displayName: displayName.trim() || cleanInputEmail.split('@')[0],
             workspaceType: 'school',
             activeWorkspace: 'school',
             schoolName: finalSchoolName,
@@ -446,8 +456,8 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
             uid: user.uid,
             schoolId: schoolId,
             role,
-            displayName,
-            email: user.email,
+            displayName: displayName.trim() || cleanInputEmail.split('@')[0],
+            email: cleanInputEmail,
             schoolName: finalSchoolName,
             schoolLogo: customSchoolLogo,
             ...(claimedInviteDocId ? { inviteDocId: claimedInviteDocId } : {})
@@ -464,20 +474,18 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           localStorage.setItem('smartpe_active_workspace', 'school');
 
           // Record new school registration login activity
-          userActivityService.recordUserLogin(user, {
+          await userActivityService.recordUserLogin(user, {
             workspaceType: 'school',
             orgName: finalSchoolName,
             role
-          }).catch(() => {});
+          });
 
           sessionStorage.setItem('smartpe_show_onboarding', 'true');
-          trackEvent('signup', { method: 'email', workspace: 'school' });
-          trackEvent('signup_complete', { method: 'email', workspace: 'school' });
-          trackEvent('profile_created', { workspace: 'school' });
+          trackEvent('sign_up', { method: 'email', workspace: 'school' });
 
           // Corporate Automated Welcome Email Dispatch
-          if (user.email) {
-            sendAutomatedWelcomeEmail(user.email, displayName || 'Physical Education Educator', finalSchoolName)
+          if (cleanInputEmail) {
+            sendAutomatedWelcomeEmail(cleanInputEmail, displayName || 'Physical Education Educator', finalSchoolName)
               .then(res => {
                 if (res.success) {
                   console.log('Automated welcome email dispatched:', res);
@@ -515,6 +523,7 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
         friendlyMessage: userFriendlyMessage
       }).catch(() => {});
     } finally {
+      userActivityService.clearInteractiveAuthInProgress();
       setLoading(false);
     }
   };

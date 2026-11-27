@@ -647,12 +647,12 @@ export const TournamentPrintPreviewModal: React.FC<TournamentPrintPreviewModalPr
         </div>
 
         {/* Multi-Page Paginated Preview Canvas */}
-        <div className="flex-1 overflow-auto p-3 sm:p-6 bg-slate-800/90 space-y-5">
+        <div className="flex-1 min-h-0 min-w-0 overflow-auto p-3 sm:p-6 bg-slate-800/90 space-y-5">
           <div className="sm:hidden bg-amber-500/15 border border-amber-400/30 text-amber-200 px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center justify-between no-print">
             <span>Swipe horizontally to inspect full print sheet &rarr;</span>
           </div>
 
-          <div id="tournament-print-area" className="space-y-6 flex flex-col items-start lg:items-center w-full overflow-x-auto touch-pan-x pb-2">
+          <div id="tournament-print-area" className="space-y-6 flex flex-col items-start lg:items-center w-full overflow-x-auto [touch-action:pan-x_pan-y] pb-2">
             {previewPages.map((page, pageIdx) => {
               const totalPages = previewPages.length;
               const isPortrait = page.orientation === 'portrait';

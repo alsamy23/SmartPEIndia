@@ -38,7 +38,7 @@ import {
 import { userActivityService, LoginActivityRecord } from '../services/userActivityService.ts';
 import { privacyAuditService } from '../services/privacyAuditService.ts';
 import { toast } from '../services/toast.ts';
-import { downloadCsvFile, safeCopyToClipboard } from '../utils/safeBrowser.ts';
+import { downloadCsvFile, safeCopyToClipboard, safeOpenExternal } from '../utils/safeBrowser.ts';
 
 type SuperAdminTab = 'overview' | 'schools' | 'coaching' | 'users' | 'feedback';
 
@@ -58,7 +58,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onNavi
     academicPrograms: [],
     totalAcademyCoaches: 0,
     usageEvents: [],
-    feedbackList: []
+    feedbackList: [],
+    loginActivity: []
   });
   const [recentLogins, setRecentLogins] = useState<LoginActivityRecord[]>([]);
 
@@ -97,11 +98,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onNavi
       return;
     }
     loadData(false);
-    const unsub = userActivityService.subscribeToRecentLogins(60, (records) => {
+    const unsub = userActivityService.subscribeToRecentLogins(200, (records) => {
       setRecentLogins(records);
     });
     return () => unsub();
   }, [isSuperAdmin]);
+
+  const effectiveLogins = useMemo(() => {
+    return recentLogins.length >= data.loginActivity.length ? recentLogins : data.loginActivity;
+  }, [recentLogins, data.loginActivity]);
 
   // Derived analytics (Zero student data!)
   const stats = useMemo(() => {
@@ -427,7 +432,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onNavi
             </div>
             <div className="text-2xl font-black mt-1">{data.registeredUsers.length}</div>
             <div className="text-[10px] text-emerald-300 font-bold mt-0.5">
-              {stats.active7d} active last 7d
+              {stats.totalVisits} logins • {stats.active7d} active 7d
             </div>
           </button>
 
@@ -508,6 +513,39 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onNavi
       {/* TAB 1: OVERVIEW, APP USAGE & DOWNLOADS */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {/* Firebase Auth vs Google Analytics Diagnostic Banner */}
+          <div className="bg-sky-50 border-2 border-slate-900 rounded-[2rem] p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="space-y-1.5 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-0.5 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-wider">
+                  Auth &amp; Analytics Sync
+                </span>
+                <span className="text-xs font-black text-slate-900">
+                  {data.registeredUsers.length} Synced Educator Accounts • {stats.totalVisits} Recorded Sessions ({effectiveLogins.length} login logs)
+                </span>
+              </div>
+              <p className="text-xs text-slate-700 font-medium leading-relaxed">
+                <strong>Why Google Analytics (G-TYN05R4X9Q) counts look higher:</strong> Google Analytics tracks <em>all</em> public website events (including anonymous page views, reloads, and UI click triggers), whereas this dashboard tracks <strong>verified signed-in educator accounts</strong> synced automatically on every sign-in and active session resume.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => safeOpenExternal('https://console.firebase.google.com/project/project-afbef9ac-2800-4c65-a90/authentication/users')}
+                className="px-3.5 py-2.5 bg-white hover:bg-slate-100 border-2 border-slate-900 rounded-xl text-[11px] font-black uppercase tracking-wider text-slate-900 transition-all cursor-pointer"
+              >
+                Firebase Auth Console →
+              </button>
+              <button
+                type="button"
+                onClick={() => safeOpenExternal('https://analytics.google.com/')}
+                className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 border-2 border-slate-900 rounded-xl text-[11px] font-black uppercase tracking-wider text-white transition-all cursor-pointer"
+              >
+                Google Analytics →
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Feature & Download Breakdown */}
             <div className="lg:col-span-7 bg-white border-2 border-slate-900 rounded-[2rem] p-6 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] space-y-5">
@@ -560,10 +598,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onNavi
               </div>
 
               <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-                {recentLogins.length === 0 ? (
+                {effectiveLogins.length === 0 ? (
                   <p className="text-xs text-slate-400 text-center py-8 font-bold">No recent logins captured yet.</p>
                 ) : (
-                  recentLogins.slice(0, 15).map((entry, idx) => (
+                  effectiveLogins.slice(0, 25).map((entry, idx) => (
                     <div
                       key={entry.id || idx}
                       className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2"

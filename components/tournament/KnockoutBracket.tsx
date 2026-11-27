@@ -483,6 +483,12 @@ Generated via SmartPE India Official Tournament Studio.`;
       const { doc, fileName, pageCount } = buildTournamentVectorPdf(buildUnifiedConfig());
       doc.save(fileName);
       toast.success(`Downloaded ${pageCount}-page Vector PDF!`);
+      trackEvent('resource_downloaded', {
+        resource_name: `Knockout Bracket Vector PDF (${sport})`,
+        resource_type: 'Tournament Fixtures',
+        format: 'pdf',
+        pageCount
+      });
     } catch (err) {
       console.error(err);
       toast.error('Could not generate Vector PDF.');
@@ -774,7 +780,7 @@ Generated via SmartPE India Official Tournament Studio.`;
             <span className="text-[10px] font-bold text-slate-400">Edit individual names or paste below</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-200 custom-scrollbar">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:max-h-64 lg:overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-200 custom-scrollbar">
             {teamsList.map((team, idx) => {
               const isBye = setup.byeSeeds.has(idx + 1);
               return (
@@ -1134,7 +1140,7 @@ Generated via SmartPE India Official Tournament Studio.`;
             Swipe horizontally to view full schedule table &rarr;
           </div>
 
-          <div className="w-full overflow-x-auto touch-pan-x pb-2">
+          <div className="w-full overflow-x-auto [touch-action:pan-x_pan-y] pb-2">
             <table className="w-full min-w-[680px] text-left border-collapse">
               <thead>
                 <tr className="border-b-2 border-slate-900 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">

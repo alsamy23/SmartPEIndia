@@ -861,7 +861,7 @@ Official CBSE / Federation standard draw.`;
           <span>Swipe horizontally to view full bracket &rarr;</span>
         </div>
 
-        <div className="w-full overflow-x-auto touch-pan-x pb-3">
+        <div className="w-full overflow-x-auto [touch-action:pan-x_pan-y] pb-3">
           <div
             ref={sheetRef}
             className={`mx-auto bg-white p-4 sm:p-6 md:p-10 rounded-2xl shadow-xl transition-all relative border border-slate-300 min-w-[1020px] max-w-[1200px] ${
